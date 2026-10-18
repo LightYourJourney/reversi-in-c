@@ -1,8 +1,10 @@
 #include "core/game.h"
 #include "core/rules.h"
 #include "test_harness.h"
+#include "test_oracle.h"
 
 #include <stdint.h>
+#include <stdio.h>
 
 #define REVERSI_RANDOM_GAMES 500
 #define REVERSI_MAX_GAME_MOVES 60
@@ -62,6 +64,8 @@ static int play_random_game(TestStats *stats, uint64_t *rng)
 
         const Move move = moves[next_random(rng) % (uint32_t)count];
         const Stone mover = state.current_player;
+        REVERSI_TEST_ASSERT(stats,
+            oracle_is_legal_move(&state.board, mover, move));
         if (!game_apply_move(&state, move)) {
             REVERSI_TEST_ASSERT(stats, false);
             break;

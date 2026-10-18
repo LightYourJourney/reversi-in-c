@@ -34,9 +34,7 @@ bool board_is_valid(const Board *board)
     for (int row = 0; row < REVERSI_BOARD_SIZE; ++row) {
         for (int col = 0; col < REVERSI_BOARD_SIZE; ++col) {
             const Stone stone = board->cells[row][col];
-            if (stone != STONE_EMPTY
-                && stone != STONE_BLACK
-                && stone != STONE_WHITE) {
+            if (stone != STONE_EMPTY && !stone_is_player(stone)) {
                 return false;
             }
         }
@@ -57,9 +55,7 @@ bool board_set(Board *board, int row, int col, Stone stone)
     if (board == NULL || !board_in_bounds(row, col)) {
         return false;
     }
-    if (stone != STONE_EMPTY
-        && stone != STONE_BLACK
-        && stone != STONE_WHITE) {
+    if (stone != STONE_EMPTY && !stone_is_player(stone)) {
         return false;
     }
 
@@ -121,6 +117,11 @@ Stone stone_opponent(Stone stone)
         return STONE_BLACK;
     }
     return STONE_EMPTY;
+}
+
+bool stone_is_player(Stone stone)
+{
+    return stone == STONE_BLACK || stone == STONE_WHITE;
 }
 
 bool move_from_notation(const char *text, Move *out_move)

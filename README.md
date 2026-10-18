@@ -38,6 +38,7 @@
 ├── tests/
 │   ├── test_harness.h    极简测试断言
 │   ├── test_helpers.h    棋盘/状态比较辅助
+│   ├── test_oracle.h     随机测试用独立合法性 oracle
 │   ├── test_board.c      core.board 测试
 │   ├── test_rules.c      core.rules 测试
 │   ├── test_game.c       core.game 测试
@@ -168,7 +169,8 @@ ctest --test-dir build --output-on-failure
 - `core.board`：棋盘、坐标/记谱、边界与安全访问
 - `core.rules`：开局着法、八方向翻转、多方向/多子翻转、间隙与边界
 - `core.game`：合法/非法落子、自动跳过、主动跳过限制、终局与结果
-- `core.random`：500 局确定性随机对局，校验每步合法性与状态不变量
+- `core.random`：500 局确定性随机对局，用独立合法性 oracle 校验每步，
+  并检查棋子占用数、总数与终局不变量
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
 

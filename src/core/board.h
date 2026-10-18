@@ -35,7 +35,8 @@ bool board_in_bounds(int row, int col);
 /* Returns true when every cell is occupied. NULL returns false. */
 bool board_is_full(const Board *board);
 
-/* Returns true when every cell holds EMPTY, BLACK, or WHITE. */
+/* Returns true when every cell holds EMPTY, BLACK, or WHITE.
+ * NULL returns false. */
 bool board_is_valid(const Board *board);
 
 /*
@@ -61,6 +62,9 @@ int board_count(const Board *board, Stone stone);
 
 /* Returns the opposing stone; EMPTY stays EMPTY. */
 Stone stone_opponent(Stone stone);
+
+/* True when stone is BLACK or WHITE (a side that can move). */
+bool stone_is_player(Stone stone);
 
 /*
  * Converts between a Move and standard notation ("d4"). File letters are

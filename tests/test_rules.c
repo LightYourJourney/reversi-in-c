@@ -241,6 +241,26 @@ static void test_own_stone_blocks_flip(TestStats *stats)
     REVERSI_TEST_ASSERT(stats,
         rules_apply_move(&board, STONE_BLACK, move) == -1);
     REVERSI_TEST_ASSERT(stats, boards_equal(&board, &before));
+
+    /* An own stone terminates the run; opponents beyond it are untouched. */
+    board_clear(&board);
+    (void)board_set(&board, 3, 4, STONE_WHITE);
+    (void)board_set(&board, 3, 5, STONE_BLACK);
+    (void)board_set(&board, 3, 6, STONE_WHITE);
+    (void)board_set(&board, 3, 7, STONE_BLACK);
+
+    REVERSI_TEST_ASSERT(stats,
+        rules_is_legal_move(&board, STONE_BLACK, move));
+    REVERSI_TEST_ASSERT(stats,
+        rules_apply_move(&board, STONE_BLACK, move) == 1);
+    REVERSI_TEST_ASSERT(stats, board_get(&board, 3, 3) == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, board_get(&board, 3, 4) == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, board_get(&board, 3, 5) == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, board_get(&board, 3, 6) == STONE_WHITE);
+    REVERSI_TEST_ASSERT(stats, board_get(&board, 3, 7) == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, board_count(&board, STONE_BLACK) == 4);
+    REVERSI_TEST_ASSERT(stats, board_count(&board, STONE_WHITE) == 1);
+    REVERSI_TEST_ASSERT(stats, board_count(&board, STONE_EMPTY) == 59);
 }
 
 static void test_zero_flip_and_no_opponent(TestStats *stats)

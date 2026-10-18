@@ -8,11 +8,6 @@ static const int DIRECTIONS[8][2] = {
     { 1, -1}, { 1, 0}, { 1, 1}
 };
 
-static bool player_is_valid(Stone player)
-{
-    return player == STONE_BLACK || player == STONE_WHITE;
-}
-
 /*
  * Counts opponent stones that would be flipped along one direction. Returns
  * 0 when the line is empty, leaves the board, or is not terminated by the
@@ -44,7 +39,7 @@ static int flips_in_direction(const Board *board, Stone player, Move move,
 
 bool rules_is_legal_move(const Board *board, Stone player, Move move)
 {
-    if (board == NULL || !player_is_valid(player)) {
+    if (board == NULL || !stone_is_player(player)) {
         return false;
     }
     if (!board_in_bounds(move.row, move.col)) {
@@ -66,7 +61,7 @@ bool rules_is_legal_move(const Board *board, Stone player, Move move)
 int rules_generate_legal_moves(const Board *board, Stone player,
                                Move *moves, int capacity)
 {
-    if (board == NULL || !player_is_valid(player)
+    if (board == NULL || !stone_is_player(player)
         || moves == NULL || capacity <= 0) {
         return 0;
     }
@@ -95,7 +90,7 @@ int rules_generate_legal_moves(const Board *board, Stone player,
 
 int rules_count_legal_moves(const Board *board, Stone player)
 {
-    if (board == NULL || !player_is_valid(player)) {
+    if (board == NULL || !stone_is_player(player)) {
         return 0;
     }
 
@@ -117,7 +112,7 @@ int rules_count_legal_moves(const Board *board, Stone player)
 
 bool rules_must_pass(const Board *board, Stone player)
 {
-    if (board == NULL || !player_is_valid(player)) {
+    if (board == NULL || !stone_is_player(player)) {
         return false;
     }
     return rules_count_legal_moves(board, player) == 0;
@@ -125,7 +120,7 @@ bool rules_must_pass(const Board *board, Stone player)
 
 int rules_apply_move(Board *board, Stone player, Move move)
 {
-    if (board == NULL || !player_is_valid(player)) {
+    if (board == NULL || !stone_is_player(player)) {
         return -1;
     }
     if (!board_in_bounds(move.row, move.col)

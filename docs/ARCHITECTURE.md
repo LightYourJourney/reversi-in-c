@@ -40,7 +40,7 @@
 | 模块 | 计划路径 | 当前状态 | 职责 | 允许依赖 |
 |---|---|---|---|---|
 | Board | `src/core/board.[ch]` | Phase 0/1 已实现 | 8×8 棋盘、坐标/记谱映射、安全读写、初始局面、棋子计数 | C 标准库 |
-| Rules | `src/core/rules.[ch]` | Phase 1 已实现 | 单步合法性、八方向翻转、合法着法生成/计数、无状态落子 | Board |
+| Rules | `src/core/rules.[ch]` | Phase 1 已实现 | 单步合法性、八方向翻转、合法着法生成/计数、必须跳过查询、无状态落子 | Board |
 | Game | `src/core/game.[ch]` | Phase 1 已实现 | 当前玩家、落子应用、自动跳过、主动跳过限制、终局、结果、一致性检查 | Board、Rules |
 | History | `src/core/history.[ch]` | Phase 2 | 着法记录、撤销、重做、重开 | Game |
 | AI | `src/ai/` | Phase 4 | 局面评估、搜索、难度分级 | Board、Rules、Game（只读） |

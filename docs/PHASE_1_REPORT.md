@@ -46,6 +46,7 @@ src/core/rules.c
 src/core/game.h
 src/core/game.c
 tests/test_helpers.h
+tests/test_oracle.h
 tests/test_rules.c
 tests/test_game.c
 tests/test_random_games.c
@@ -95,10 +96,10 @@ ctest --test-dir build --output-on-failure
 
 | 测试 | 断言数 | 结果 |
 |---|---:|---|
-| `core.board` | 619 | PASS |
-| `core.rules` | 217 | PASS |
+| `core.board` | 623 | PASS |
+| `core.rules` | 227 | PASS |
 | `core.game` | 115 | PASS |
-| `core.random` | 527,932 | PASS |
+| `core.random` | 557,924 | PASS |
 
 随机对局统计：
 
@@ -106,11 +107,13 @@ ctest --test-dir build --output-on-failure
 random games: 500 finished, total moves 29992, max moves 60
 ```
 
+总断言数：**558,889**，失败 **0**。
+
 覆盖内容包括：开局双方各 2 子、黑方四个开局合法点（C4/D3/E6/F5）、C4 翻转 D4、
 八方向翻转、多方向同时翻转、多子连续翻转、不同方向不同翻转数、四角/四边、
-间隙与己方棋子阻挡、零翻子非法、无对手棋子、自动跳过、主动跳过拒绝、
-未填满终局、棋盘填满终局、平局/黑白胜、终局后禁止落子、非法坐标/非法玩家、
-状态一致性、500 局随机对局不变量。
+间隙与己方棋子阻挡、己方棋子终止翻转、零翻子非法、无对手棋子、自动跳过、
+主动跳过拒绝、未填满终局、棋盘填满终局、平局/黑白胜、终局后禁止落子、
+非法坐标/非法玩家、状态一致性、500 局随机对局不变量与独立合法性 oracle。
 
 ### 4.2 Release 构建与测试
 
@@ -141,6 +144,34 @@ ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \
 
 第一方源码重新编译后未产生 warning/error。仅存在 raylib 自身的第三方警告
 （`stb_vorbis.c`）与配置期 developer warning。
+
+### 4.5 Code review 修复
+
+Standards / Spec 两轴审查结论：
+
+- **Standards**：无硬性规范违反；发现 5 项判断项。
+- **Spec**：无缺失或部分实现的需求，未发现错误实现；指出两项测试覆盖弱点。
+
+已修复：
+
+- 抽取 `stone_is_player()` 到 board 模块，消除 rules/game 中重复的
+  `player_is_valid()`。
+- `game.c` 改用 `rules_must_pass()`，使该公开查询进入生产路径，
+  不再只是测试专用包装。
+- `board_is_valid()` 头文件注释补充 NULL 语义。
+- `test_random_games.c` 显式包含 `<stdio.h>`，不依赖测试 harness 的间接包含。
+- 新增 `tests/test_oracle.h`：随机对局的每一步候选落子同时由独立合法性
+  oracle 校验，避免“生成与校验使用同一实现”的自洽性盲区。
+- 新增“己方棋子终止翻转”用例：验证己方棋子之后的对手棋子不会被误翻。
+- 测试数量更新为 board 623、rules 227、game 115、random 557,924。
+
+保留的判断项：
+
+- `GameState.current_player` 仍使用 `Stone`，非法值由 `stone_is_player()`
+  集中校验；引入独立 player 类型属于更大的 API 变更，暂不做。
+- 测试中的方向表与引擎方向表重复，作为独立 oracle 保留。
+- Spec 审查列出的 `game_pass()`、`board_clear()`、`stone_opponent()`、
+  `board_set()` 返回 bool 等均为规格要求或安全输入所需，保留。
 
 ## 5. 已知问题与风险
 

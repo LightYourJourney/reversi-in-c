@@ -190,6 +190,11 @@ static void test_opponent(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, stone_opponent(STONE_WHITE) == STONE_BLACK);
     REVERSI_TEST_ASSERT(stats, stone_opponent(STONE_EMPTY) == STONE_EMPTY);
     REVERSI_TEST_ASSERT(stats, stone_opponent((Stone)99) == STONE_EMPTY);
+
+    REVERSI_TEST_ASSERT(stats, stone_is_player(STONE_BLACK));
+    REVERSI_TEST_ASSERT(stats, stone_is_player(STONE_WHITE));
+    REVERSI_TEST_ASSERT(stats, !stone_is_player(STONE_EMPTY));
+    REVERSI_TEST_ASSERT(stats, !stone_is_player((Stone)99));
 }
 
 int main(void)
