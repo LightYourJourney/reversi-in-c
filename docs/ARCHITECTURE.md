@@ -42,10 +42,10 @@
 | Board | `src/core/board.[ch]` | Phase 0/1 已实现 | 8×8 棋盘、坐标/记谱映射、安全读写、初始局面、棋子计数 | C 标准库 |
 | Rules | `src/core/rules.[ch]` | Phase 1 已实现 | 单步合法性、八方向翻转、合法着法生成/计数、必须跳过查询、无状态落子 | Board |
 | Game | `src/core/game.[ch]` | Phase 1 已实现 | 当前玩家、落子应用、自动跳过、主动跳过限制、终局、结果、一致性检查 | Board、Rules |
-| History | `src/core/history.[ch]` | Phase 2 | 着法记录、撤销、重做、重开 | Game |
+| History | `src/core/history.[ch]` | Phase 3 | 着法记录、撤销、重做、重开 | Game |
 | AI | `src/ai/` | Phase 4 | 局面评估、搜索、难度分级 | Board、Rules、Game（只读） |
-| UI | `src/ui/` | Phase 0 基础（`render`） | 棋盘与界面绘制、输入映射、动画与反馈 | raylib、core 的只读视图类型 |
-| App | `src/app/` | Phase 0 基础（生命周期） | 应用状态机、页面切换、模块编排 | 所有下层模块 |
+| UI | `src/ui/` | Phase 2 已实现 | 设计令牌、绘制基础、字体、棋盘/菜单/对局/设置/结算视图、动画、模态 | raylib、core 的只读视图类型 |
+| App | `src/app/` | Phase 2 已实现 | 应用状态机、页面转场、模态编排、输入路由 | 所有下层模块 |
 | Storage | `src/storage/` | Phase 5 | 存档/读档、格式版本校验 | Game、History、C 标准库 |
 | Settings | `src/settings/` | Phase 5 | 用户偏好读写 | C 标准库 / Storage |
 | Utils | `src/utils/` | 按需 | 无业务含义的纯工具函数 | C 标准库 |
@@ -61,22 +61,37 @@
 raylib 输入事件
       │
       ▼
-ui：坐标命中测试 / 交互意图
+app：read_input() 汇总为 UiInput
       │
       ▼
-app：向 game/rules 请求合法着法并校验
+ui：棋盘命中测试 / 键盘光标 / 按钮状态 → GameViewAction
       │
       ▼
-game：应用落子、翻转、切换回合
+app：调用 game_apply_move（内部使用 rules 校验与翻转）
       │
       ▼
-history：追加记录（用于撤销/重做）
+app：比较落子前后棋盘，生成 UiMoveAnimation
       │
       ▼
-ui：从只读视图重新绘制
+ui：从只读 GameState 与动画进度重新绘制
 ```
 
-### 4.2 AI 落子
+Phase 3 会在 `game_apply_move` 成功后追加 `History` 记录，用于撤销/重做；
+该步骤不改变上述输入与校验路径。
+
+### 4.2 UI 状态与动画
+
+UI 的瞬时状态（悬停、光标位置、按钮按压、动画进度、页面转场、模态）
+全部由 `app` 或视图结构体持有：
+
+- `UiMoveAnimation` 只保存落子格与翻转格的渲染进度，来源是落子前后的
+  棋盘快照；它不写回 `GameState`。
+- 动画进行时 `app` 将 `board_accept` 置为 `false`，落子输入被暂时拒绝。
+- 设置开关只影响绘制与动画启动，不改变规则判定。
+- 页面转场期间 `app_update` 只推进被动布局，不读取操作输入。
+- 模态打开时输入只交给模态，背景页面不更新，因此背景按钮与棋盘无法被操作。
+
+### 4.3 AI 落子
 
 ```text
 app ──只读快照──> ai ──候选落子──> app
@@ -88,7 +103,7 @@ app ──只读快照──> ai ──候选落子──> app
 
 AI 返回的落子即使非法，也会被规则层拒绝；AI 不拥有跳过校验的特权。
 
-### 4.3 存档与读档
+### 4.4 存档与读档
 
 ```text
 app ──> storage ──> 文件（带格式版本号）
@@ -101,8 +116,12 @@ app <── storage <── 校验后的状态
 
 - `Board`、`Game`、`History`、`Settings` 的实例由 `app` 拥有，生命周期与
   应用一致。
+- `MenuView`、`GameView`、`SettingsView`、`ResultView`、`Modal`、
+  `UiMoveAnimation`、`UiFonts` 与 `AppSettings` 同样由 `app` 拥有；
+  设置当前只在进程内有效，Phase 5 再交给 `settings` 持久化。
 - 下层模块通过指针或 `const` 视图接收状态，不持有隐藏的全局单例。
-- `ui` 仅保有自己的瞬时状态（动画进度、悬停格、布局缓存）。
+- `ui` 仅保有自己的瞬时状态（动画进度、悬停格、光标、布局计算结果）。
+- 字体在启动时加载一次，退出时统一卸载；绘制循环不加载资源。
 - raylib 的窗口/GPU 状态是进程级的，由 `app` 在启动和退出时统一初始化与释放。
 - 不引入可变的文件作用域全局变量；如确需常量，使用 `static const`。
 
@@ -121,10 +140,13 @@ app <── storage <── 校验后的状态
 ## 7. 资源路径
 
 - 构建完成后，CMake 将 `assets/` 复制到可执行文件所在目录。
-- 运行时资源路径以**可执行文件目录**为基准（计划使用 raylib 的
-  `GetApplicationDirectory()`），而不是源码目录或当前工作目录。
+- 运行时资源路径以**可执行文件目录**为基准（`GetApplicationDirectory()`），
+  而不是源码目录或当前工作目录。
+- 当前资源为 `assets/fonts/Inter-Regular.ttf` 与 `Inter-SemiBold.ttf`；
+  `ui_fonts_load()` 按显示器 DPI 加载 32/64 像素字体图集。
+- 字体缺失或加载失败时记录警告并回退到 `GetFontDefault()`，界面仍可操作。
 - 测试和程序都不依赖调用者从哪个目录启动。
-- 规则引擎不涉及任何资源文件；复制机制保持就位，供后续 UI 阶段使用。
+- 规则引擎不涉及任何资源文件。
 
 ## 8. 测试策略
 
@@ -136,12 +158,13 @@ app <── storage <── 校验后的状态
 | 随机对局 | 500 局确定性随机对局：每步合法、占用数一致、有限步结束 | 否 |
 | AI 合法性 | 所有难度在大量局面上只能返回合法着法（Phase 4） | 否 |
 | 存档往返 | 保存后读取得到等价状态；损坏文件被拒绝（Phase 5） | 否 |
+| UI 按钮 | 合成 `UiInput` 验证悬停、按下、释放、移出取消、禁用与输入阻断 | 否（链接 raylib，不建窗口） |
 | 冒烟测试 | `reversi --frames N` 验证窗口初始化、渲染、关闭 | 是（需显示环境） |
 
 CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 `-DREVERSI_ENABLE_GUI_TESTS=ON` 注册为 `app.smoke`，避免在无显示环境中失败。
 第一方目标的编译警告视为缺陷；新增公开函数必须同时新增测试，
-GUI 入口（`app_run`、`ui_draw_frame`）由 `app.smoke` 覆盖。
+窗口生命周期由 `app.smoke` 覆盖，按钮输入语义由 `ui.button` 覆盖。
 
 ## 9. 目录决策
 
@@ -150,7 +173,7 @@ GUI 入口（`app_run`、`ui_draw_frame`）由 `app.smoke` 覆盖。
 | 不创建 `include/` | 头文件与实现同目录，通过 `src/` 作为包含根；避免重复的公共/私有头文件树 |
 | 暂不创建 `cmake/` | 当前单个 `CMakeLists.txt` 足够清晰；出现可复用模块时再拆分 |
 | 暂不创建空的 `ai/`、`storage/`、`settings/` | 禁止为模块化制造无意义空目录；有真实代码时再加入 |
-| `tests/` 独立于 `src/` | 测试可执行文件只链接 core，确保规则层与 GUI 解耦 |
+| `tests/` 独立于 `src/` | core 测试只链接 `reversi_core`，保证规则层与 GUI 解耦；`ui.button` 单独链接 `reversi_ui` 但不创建窗口 |
 | `assets/` 在构建后复制 | 运行时与源码目录、当前工作目录彻底解耦 |
 
 ## 10. 编码约定
@@ -196,3 +219,25 @@ GUI 入口（`app_run`、`ui_draw_frame`）由 `app.smoke` 覆盖。
    的中间态）；终局必须无合法着法且结果与最终棋子数一致。
 7. **返回约定**：查询函数不修改状态；`rules_apply_move()` 返回翻转数或 `-1`；
    `game_apply_move()`/`game_pass()` 返回布尔值，失败时不改变状态。
+
+## 13. Phase 2 关键决策
+
+1. **按页面拆分 UI**：`menu_view`、`game_view`、`settings_view`、
+   `result_view`、`modal` 各自拥有布局与局部状态；`draw` 提供共享绘制原语，
+   `theme.h` 是颜色、字号、间距、圆角与动画时长的唯一来源。
+2. **app 仍是唯一组装根**：页面不直接修改 `GameState`，而是返回动作
+   （`GAME_VIEW_MOVE`、`SETTINGS_ACTION_*` 等），由 `app` 调用规则层并处理转场。
+3. **动画与规则状态分离**：落子前保存棋盘快照，落子后比较差异生成
+   `UiMoveAnimation`；动画只读取快照并在渲染层插值，绝不写回棋盘。
+4. **动画期间阻断棋盘输入**：`board_accept` 在动画激活时为 `false`，
+   直到落子与翻转全部结束，避免快速连点导致状态与画面错位。
+5. **宽/窄双布局**：宽度 ≥1000 且高度 ≥680 时使用棋盘 + 侧栏；否则使用
+   顶部回合/计分栏、居中棋盘与底部状态/操作栏。最小窗口 760×600。
+6. **模态与转场统一门控**：模态打开时只更新模态；页面转场期间只推进被动
+   布局，不读取操作输入，从而保证背景页面不可误触。
+7. **HiDPI 字体一次加载**：按 `GetWindowScaleDPI()` 以 32/64 像素加载
+   Inter 图集，使用双线性过滤；缺失时回退默认字体并记录警告。
+8. **程序化视觉资源**：棋盘、棋子、阴影、提示点、按钮全部由绘制生成，
+   不引入贴图或图标资源；仅字体是外部资源。
+9. **设置暂存内存**：本阶段只提供三项显示/动画开关；持久化属于 Phase 5，
+   避免在 UI 阶段提前引入存储格式。

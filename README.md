@@ -2,10 +2,10 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前状态：Phase 1（规则引擎）已完成。**
-> 标准 8×8 规则、合法着法生成、翻转、自动跳过、终局与胜负判定均已实现，
-> 并通过确定性随机对局测试。当前窗口仍只绘制基础画面；完整界面、AI、
-> 存档等功能将在后续阶段实现。详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+> **当前状态：Phase 2（图形界面与交互）已完成。**
+> 主菜单、对局、设置、结算页与模态确认均可操作；落子/翻转/最后一步动画、
+> 窗口缩放与 HiDPI、字体回退均已验证。AI、撤销/重做与存档将在后续阶段实现。
+> 详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ## 技术栈
 
@@ -33,8 +33,18 @@
 │   │   ├── board.[ch]    棋盘、坐标/记谱映射、棋子统计
 │   │   ├── rules.[ch]    合法着法、翻转、无状态规则
 │   │   └── game.[ch]     回合、自动跳过、终局与结果
-│   ├── ui/render.[ch]    raylib 绘制入口
-│   └── app/app.[ch]      应用生命周期与主循环
+│   ├── ui/
+│   │   ├── theme.h       颜色、字号、间距、圆角与时长令牌
+│   │   ├── draw.[ch]     圆角面板、文字、按钮状态、程序化棋子
+│   │   ├── fonts.[ch]    Inter 字体加载、HiDPI 缩放与回退
+│   │   ├── animation.[ch] 落子/翻转动画（仅影响渲染）
+│   │   ├── board_view.[ch] 棋盘、坐标、合法提示、最后一步
+│   │   ├── menu_view.[ch] 主菜单
+│   │   ├── game_view.[ch] 对局页与响应式布局
+│   │   ├── settings_view.[ch] 设置页
+│   │   ├── result_view.[ch] 结算页
+│   │   └── modal.[ch]    退出/重开/返回确认
+│   └── app/app.[ch]      应用状态机、页面切换与主循环
 ├── tests/
 │   ├── test_harness.h    极简测试断言
 │   ├── test_helpers.h    棋盘/状态比较辅助
@@ -42,13 +52,16 @@
 │   ├── test_board.c      core.board 测试
 │   ├── test_rules.c      core.rules 测试
 │   ├── test_game.c       core.game 测试
-│   └── test_random_games.c 随机合法对局测试
+│   ├── test_random_games.c 随机合法对局测试
+│   └── test_ui_button.c  按钮悬停/按下/释放/禁用测试
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── ROADMAP.md        分阶段交付计划
 │   ├── PHASE_0_REPORT.md Phase 0 完成报告
-│   └── PHASE_1_REPORT.md Phase 1 完成报告
-├── assets/              字体、音效、图像（目前仅有说明）
+│   ├── PHASE_1_REPORT.md Phase 1 完成报告
+│   └── PHASE_2_REPORT.md Phase 2 完成报告
+├── assets/
+│   └── fonts/            Inter 4.1（SIL OFL 1.1）
 └── LICENSE              GPL-3.0
 ```
 
@@ -63,6 +76,32 @@
 
 坐标约定：行 0 为顶部，列 0 为左侧；记谱 `a1` 为左下角，`h8` 为右上角。
 标准开局为 D4/E5 白、D5/E4 黑。
+
+## 图形界面与交互
+
+- **页面**：主菜单、对局、设置、结算；退出、重开与返回菜单使用模态确认。
+- **对局页**：8×8 棋盘与坐标、当前回合、双方实时棋子数、合法着法提示、
+  最后一步脉冲标记、状态文本；宽窗口使用侧栏，窄窗口使用上下信息栏。
+- **操作**：鼠标悬停/点击；方向键移动棋盘光标、Enter/Space 落子；
+  `R` 重开、`M`/`Esc` 返回菜单；所有按钮同时支持键盘焦点与鼠标。
+- **反馈**：非法落点红色闪框；落子缩放、翻转与最后一步动画只影响渲染，
+  不修改 `GameState`；动画期间棋盘输入被禁用。
+- **设置（内存内，尚未持久化）**：动画、合法着法提示、最后一步高亮开关。
+- **布局**：最小窗口 760×600，支持任意缩放；宽/窄两套布局；HiDPI 按显示器
+  缩放加载字体；超长状态文本使用裁剪区域。
+- **字体**：内置 Inter 4.1 Regular/SemiBold（SIL OFL 1.1）。资源缺失时自动
+  回退到 raylib 默认字体并记录警告，不阻断启动。
+- **程序化资源**：棋子、棋盘、阴影、按钮与提示均为绘制生成，不依赖贴图。
+
+开发辅助（不影响正常游玩）：
+
+```bash
+# 自动落子，用于快速走完一局并检查结算页
+REVERSI_AUTOPLAY=1 ./build/bin/reversi
+
+# 启用 F12 窗口截图，写入指定目录
+REVERSI_SHOT_DIR=/tmp/reversi-shots ./build/bin/reversi
+```
 
 ## 构建
 
@@ -166,11 +205,22 @@ ctest --test-dir build --output-on-failure
 
 四个 core 测试目标只链接 `reversi_core`，不依赖 raylib，因此可在无图形环境运行：
 
-- `core.board`：棋盘、坐标/记谱、边界与安全访问
-- `core.rules`：开局着法、八方向翻转、多方向/多子翻转、间隙与边界
-- `core.game`：合法/非法落子、自动跳过、主动跳过限制、终局与结果
-- `core.random`：500 局确定性随机对局，用独立合法性 oracle 校验每步，
-  并检查棋子占用数、总数与终局不变量
+- `core.board`：623 项断言；棋盘、坐标/记谱、边界与安全访问
+- `core.rules`：227 项断言；开局着法、八方向翻转、多方向/多子翻转、间隙与边界
+- `core.game`：115 项断言；合法/非法落子、自动跳过、主动跳过限制、终局与结果
+- `core.random`：557,924 项断言；500 局确定性随机对局，用独立合法性 oracle
+  校验每步，并检查棋子占用数、总数与终局不变量
+
+`ui.button`（26 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
+悬停、按下、释放、移出取消、禁用与输入阻断语义。
+
+实际结果（2026-10-19，macOS arm64）：
+
+| 构建 | 测试结果 |
+|---|---|
+| Debug（`REVERSI_ENABLE_GUI_TESTS=ON`） | 6/6，含 `app.smoke` |
+| Release | 5/5 |
+| ASan+UBSan（`ASAN_OPTIONS=detect_leaks=0`） | 5/5，另运行 `--frames 5` 无报告 |
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
 
@@ -200,7 +250,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug、Release、ASan+UBSan 构建与测试已实际验证（2026-10-19） |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug、Release、ASan+UBSan 构建与测试已实际验证；Phase 2 界面在 760×600、800×620、1100×800、1400×1000 下完成截图验证（2026-10-19） |
 | Windows | 未验证 |
 | Linux | 未验证 |
 
@@ -213,7 +263,11 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
   `-Wtautological-compare` 警告。它不属于第一方代码，也不影响构建结果。
 - 在 macOS 上配置阶段，raylib 自身会打印一条关于 OpenGL 已废弃的
   developer warning；这是 raylib 6.2 的既有提示。
-- 规则引擎已完成；完整图形界面、AI 与存档尚未实现，`--frames` 仅用于冒烟测试。
+- 设置项当前只保存在内存中，重启后恢复默认；持久化计划在 Phase 5 实现。
+- AI 对战、撤销/重做、存档/读档尚未实现，分别计划在 Phase 3–5 落地。
+- 在锁屏或没有活动图形会话时，GLFW 无法获取主显示器，`app.smoke`
+  会以“Failed to initialize platform”失败；解锁并保持显示唤醒后重跑即可。
+- Windows 与 Linux 构建路径已记录，但尚未实机验证。
 
 ## 文档
 
@@ -221,6 +275,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 - [路线图](docs/ROADMAP.md)
 - [Phase 0 报告](docs/PHASE_0_REPORT.md)
 - [Phase 1 报告](docs/PHASE_1_REPORT.md)
+- [Phase 2 报告](docs/PHASE_2_REPORT.md)
 
 ## 许可证
 

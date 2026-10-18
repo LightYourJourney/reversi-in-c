@@ -143,11 +143,22 @@ target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
 add_library(reversi_ui STATIC
-    src/ui/render.c)
+    src/ui/animation.c
+    src/ui/board_view.c
+    src/ui/draw.c
+    src/ui/fonts.c
+    src/ui/game_view.c
+    src/ui/menu_view.c
+    src/ui/modal.c
+    src/ui/result_view.c
+    src/ui/settings_view.c)
 target_include_directories(reversi_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_ui
     PUBLIC ${REVERSI_RAYLIB_TARGET}
     PRIVATE reversi_warnings)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(reversi_ui PUBLIC m)
+endif()
 
 add_library(reversi_app STATIC
     src/app/app.c)
@@ -193,6 +204,17 @@ if(REVERSI_BUILD_TESTS)
     reversi_add_core_test(reversi_game_tests tests/test_game.c core.game)
     reversi_add_core_test(reversi_random_tests tests/test_random_games.c
         core.random)
+
+    # Button input is pure logic over UiInput; no window is created.
+    add_executable(reversi_ui_button_tests tests/test_ui_button.c)
+    target_include_directories(reversi_ui_button_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_ui_button_tests
+        PRIVATE reversi_ui reversi_warnings)
+    add_test(NAME ui.button COMMAND reversi_ui_button_tests)
+    set_tests_properties(ui.button PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     if(REVERSI_ENABLE_GUI_TESTS)
         add_test(NAME app.smoke COMMAND reversi --frames 2)
