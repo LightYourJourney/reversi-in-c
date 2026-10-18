@@ -136,7 +136,9 @@ endif()
 #                 -> core
 # ---------------------------------------------------------------------------
 add_library(reversi_core STATIC
-    src/core/board.c)
+    src/core/board.c
+    src/core/rules.c
+    src/core/game.c)
 target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
@@ -171,18 +173,26 @@ add_custom_command(TARGET reversi POST_BUILD
 # Tests. Core tests are GUI-free and link only reversi_core; the optional
 # app.smoke test opens a window and therefore requires a display.
 # ---------------------------------------------------------------------------
+function(reversi_add_core_test target source test_name)
+    add_executable(${target} ${source})
+    target_include_directories(${target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(${target} PRIVATE reversi_core reversi_warnings)
+
+    add_test(NAME ${test_name} COMMAND ${target})
+    set_tests_properties(${test_name} PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+endfunction()
+
 if(REVERSI_BUILD_TESTS)
     enable_testing()
 
-    add_executable(reversi_tests tests/test_board.c)
-    target_include_directories(reversi_tests PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-    target_link_libraries(reversi_tests PRIVATE reversi_core reversi_warnings)
-
-    add_test(NAME core.board COMMAND reversi_tests)
-    set_tests_properties(core.board PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    reversi_add_core_test(reversi_tests tests/test_board.c core.board)
+    reversi_add_core_test(reversi_rules_tests tests/test_rules.c core.rules)
+    reversi_add_core_test(reversi_game_tests tests/test_game.c core.game)
+    reversi_add_core_test(reversi_random_tests tests/test_random_games.c
+        core.random)
 
     if(REVERSI_ENABLE_GUI_TESTS)
         add_test(NAME app.smoke COMMAND reversi --frames 2)

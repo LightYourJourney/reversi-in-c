@@ -2,10 +2,10 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前状态：Phase 0（工程初始化）已完成。**
-> 目前程序可以启动窗口、渲染基础画面、响应退出并干净释放资源；
-> 游戏规则、完整界面、AI、存档等功能将在后续阶段实现。详见
-> [docs/ROADMAP.md](docs/ROADMAP.md)。
+> **当前状态：Phase 1（规则引擎）已完成。**
+> 标准 8×8 规则、合法着法生成、翻转、自动跳过、终局与胜负判定均已实现，
+> 并通过确定性随机对局测试。当前窗口仍只绘制基础画面；完整界面、AI、
+> 存档等功能将在后续阶段实现。详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ## 技术栈
 
@@ -29,22 +29,39 @@
 ├── CMakeLists.txt
 ├── src/
 │   ├── main.c            程序入口与命令行解析
-│   ├── core/board.[ch]   棋盘表示、边界与基础访问
+│   ├── core/
+│   │   ├── board.[ch]    棋盘、坐标/记谱映射、棋子统计
+│   │   ├── rules.[ch]    合法着法、翻转、无状态规则
+│   │   └── game.[ch]     回合、自动跳过、终局与结果
 │   ├── ui/render.[ch]    raylib 绘制入口
 │   └── app/app.[ch]      应用生命周期与主循环
 ├── tests/
 │   ├── test_harness.h    极简测试断言
-│   └── test_board.c      core.board 单元测试
+│   ├── test_helpers.h    棋盘/状态比较辅助
+│   ├── test_board.c      core.board 测试
+│   ├── test_rules.c      core.rules 测试
+│   ├── test_game.c       core.game 测试
+│   └── test_random_games.c 随机合法对局测试
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── ROADMAP.md        分阶段交付计划
-│   └── PHASE_0_REPORT.md Phase 0 完成报告
-├── assets/              字体、音效、图像（Phase 0 仅有说明）
+│   ├── PHASE_0_REPORT.md Phase 0 完成报告
+│   └── PHASE_1_REPORT.md Phase 1 完成报告
+├── assets/              字体、音效、图像（目前仅有说明）
 └── LICENSE              GPL-3.0
 ```
 
 `ai/`、`storage/`、`settings/` 等目录会在对应阶段拥有真实实现后再创建，
 避免出现无意义的空目录。理由见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+## 规则引擎
+
+- `board`：8×8 棋盘、安全的格子读写、棋子统计、坐标与标准记谱互转。
+- `rules`：单步合法性、八方向翻转、合法着法生成/计数、无状态落子。
+- `game`：黑方先行、回合切换、自动跳过、主动跳过限制、终局与胜负/平局。
+
+坐标约定：行 0 为顶部，列 0 为左侧；记谱 `a1` 为左下角，`h8` 为右上角。
+标准开局为 D4/E5 白、D5/E4 黑。
 
 ## 构建
 
@@ -146,7 +163,12 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-测试目标 `reversi_tests` 只链接 `reversi_core`，不依赖 raylib，因此可在无图形环境运行。
+四个 core 测试目标只链接 `reversi_core`，不依赖 raylib，因此可在无图形环境运行：
+
+- `core.board`：棋盘、坐标/记谱、边界与安全访问
+- `core.rules`：开局着法、八方向翻转、多方向/多子翻转、间隙与边界
+- `core.game`：合法/非法落子、自动跳过、主动跳过限制、终局与结果
+- `core.random`：500 局确定性随机对局，校验每步合法性与状态不变量
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
 
@@ -168,7 +190,9 @@ ctest --test-dir build-sanitize --output-on-failure
 ./build-sanitize/bin/reversi --frames 5
 ```
 
-Sanitizer 标志只作用于第一方目标，不会重新编译 raylib。
+Sanitizer 标志只作用于第一方目标，不会重新编译 raylib。macOS 上的
+AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
+`ASAN_OPTIONS=detect_leaks=0`。
 
 ## 平台状态
 
@@ -187,13 +211,14 @@ Sanitizer 标志只作用于第一方目标，不会重新编译 raylib。
   `-Wtautological-compare` 警告。它不属于第一方代码，也不影响构建结果。
 - 在 macOS 上配置阶段，raylib 自身会打印一条关于 OpenGL 已废弃的
   developer warning；这是 raylib 6.2 的既有提示。
-- 当前版本尚未实现游戏规则与交互，`--frames` 仅用于冒烟测试。
+- 规则引擎已完成；完整图形界面、AI 与存档尚未实现，`--frames` 仅用于冒烟测试。
 
 ## 文档
 
 - [架构设计](docs/ARCHITECTURE.md)
 - [路线图](docs/ROADMAP.md)
 - [Phase 0 报告](docs/PHASE_0_REPORT.md)
+- [Phase 1 报告](docs/PHASE_1_REPORT.md)
 
 ## 许可证
 

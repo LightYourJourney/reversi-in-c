@@ -5,6 +5,11 @@
 - 结论：**完成**。Debug、Release、ASan+UBSan 三套构建通过，CTest 通过，
   窗口程序可正常启动并干净退出。
 
+> **Phase 1 修正（2026-10-19）**：本阶段的 `board_init` 在“行 0 = 顶部”
+> 的坐标约定下把开局颜色放反了。Phase 1 已按
+> D4=White、E5=White、D5=Black、E4=Black 修正，并加入记谱回归测试；
+> 详见 [PHASE_1_REPORT.md](PHASE_1_REPORT.md)。
+
 ## 1. 实际完成的功能
 
 - 从零建立 C11 + raylib + CMake 工程（仓库此前仅有 LICENSE 与空 README）。

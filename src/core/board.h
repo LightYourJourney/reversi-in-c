@@ -4,16 +4,26 @@
 #include <stdbool.h>
 
 #define REVERSI_BOARD_SIZE 8
+#define REVERSI_BOARD_CELL_COUNT (REVERSI_BOARD_SIZE * REVERSI_BOARD_SIZE)
 
 /*
- * Coordinates use zero-based row/column indices.
- * Row 0 is the top edge and column 0 is the left edge.
+ * Coordinates are zero-based: row 0 is the top edge, column 0 is the left
+ * edge. Notation uses standard chess files/ranks: "a1" is the bottom-left
+ * cell and "h8" is the top-right cell.
+ *
+ *   col = file - 'a'
+ *   row = '8' - rank
  */
 typedef enum Stone {
     STONE_EMPTY = 0,
     STONE_BLACK = 1,
     STONE_WHITE = 2
 } Stone;
+
+typedef struct Move {
+    int row;
+    int col;
+} Move;
 
 typedef struct Board {
     Stone cells[REVERSI_BOARD_SIZE][REVERSI_BOARD_SIZE];
@@ -22,17 +32,42 @@ typedef struct Board {
 /* Returns true when (row, col) addresses a cell on the board. */
 bool board_in_bounds(int row, int col);
 
+/* Returns true when every cell is occupied. NULL returns false. */
+bool board_is_full(const Board *board);
+
+/* Returns true when every cell holds EMPTY, BLACK, or WHITE. */
+bool board_is_valid(const Board *board);
+
 /*
- * Cell accessors. get/set require in-bounds coordinates; violations are
- * programmer errors and are trapped by assert() in debug builds.
+ * Safe cell access. board_get returns STONE_EMPTY for a NULL board or
+ * out-of-bounds coordinates. board_set returns false and leaves the board
+ * unchanged for invalid input.
  */
 Stone board_get(const Board *board, int row, int col);
-void board_set(Board *board, int row, int col, Stone stone);
+bool board_set(Board *board, int row, int col, Stone stone);
 
-/* Resets the board to the standard Othello starting position. */
+/* Clears every cell. NULL is ignored. */
+void board_clear(Board *board);
+
+/*
+ * Resets to the standard Othello opening:
+ *   d4 = White, e5 = White, d5 = Black, e4 = Black.
+ * Black moves first.
+ */
 void board_init(Board *board);
 
-/* Counts how many cells currently hold the given stone. */
+/* Counts cells holding the given stone. NULL returns 0. */
 int board_count(const Board *board, Stone stone);
+
+/* Returns the opposing stone; EMPTY stays EMPTY. */
+Stone stone_opponent(Stone stone);
+
+/*
+ * Converts between a Move and standard notation ("d4"). File letters are
+ * case-insensitive on input. The two-character input must be exactly two
+ * characters long. On failure the output is unchanged.
+ */
+bool move_from_notation(const char *text, Move *out_move);
+bool move_to_notation(Move move, char out[3]);
 
 #endif
