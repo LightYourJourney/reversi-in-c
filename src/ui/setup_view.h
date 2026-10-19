@@ -10,9 +10,16 @@ typedef enum SetupAction {
     SETUP_ACTION_BACK
 } SetupAction;
 
+typedef enum SetupDifficulty {
+    SETUP_DIFFICULTY_EASY = 0,
+    SETUP_DIFFICULTY_MEDIUM,
+    SETUP_DIFFICULTY_HARD
+} SetupDifficulty;
+
 typedef struct SetupView {
     GameMode mode;
     Stone human_color;
+    SetupDifficulty difficulty;
     bool ai_available;
     int focus;
     bool focus_visible;
@@ -20,6 +27,9 @@ typedef struct SetupView {
     UiButton computer;
     UiButton black;
     UiButton white;
+    UiButton easy;
+    UiButton medium;
+    UiButton hard;
     UiButton start;
     UiButton back;
 } SetupView;

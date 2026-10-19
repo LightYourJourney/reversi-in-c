@@ -88,8 +88,9 @@ const char *ui_result_title(GameResult result);
 
 /*
  * Advances a focus index by direction (+1/-1), wrapping within [0, count)
- * and skipping disabled_index. A negative disabled_index disables skipping.
+ * and skipping entries whose bit is set in disabled_mask.
  */
-int ui_focus_step(int focus, int direction, int count, int disabled_index);
+int ui_focus_step(int focus, int direction, int count,
+                  unsigned disabled_mask);
 
 #endif

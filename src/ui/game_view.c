@@ -173,6 +173,7 @@ void game_view_reset(GameView *view)
     view->has_last_mouse = false;
     view->last_mouse = (Vector2){0, 0};
     view->reject_timer = 0.0f;
+    view->thinking_time = 0.0f;
     view->reject_move = (Move){0, 0};
 }
 
@@ -190,11 +191,16 @@ GameViewAction game_view_update(GameView *view, const Match *match,
 
     const bool player_turn = match->phase == MATCH_PHASE_PLAYER_TURN;
     const bool game_over = match->phase == MATCH_PHASE_GAME_OVER;
-    const bool can_use_actions = accept_input && (player_turn || game_over);
+    const bool ai_thinking = match->phase == MATCH_PHASE_AI_THINKING;
+    const bool human_turn = match_is_human_turn(match);
+    const bool can_use_actions = accept_input
+        && (player_turn || game_over || ai_thinking);
 
+    view->thinking_time = ai_thinking ? view->thinking_time + dt : 0.0f;
     view->undo.enabled = can_use_actions && match_can_undo(match);
-    view->redo.enabled = can_use_actions && match_can_redo(match);
-    view->pause.enabled = accept_input && player_turn;
+    view->redo.enabled = accept_input && (player_turn || game_over)
+        && match_can_redo(match);
+    view->pause.enabled = accept_input && player_turn && human_turn;
     view->restart.enabled = can_use_actions;
     view->menu.enabled = can_use_actions;
 
@@ -223,7 +229,7 @@ GameViewAction game_view_update(GameView *view, const Match *match,
                    || (view->redo.enabled && input->redo_pressed)) {
             action.type = GAME_VIEW_REDO;
         } else if (pause_clicked
-                   || (player_turn
+                   || (player_turn && human_turn
                        && (input->pause_pressed
                            || input->escape_pressed))) {
             action.type = GAME_VIEW_PAUSE;
@@ -234,7 +240,7 @@ GameViewAction game_view_update(GameView *view, const Match *match,
         }
     }
 
-    const bool board_accept = accept_input && player_turn;
+    const bool board_accept = accept_input && player_turn && human_turn;
     int hover_row = 0;
     int hover_col = 0;
     const bool over_board = board_accept && board_view_hit_test(
@@ -351,6 +357,10 @@ static void draw_turn_card(const UiFonts *fonts, Rectangle card,
     if (title != NULL) {
         draw_result_discs(center, match->state.result);
         snprintf(text, sizeof(text), "%s", title);
+    } else if (match->phase == MATCH_PHASE_AI_THINKING) {
+        ui_draw_disc(center, 14.0f, match->state.current_player,
+                     1.0f, 1.0f, 1.0f);
+        snprintf(text, sizeof(text), "Computer thinking");
     } else {
         ui_draw_disc(center, 14.0f, match->state.current_player,
                      1.0f, 1.0f, 1.0f);
@@ -469,6 +479,10 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
     if (title != NULL) {
         draw_result_discs(center, match->state.result);
         snprintf(turn, sizeof(turn), "%s", title);
+    } else if (match->phase == MATCH_PHASE_AI_THINKING) {
+        ui_draw_disc(center, 15.0f, match->state.current_player,
+                     1.0f, 1.0f, 1.0f);
+        snprintf(turn, sizeof(turn), "Computer thinking");
     } else {
         ui_draw_disc(center, 15.0f, match->state.current_player,
                      1.0f, 1.0f, 1.0f);
@@ -586,6 +600,12 @@ void game_view_draw(const GameView *view, const Match *match,
     case MATCH_PHASE_PAUSED:
         snprintf(status, sizeof(status), "Paused");
         break;
+    case MATCH_PHASE_AI_THINKING: {
+        const int dots = ((int)(view->thinking_time * 3.0f)) % 4;
+        snprintf(status, sizeof(status), "Computer is thinking%.*s",
+                 dots, "...");
+        break;
+    }
     case MATCH_PHASE_PLAYER_TURN:
     default:
         if (game_must_pass(&match->state)) {

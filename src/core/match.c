@@ -102,8 +102,14 @@ static int count_flips(const Board *before, const Board *after,
 
 bool match_apply_move(Match *match, Move move)
 {
-    if (match == NULL || match->phase != MATCH_PHASE_PLAYER_TURN
+    if (match == NULL
+        || (match->phase != MATCH_PHASE_PLAYER_TURN
+            && match->phase != MATCH_PHASE_AI_THINKING)
         || match->state.result != GAME_RESULT_ONGOING) {
+        return false;
+    }
+    if (match->phase == MATCH_PHASE_AI_THINKING
+        && match->config.mode != GAME_MODE_PVE) {
         return false;
     }
 
@@ -190,7 +196,41 @@ bool match_resume(Match *match)
     return true;
 }
 
-static bool phase_allows_history(const Match *match)
+bool match_begin_ai_turn(Match *match)
+{
+    if (match == NULL || match->phase != MATCH_PHASE_PLAYER_TURN
+        || match->config.mode != GAME_MODE_PVE
+        || match->state.result != GAME_RESULT_ONGOING) {
+        return false;
+    }
+    if (match->state.current_player == match->config.human_color
+        || game_must_pass(&match->state)) {
+        return false;
+    }
+
+    match->phase = MATCH_PHASE_AI_THINKING;
+    return true;
+}
+
+bool match_cancel_ai_turn(Match *match)
+{
+    if (match == NULL || match->phase != MATCH_PHASE_AI_THINKING) {
+        return false;
+    }
+
+    match->phase = MATCH_PHASE_PLAYER_TURN;
+    return true;
+}
+
+static bool phase_allows_undo(const Match *match)
+{
+    return match != NULL
+        && (match->phase == MATCH_PHASE_PLAYER_TURN
+            || match->phase == MATCH_PHASE_GAME_OVER
+            || match->phase == MATCH_PHASE_AI_THINKING);
+}
+
+static bool phase_allows_redo(const Match *match)
 {
     return match != NULL
         && (match->phase == MATCH_PHASE_PLAYER_TURN
@@ -229,7 +269,7 @@ static bool restore_current(Match *match)
 
 static bool travel_history(Match *match, bool forward)
 {
-    if (!phase_allows_history(match)) {
+    if (forward ? !phase_allows_redo(match) : !phase_allows_undo(match)) {
         return false;
     }
     if (forward ? !history_can_redo(&match->history)
@@ -279,6 +319,7 @@ bool match_restart(Match *match)
     }
     if (match->phase != MATCH_PHASE_PLAYER_TURN
         && match->phase != MATCH_PHASE_PAUSED
+        && match->phase != MATCH_PHASE_AI_THINKING
         && match->phase != MATCH_PHASE_GAME_OVER) {
         return false;
     }
@@ -307,7 +348,7 @@ bool match_is_human_turn(const Match *match)
 
 bool match_can_undo(const Match *match)
 {
-    if (!phase_allows_history(match) || !history_can_undo(&match->history)) {
+    if (!phase_allows_undo(match) || !history_can_undo(&match->history)) {
         return false;
     }
     if (match->config.mode == GAME_MODE_PVE) {
@@ -318,7 +359,7 @@ bool match_can_undo(const Match *match)
 
 bool match_can_redo(const Match *match)
 {
-    return phase_allows_history(match) && history_can_redo(&match->history);
+    return phase_allows_redo(match) && history_can_redo(&match->history);
 }
 
 bool match_is_consistent(const Match *match)
@@ -359,6 +400,11 @@ bool match_is_consistent(const Match *match)
         return match->state.result == GAME_RESULT_ONGOING;
     case MATCH_PHASE_GAME_OVER:
         return match->state.result != GAME_RESULT_ONGOING;
+    case MATCH_PHASE_AI_THINKING:
+        return match->config.mode == GAME_MODE_PVE
+            && match->state.result == GAME_RESULT_ONGOING
+            && match->state.current_player != match->config.human_color
+            && !game_must_pass(&match->state);
     default:
         return false;
     }

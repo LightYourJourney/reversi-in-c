@@ -391,6 +391,65 @@ static void test_terminal_without_full_board(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
 }
 
+static void test_ai_thinking_phase(TestStats *stats)
+{
+    Match match;
+    MatchConfig pve = pve_config(STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &pve));
+    REVERSI_TEST_ASSERT(stats, !match_begin_ai_turn(&match));
+
+    play_move(stats, &match, first_legal_move(&match)); /* human */
+    REVERSI_TEST_ASSERT(stats, !match_is_human_turn(&match));
+    REVERSI_TEST_ASSERT(stats, !match_can_redo(&match));
+    REVERSI_TEST_ASSERT(stats, match_begin_ai_turn(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_AI_THINKING);
+    REVERSI_TEST_ASSERT(stats, !match_begin_ai_turn(&match));
+    REVERSI_TEST_ASSERT(stats, !match_pause(&match));
+    REVERSI_TEST_ASSERT(stats, match_can_undo(&match));
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_cancel_ai_turn(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, !match_cancel_ai_turn(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_begin_ai_turn(&match));
+    REVERSI_TEST_ASSERT(stats,
+        match_apply_move(&match, first_legal_move(&match)));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_ANIMATING);
+    finish_phases(stats, &match);
+    REVERSI_TEST_ASSERT(stats, match_is_human_turn(&match));
+
+    play_move(stats, &match, first_legal_move(&match)); /* human */
+    REVERSI_TEST_ASSERT(stats, match_begin_ai_turn(&match));
+    const int human_decision = history_position(&match.history);
+    REVERSI_TEST_ASSERT(stats, match_undo(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, match_is_human_turn(&match));
+    REVERSI_TEST_ASSERT(stats,
+        history_position(&match.history) < human_decision);
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_redo(&match));
+    REVERSI_TEST_ASSERT(stats, match_begin_ai_turn(&match));
+    REVERSI_TEST_ASSERT(stats, match_restart(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, history_count(&match.history) == 1);
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+
+    MatchConfig pvp = pvp_config();
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &pvp));
+    REVERSI_TEST_ASSERT(stats, !match_begin_ai_turn(&match));
+
+    MatchConfig white = pve_config(STONE_WHITE);
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &white));
+    REVERSI_TEST_ASSERT(stats, match_begin_ai_turn(&match));
+    REVERSI_TEST_ASSERT(stats,
+        match_apply_move(&match, first_legal_move(&match)));
+    finish_phases(stats, &match);
+    REVERSI_TEST_ASSERT(stats, match_is_human_turn(&match));
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+}
+
 static void test_pve_redo_branch_end(TestStats *stats)
 {
     Match match;
@@ -425,6 +484,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_auto_pass_and_undo);
     REVERSI_RUN_TEST(&stats, test_terminal_and_restart);
     REVERSI_RUN_TEST(&stats, test_mode_switch_and_pve_undo);
+    REVERSI_RUN_TEST(&stats, test_ai_thinking_phase);
     REVERSI_RUN_TEST(&stats, test_pve_redo_branch_end);
     REVERSI_RUN_TEST(&stats, test_terminal_without_full_board);
 

@@ -13,6 +13,10 @@ typedef struct SetupLayout {
     Rectangle color_white;
     Rectangle mode_row;
     Rectangle color_row;
+    Rectangle easy;
+    Rectangle medium;
+    Rectangle hard;
+    Rectangle difficulty_row;
     Rectangle start;
     Rectangle back;
 } SetupLayout;
@@ -22,12 +26,13 @@ static SetupLayout setup_layout(void)
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
     const float panel_width = fminf(620.0f, width - 64.0f);
-    const float panel_height = fminf(500.0f, height - 64.0f);
+    const float panel_height = fminf(560.0f, height - 64.0f);
     const float x = (width - panel_width) * 0.5f;
     const float y = (height - panel_height) * 0.5f;
     const float gap = 12.0f;
     const float mode_width = (panel_width - 48.0f - gap) * 0.5f;
     const float color_width = 132.0f;
+    const float difficulty_width = (panel_width - 48.0f - gap * 2.0f) / 3.0f;
 
     SetupLayout layout = {0};
     layout.panel = (Rectangle){x, y, panel_width, panel_height};
@@ -44,6 +49,16 @@ static SetupLayout setup_layout(void)
     layout.color_row = (Rectangle){
         x + 18.0f, y + 222.0f,
         color_width * 2.0f + gap + 12.0f, 64.0f};
+    layout.easy = (Rectangle){
+        x + 24.0f, y + 316.0f, difficulty_width, 48.0f};
+    layout.medium = (Rectangle){
+        x + 24.0f + difficulty_width + gap, y + 316.0f,
+        difficulty_width, 48.0f};
+    layout.hard = (Rectangle){
+        x + 24.0f + (difficulty_width + gap) * 2.0f, y + 316.0f,
+        difficulty_width, 48.0f};
+    layout.difficulty_row = (Rectangle){
+        x + 18.0f, y + 308.0f, panel_width - 36.0f, 64.0f};
     layout.back = (Rectangle){
         x + 24.0f, y + panel_height - 24.0f - 48.0f,
         panel_width - 48.0f, 48.0f};
@@ -66,6 +81,7 @@ void setup_view_init(SetupView *view)
 
     view->mode = GAME_MODE_PVP;
     view->human_color = STONE_BLACK;
+    view->difficulty = SETUP_DIFFICULTY_MEDIUM;
     view->ai_available = false;
     view->focus = 0;
     view->focus_visible = false;
@@ -73,6 +89,9 @@ void setup_view_init(SetupView *view)
     ui_button_init(&view->computer, "Computer", false);
     ui_button_init(&view->black, "Black", true);
     ui_button_init(&view->white, "White", false);
+    ui_button_init(&view->easy, "Easy", false);
+    ui_button_init(&view->medium, "Medium", true);
+    ui_button_init(&view->hard, "Hard", false);
     ui_button_init(&view->start, "Start game", true);
     ui_button_init(&view->back, "Back", false);
 }
@@ -97,12 +116,17 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
     }
 
     const SetupLayout layout = setup_layout();
-    const bool colors = color_available(view);
+    const bool computer = color_available(view);
+    const unsigned disabled_mask = computer
+        ? 0u : ((1u << 1) | (1u << 2));
 
     ui_button_set_bounds(&view->local, layout.mode_local);
     ui_button_set_bounds(&view->computer, layout.mode_computer);
     ui_button_set_bounds(&view->black, layout.color_black);
     ui_button_set_bounds(&view->white, layout.color_white);
+    ui_button_set_bounds(&view->easy, layout.easy);
+    ui_button_set_bounds(&view->medium, layout.medium);
+    ui_button_set_bounds(&view->hard, layout.hard);
     ui_button_set_bounds(&view->start, layout.start);
     ui_button_set_bounds(&view->back, layout.back);
 
@@ -110,13 +134,19 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
     view->computer.primary = view->mode == GAME_MODE_PVE;
     view->black.primary = view->human_color == STONE_BLACK;
     view->white.primary = view->human_color == STONE_WHITE;
+    view->easy.primary = view->difficulty == SETUP_DIFFICULTY_EASY;
+    view->medium.primary = view->difficulty == SETUP_DIFFICULTY_MEDIUM;
+    view->hard.primary = view->difficulty == SETUP_DIFFICULTY_HARD;
     view->computer.enabled = view->ai_available;
-    view->black.enabled = colors;
-    view->white.enabled = colors;
+    view->black.enabled = computer;
+    view->white.enabled = computer;
+    view->easy.enabled = computer;
+    view->medium.enabled = computer;
+    view->hard.enabled = computer;
     view->start.enabled = view->mode == GAME_MODE_PVP || view->ai_available;
 
-    if (!colors && view->focus == 1) {
-        view->focus = 2;
+    if (!computer && (view->focus == 1 || view->focus == 2)) {
+        view->focus = 3;
     }
 
     const bool local_clicked = ui_button_update(
@@ -127,6 +157,12 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
         &view->black, input, accept_input, dt);
     const bool white_clicked = ui_button_update(
         &view->white, input, accept_input, dt);
+    const bool easy_clicked = ui_button_update(
+        &view->easy, input, accept_input, dt);
+    const bool medium_clicked = ui_button_update(
+        &view->medium, input, accept_input, dt);
+    const bool hard_clicked = ui_button_update(
+        &view->hard, input, accept_input, dt);
     const bool start_clicked = ui_button_update(
         &view->start, input, accept_input, dt);
     const bool back_clicked = ui_button_update(
@@ -141,18 +177,21 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
     }
     if (input->up_pressed || input->down_pressed) {
         view->focus = ui_focus_step(
-            view->focus, input->down_pressed ? 1 : -1, 4,
-            colors ? -1 : 1);
+            view->focus, input->down_pressed ? 1 : -1, 5, disabled_mask);
         view->focus_visible = true;
     }
 
     if (input->left_pressed || input->right_pressed) {
+        const int step = input->right_pressed ? 1 : -1;
         if (view->focus == 0 && view->ai_available) {
             view->mode = view->mode == GAME_MODE_PVP
                 ? GAME_MODE_PVE : GAME_MODE_PVP;
-        } else if (view->focus == 1 && colors) {
+        } else if (view->focus == 1 && computer) {
             view->human_color = view->human_color == STONE_BLACK
                 ? STONE_WHITE : STONE_BLACK;
+        } else if (view->focus == 2 && computer) {
+            view->difficulty = (SetupDifficulty)(
+                ((int)view->difficulty + step + 3) % 3);
         }
     }
 
@@ -160,10 +199,16 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
         view->mode = GAME_MODE_PVP;
     } else if (computer_clicked && view->ai_available) {
         view->mode = GAME_MODE_PVE;
-    } else if (black_clicked && colors) {
+    } else if (black_clicked && computer) {
         view->human_color = STONE_BLACK;
-    } else if (white_clicked && colors) {
+    } else if (white_clicked && computer) {
         view->human_color = STONE_WHITE;
+    } else if (easy_clicked && computer) {
+        view->difficulty = SETUP_DIFFICULTY_EASY;
+    } else if (medium_clicked && computer) {
+        view->difficulty = SETUP_DIFFICULTY_MEDIUM;
+    } else if (hard_clicked && computer) {
+        view->difficulty = SETUP_DIFFICULTY_HARD;
     }
 
     if (back_clicked || input->escape_pressed) {
@@ -177,13 +222,16 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
         if (view->focus == 0 && view->ai_available) {
             view->mode = view->mode == GAME_MODE_PVP
                 ? GAME_MODE_PVE : GAME_MODE_PVP;
-        } else if (view->focus == 1 && colors) {
+        } else if (view->focus == 1 && computer) {
             view->human_color = view->human_color == STONE_BLACK
                 ? STONE_WHITE : STONE_BLACK;
-        } else if (view->focus == 2) {
+        } else if (view->focus == 2 && computer) {
+            view->difficulty = (SetupDifficulty)(
+                ((int)view->difficulty + 1) % 3);
+        } else if (view->focus == 3) {
             return view->start.enabled
                 ? SETUP_ACTION_START : SETUP_ACTION_NONE;
-        } else if (view->focus == 3) {
+        } else if (view->focus == 4) {
             return SETUP_ACTION_BACK;
         }
     }
@@ -222,6 +270,11 @@ void setup_view_draw(const SetupView *view, const UiFonts *fonts)
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 206.0f,
                     layout.panel.width - 48.0f, 18.0f},
         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
+    ui_draw_text_aligned(
+        fonts, UI_TEXT_REGULAR, "DIFFICULTY",
+        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 292.0f,
+                    layout.panel.width - 48.0f, 18.0f},
+        REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
 
     if (view->focus_visible && view->focus == 0) {
         ui_draw_rounded_outline(layout.mode_row, REVERSI_UI_RADIUS_SM + 2.0f,
@@ -231,22 +284,30 @@ void setup_view_draw(const SetupView *view, const UiFonts *fonts)
         ui_draw_rounded_outline(layout.color_row, REVERSI_UI_RADIUS_SM + 2.0f,
                                 2.0f, REVERSI_UI_COLOR_FOCUS);
     }
+    if (view->focus_visible && view->focus == 2 && color_available(view)) {
+        ui_draw_rounded_outline(layout.difficulty_row,
+                                REVERSI_UI_RADIUS_SM + 2.0f, 2.0f,
+                                REVERSI_UI_COLOR_FOCUS);
+    }
 
     ui_button_draw(&view->local, fonts, false);
     ui_button_draw(&view->computer, fonts, false);
     ui_button_draw(&view->black, fonts, false);
     ui_button_draw(&view->white, fonts, false);
+    ui_button_draw(&view->easy, fonts, false);
+    ui_button_draw(&view->medium, fonts, false);
+    ui_button_draw(&view->hard, fonts, false);
     ui_button_draw(&view->start, fonts,
-                   view->focus_visible && view->focus == 2);
-    ui_button_draw(&view->back, fonts,
                    view->focus_visible && view->focus == 3);
+    ui_button_draw(&view->back, fonts,
+                   view->focus_visible && view->focus == 4);
 
     const char *note = view->ai_available
-        ? "Local two-player is always available."
-        : "Computer opponent arrives in Phase 4; local play is ready.";
+        ? "Local two-player or computer; choose your colour and strength."
+        : "Computer opponent is unavailable; local play is ready.";
     ui_draw_text_clipped(
         fonts, UI_TEXT_REGULAR, note,
-        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 292.0f,
+        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 374.0f,
                     layout.panel.width - 48.0f, 24.0f},
         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
 }

@@ -96,7 +96,8 @@ const char *ui_result_title(GameResult result)
     }
 }
 
-int ui_focus_step(int focus, int direction, int count, int disabled_index)
+int ui_focus_step(int focus, int direction, int count,
+                  unsigned disabled_mask)
 {
     if (count <= 0) {
         return focus;
@@ -105,7 +106,7 @@ int ui_focus_step(int focus, int direction, int count, int disabled_index)
     const int step = direction < 0 ? -1 : 1;
     for (int attempt = 0; attempt < count; ++attempt) {
         focus = (focus + step + count) % count;
-        if (focus != disabled_index) {
+        if ((disabled_mask & (1u << (unsigned)focus)) == 0) {
             return focus;
         }
     }

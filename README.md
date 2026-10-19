@@ -2,10 +2,12 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前状态：Phase 3（游戏流程与对局状态管理）已完成。**
-> 本地双人可从新游戏页开始，完整走完一局；撤销/重做、重开、暂停/继续、
-> 返回菜单、历史查看、自动跳过提示与终局结果均已接入显式状态机。
-> AI 对战（Phase 4）尚未实现：新游戏页的 Computer 选项按构建禁用并标注。
+> **当前状态：Phase 4（AI 与难度）已完成。**
+> 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
+> Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结，
+> 新对局、撤销、重开、返回菜单与退出都会取消旧搜索。
+> 三档 AI 均只返回合法着法，真实对局基准与结果见
+> [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
 > 详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ## 技术栈
@@ -38,6 +40,11 @@
 │   │   ├── game.[ch]     回合、自动跳过、终局与结果
 │   │   ├── history.[ch]  局面快照栈、撤销/重做、分支截断
 │   │   └── match.[ch]    对局状态机、模式与 AI 边界、撤销语义
+│   ├── ai/
+│   │   ├── ai.[ch]       难度配置、评估入口、合法性兜底、同步控制器
+│   │   ├── ai_eval.c     角点/机动性/位置/稳定子/前沿/奇偶评估
+│   │   ├── ai_search.[ch] Negamax、Alpha-Beta、迭代加深、置换表
+│   │   └── ai_worker.[ch] 后台搜索线程、快照、取消与结果回收
 │   ├── ui/
 │   │   ├── theme.h       颜色、字号、间距、圆角与时长令牌
 │   │   ├── draw.[ch]     圆角面板、文字、按钮状态、程序化棋子
@@ -63,6 +70,9 @@
 │   ├── test_random_games.c 随机合法对局测试
 │   ├── test_history.c    core.history 测试
 │   ├── test_match.c      core.match 测试
+│   ├── test_ai.c         core.ai 测试（评估、搜索、PvE 完整对局）
+│   ├── test_ai_worker.c  ai.worker 测试（快照、取消、生命周期）
+│   ├── bench_ai.c        AI 基准（对局、节点/剪枝/耗时、局面探针）
 │   ├── test_ui_button.c  按钮悬停/按下/释放/禁用测试
 │   └── test_ui_helpers.c 缓动/颜色、命中、各视图输入、动画插值测试
 ├── docs/
@@ -71,13 +81,14 @@
 │   ├── PHASE_0_REPORT.md Phase 0 完成报告
 │   ├── PHASE_1_REPORT.md Phase 1 完成报告
 │   ├── PHASE_2_REPORT.md Phase 2 完成报告
-│   └── PHASE_3_REPORT.md Phase 3 完成报告
+│   ├── PHASE_3_REPORT.md Phase 3 完成报告
+│   └── PHASE_4_REPORT.md Phase 4 完成报告（含 AI 基准结果）
 ├── assets/
 │   └── fonts/            Inter 4.1（SIL OFL 1.1）
 └── LICENSE              GPL-3.0
 ```
 
-`ai/`、`storage/`、`settings/` 等目录会在对应阶段拥有真实实现后再创建，
+`storage/`、`settings/` 等目录会在对应阶段拥有真实实现后再创建，
 避免出现无意义的空目录。理由见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 规则引擎与对局流程
@@ -93,6 +104,22 @@
 坐标约定：行 0 为顶部，列 0 为左侧；记谱 `a1` 为左下角，`h8` 为右上角。
 标准开局为 D4/E5 白、D5/E4 黑。
 
+## AI 引擎
+
+- **搜索**：Negamax + Alpha-Beta，显式 pass 节点，双方无着法时返回精确终局分；
+  迭代加深、时间预算、取消回调、置换表（Hard）与着法排序。
+- **评估**：角点、机动性、潜在机动性、位置权重、边稳定子、前沿子、棋子数与
+  奇偶，按开局/中局/残局切换权重；分量值单独保存在 `AiEvaluation` 中可检查。
+- **难度**：Easy 为单层静态评估加随机扰动；Medium 为固定深度 Alpha-Beta；
+  Hard 为迭代加深 + 置换表 + 残局扩展。三档均只返回合法着法。
+- **线程边界**：`AiWorker` 复制状态快照在后台搜索；取消/完成用 C11 原子变量
+  同步。后台线程不接触 `Match`、UI 或全局状态，结果仍由 `match_apply_move()`
+  校验后应用。线程创建失败时退回同步搜索，再退化为第一个合法着法。
+- **基准**：`reversi_ai_bench --games N` 用固定种子跑 Random/Greedy 与不同难度
+  对局，输出 W/D/L、非法着法、失败、未完成局数、节点数、剪枝率、置换表命中、
+  平均耗时与最大深度，并对开局/中局/残局做局面探针。实际结果见
+  [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
+
 ### 状态机
 
 对局逻辑状态（`MatchPhase`）与应用页面（`AppScreen`）是两个独立的维度：
@@ -105,7 +132,9 @@ AppScreen:  MainMenu → GameSetup → Game → History ─┐
 MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬─> PLAYER_TURN
                  │      ↑                              ├─> PASSING_TURN ──> PLAYER_TURN
                  │      └──────────────────────────────┘                  └─> GAME_OVER
-                 └──暂停──> PAUSED ──继续──> PLAYER_TURN        GAME_OVER ──撤销/重做──> PLAYER_TURN
+                 ├──暂停──> PAUSED ──继续──> PLAYER_TURN
+                 └──轮到 AI──> AI_THINKING ──落子──> ANIMATING
+                                      └──取消──> PLAYER_TURN
 ```
 
 - 每个转换都有显式前置条件，非法的转换返回 `false` 且不改变任何状态。
@@ -119,8 +148,13 @@ MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬�
 
 - **页面**：主菜单、新游戏、对局、历史、设置、结算；退出、重开与返回菜单
   使用模态确认。
-- **新游戏页**：模式（Local / Computer）与先手颜色；AI 未实现时 Computer 与
-  颜色按钮按构建禁用，并显示 “Computer opponent arrives in Phase 4”。
+- **新游戏页**：模式（Local / Computer）、先手颜色与 AI 难度（Easy / Medium /
+  Hard）；难度只在 Computer 模式可选。AI 控制器不可用时 Computer、颜色与
+  难度按钮禁用，并显示原因。
+- **人机对战**：轮到电脑时进入 `AI_THINKING`，状态栏显示 “Computer is
+  thinking...” 动态提示；棋盘与暂停禁用，撤销/重开/返回菜单仍可用。搜索在
+  后台线程执行，主线程继续渲染；撤销、重开、返回菜单、退出或开始新对局都会
+  取消并回收旧搜索。电脑无子可下时沿用自动跳过提示。
 - **对局页**：8×8 棋盘与坐标、当前回合、双方实时棋子数、合法着法提示、
   最后一步脉冲标记、状态文本；宽窗口使用侧栏（含 Undo/Redo/Pause/Restart/
   Main menu），窄窗口使用上下信息栏与底部五按钮操作栏。
@@ -130,8 +164,8 @@ MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬�
   继续后回到暂停前的阶段。
 - **历史**：显示每一步的序号、落子方、记谱、翻转数与跳过标记；当前局面
   高亮为 CURRENT，撤销后可重做的行标记为 REDO 并置灰；支持滚轮与上下键滚动。
-- **撤销/重做**：本地双人撤销一步；新落子会丢弃重做分支。人机模式（Phase 4）
-  预留“撤销到玩家上一个决策点”的语义，已在 `match` 中实现并由测试覆盖。
+- **撤销/重做**：本地双人撤销一步；人机模式撤销到玩家上一个决策点（搜索中
+  撤销会先取消 AI 搜索）。新落子会丢弃重做分支。
 - **操作**：鼠标悬停/点击；方向键移动棋盘光标、Enter/Space 落子；
   `R` 重开、`M` 返回菜单、`P`/`Esc` 暂停、`H` 查看历史；
   `Ctrl/Cmd+Z` 撤销、`Ctrl/Cmd+Shift+Z` 或 `Ctrl/Cmd+Y` 重做；
@@ -257,7 +291,7 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-六个 core 测试目标只链接 `reversi_core`，不依赖 raylib，因此可在无图形环境运行：
+`core.*` 与 `ai.*` 测试目标不依赖 raylib，因此可在无图形环境运行：
 
 - `core.board`：623 项断言；棋盘、坐标/记谱、边界与安全访问
 - `core.rules`：227 项断言；开局着法、八方向翻转、多方向/多子翻转、间隙与边界
@@ -266,22 +300,31 @@ ctest --test-dir build --output-on-failure
   校验每步，并检查棋子占用数、总数与终局不变量
 - `core.history`：124 项断言；快照初始化、撤销/重做完整恢复、新落子截断重做
   分支、跳过事件与终局恢复、容量与空指针
-- `core.match`：653 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
-  从暂停/终局重开、撤销/重做恢复一致性、模式切换与人机撤销到决策点
+- `core.match`：701 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
+  从暂停/终局重开、撤销/重做恢复一致性、模式切换、AI_THINKING 与人机撤销
+- `core.ai`：2,618 项断言；配置/名称、评估分量、大量局面的合法性、单步与
+  pass 局面、取消与确定性，以及三档难度 × 黑白方的 6 局完整人机对局
+- `ai.worker`：22 项断言；后台搜索、状态快照隔离、取消、空指针与生命周期
 
 `ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
 悬停、按下、释放、移出取消、禁用、输入阻断与 reduced-motion 语义。
-`ui.helpers`（128 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、显示名称/
-终局标题、焦点跳转、对局输入门控、各视图（新游戏/暂停/历史/结算）的键盘与
-鼠标动作，以及落子/翻转/跳过动画插值，并确认动画不修改棋盘快照。
+`ui.helpers`（175 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、显示名称/
+终局标题、焦点跳转、对局输入门控、AI_THINKING 门控、新游戏难度选择、
+各视图（新游戏/暂停/历史/结算）的键盘与鼠标动作，以及落子/翻转/跳过动画
+插值，并确认动画不修改棋盘快照。
 
-实际结果（2026-10-19，macOS arm64，Phase 3 完成后）：
+实际结果（2026-10-20，macOS arm64，Phase 4 完成后）：
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug（`REVERSI_ENABLE_GUI_TESTS=ON`） | 9/9，含 `app.smoke` |
-| Release | 8/8 |
-| ASan+UBSan（`ASAN_OPTIONS=detect_leaks=0`） | 8/8，另运行 `--frames 5` 无报告 |
+| Debug | 11/11，含 `app.smoke`（1.21 s） |
+| Release | 10/10 无 GUI 测试通过 |
+| ASan+UBSan | 10/10 无 GUI 测试通过，无 Sanitizer 报告 |
+
+AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 4 局）中所有对局
+`illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 全胜，Medium 对
+Hard 全负，Easy 对 Medium 1:3。完整数据见
+[docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
 
@@ -311,7 +354,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug、Release、ASan+UBSan 构建与测试已实际验证；Phase 3 界面在 1100×800（HiDPI 2×）下完成截图验证（2026-10-19） |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 11/11（含 GUI 冒烟）、Release 10/10、ASan+UBSan 10/10 已实际验证（2026-10-20）；Phase 3/4 界面在 1100×800/1100×832（HiDPI 2×）下完成截图与真实鼠标验证 |
 | Windows | 未验证 |
 | Linux | 未验证 |
 
@@ -325,10 +368,13 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 - 在 macOS 上配置阶段，raylib 自身会打印一条关于 OpenGL 已废弃的
   developer warning；这是 raylib 6.2 的既有提示。
 - 设置项当前只保存在内存中，重启后恢复默认；持久化计划在 Phase 5 实现。
-- AI 对战尚未实现，新游戏页的 Computer 选项按构建禁用；存档/读档计划在
-  Phase 5 落地。
-- 人机模式的撤销语义（撤销到玩家上一个决策点）已在 `match` 中实现并有测试
-  覆盖，但缺少可操作的 AI 对手，尚未在真实对局中人工验证。
+- 存档/读档计划在 Phase 5 落地。
+- Phase 4 界面已实际验证：难度与颜色选择、人机执黑/执白、思考提示、
+  AI 自动落子、思考中撤销、重做后重新搜索、重开与确认框取消。
+  完整人机对局到结算页、人机自动跳过提示、思考中关闭窗口这三项**未人工验证**；
+  对应逻辑由 `core.ai` / `core.match` / `ai.worker` 测试覆盖。
+- AI 基准每组仅 4 局，样本量有限；结果用于验证强弱顺序与零非法着法，
+  不作为精确胜率估计。
 - 在锁屏、显示器休眠或没有活动图形会话时，GLFW 无法获取主显示器，
   `app.smoke` 与手动运行都会以 “Failed to get primary monitor /
   Failed to initialize platform” 失败；解锁并保持显示唤醒后重跑即可。
@@ -342,6 +388,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 - [Phase 1 报告](docs/PHASE_1_REPORT.md)
 - [Phase 2 报告](docs/PHASE_2_REPORT.md)
 - [Phase 3 报告](docs/PHASE_3_REPORT.md)
+- [Phase 4 报告](docs/PHASE_4_REPORT.md)
 
 ## 许可证
 

@@ -1,5 +1,7 @@
 #include "app/app.h"
 
+#include "ai/ai.h"
+#include "ai/ai_worker.h"
 #include "core/game.h"
 #include "core/match.h"
 #include "core/rules.h"
@@ -82,6 +84,9 @@ typedef struct App {
     PendingGameAction pending_action;
     MatchConfig pending_config;
     const AiController *ai;
+    AiWorker *ai_worker;
+    AiDifficulty ai_difficulty;
+    unsigned ai_seed;
 } App;
 
 static UiInput read_input(void);
@@ -103,6 +108,11 @@ static void app_after_history_change(App *app);
 static void app_handle_menu_action(App *app, MenuAction action);
 static void app_handle_pause_action(App *app, PauseAction action);
 static void app_handle_modal_confirm(App *app);
+static void app_cancel_ai(App *app);
+static bool app_start_ai(App *app);
+static bool app_poll_ai(App *app);
+static void app_maybe_start_ai(App *app);
+static AiDifficulty app_ai_difficulty_from_setup(SetupDifficulty difficulty);
 
 static UiInput read_input(void)
 {
@@ -163,7 +173,10 @@ static void app_init(App *app)
         .human_color = STONE_BLACK,
         .ai = NULL
     };
-    app->ai = NULL;
+    app->ai = ai_controller_for_difficulty(AI_DIFFICULTY_MEDIUM);
+    app->ai_worker = NULL;
+    app->ai_difficulty = AI_DIFFICULTY_MEDIUM;
+    app->ai_seed = 0x51ED270Bu;
 
 #ifndef NDEBUG
     const char *autoplay = getenv("REVERSI_AUTOPLAY");
@@ -179,6 +192,7 @@ static void app_init(App *app)
 #endif
 
     ui_fonts_load(&app->fonts);
+    app->ai_worker = ai_worker_create();
     menu_view_init(&app->menu);
     setup_view_init(&app->setup_view);
     setup_view_set_ai_available(&app->setup_view, app->ai != NULL);
@@ -213,8 +227,124 @@ static void app_reset_match_ui(App *app)
     pause_view_reset(&app->pause_view);
 }
 
+static AiDifficulty app_ai_difficulty_from_setup(SetupDifficulty difficulty)
+{
+    switch (difficulty) {
+    case SETUP_DIFFICULTY_EASY:
+        return AI_DIFFICULTY_EASY;
+    case SETUP_DIFFICULTY_HARD:
+        return AI_DIFFICULTY_HARD;
+    case SETUP_DIFFICULTY_MEDIUM:
+    default:
+        return AI_DIFFICULTY_MEDIUM;
+    }
+}
+
+static void app_cancel_ai(App *app)
+{
+    if (app->ai_worker != NULL) {
+        ai_worker_join(app->ai_worker);
+    }
+    if (app->match.phase == MATCH_PHASE_AI_THINKING) {
+        (void)match_cancel_ai_turn(&app->match);
+    }
+}
+
+static bool app_apply_first_legal(App *app)
+{
+    Move moves[REVERSI_BOARD_CELL_COUNT];
+    const int count = rules_generate_legal_moves(
+        &app->match.state.board, app->match.state.current_player, moves,
+        REVERSI_BOARD_CELL_COUNT);
+    if (count <= 0) {
+        return false;
+    }
+    app_apply_move(app, moves[0]);
+    return app->match.phase != MATCH_PHASE_AI_THINKING;
+}
+
+static bool app_start_ai(App *app)
+{
+    Match *match = &app->match;
+    if (app->ai == NULL || match->phase != MATCH_PHASE_PLAYER_TURN
+        || match->config.mode != GAME_MODE_PVE
+        || match_is_human_turn(match)) {
+        return false;
+    }
+    if (!match_begin_ai_turn(match)) {
+        return false;
+    }
+
+    AiConfig config = ai_default_config(app->ai_difficulty, app->ai_seed++);
+    if (app->ai_worker != NULL
+        && ai_worker_start(app->ai_worker, &match->state, &config)) {
+        return true;
+    }
+
+    Move move = {0, 0};
+    AiStats stats;
+    if (ai_choose_move(&match->state, &config, &move, &stats)
+        && rules_is_legal_move(&match->state.board,
+                               match->state.current_player, move)) {
+        app_apply_move(app, move);
+        if (match->phase != MATCH_PHASE_AI_THINKING) {
+            return true;
+        }
+    }
+    if (app_apply_first_legal(app)) {
+        return true;
+    }
+
+    (void)match_cancel_ai_turn(match);
+    return false;
+}
+
+static bool app_poll_ai(App *app)
+{
+    Match *match = &app->match;
+    if (match->phase != MATCH_PHASE_AI_THINKING) {
+        return false;
+    }
+    if (app->ai_worker != NULL
+        && ai_worker_status(app->ai_worker) == AI_WORKER_RUNNING) {
+        return false;
+    }
+
+    Move move = {0, 0};
+    AiStats stats;
+    bool found = app->ai_worker != NULL
+        && ai_worker_take(app->ai_worker, &move, &stats)
+        && rules_is_legal_move(&match->state.board,
+                               match->state.current_player, move);
+    if (found) {
+        app_apply_move(app, move);
+        if (match->phase != MATCH_PHASE_AI_THINKING) {
+            return true;
+        }
+    }
+
+    if (app_apply_first_legal(app)) {
+        return true;
+    }
+    (void)match_cancel_ai_turn(match);
+    return true;
+}
+
+static void app_maybe_start_ai(App *app)
+{
+    if (app->match.phase == MATCH_PHASE_PLAYER_TURN
+        && app->match.config.mode == GAME_MODE_PVE
+        && !match_is_human_turn(&app->match)) {
+        (void)app_start_ai(app);
+    }
+}
+
 static void app_switch_screen(App *app, AppScreen target)
 {
+    if (target != APP_SCREEN_GAME) {
+        app_cancel_ai(app);
+    }
+
     app->screen = target;
     if (target != APP_SCREEN_GAME) {
         return;
@@ -224,6 +354,7 @@ static void app_switch_screen(App *app, AppScreen target)
     case PENDING_GAME_START:
         if (match_start(&app->match, &app->pending_config)) {
             app_reset_match_ui(app);
+            app_maybe_start_ai(app);
         } else {
             app->screen = APP_SCREEN_SETUP;
         }
@@ -248,9 +379,12 @@ static void app_begin_match(App *app, const MatchConfig *config)
         return;
     }
 
+    app_cancel_ai(app);
+
     if (app->screen == APP_SCREEN_GAME && !app->transition.active) {
         if (match_start(&app->match, config)) {
             app_reset_match_ui(app);
+            app_maybe_start_ai(app);
         }
         return;
     }
@@ -456,14 +590,18 @@ static void app_handle_modal_confirm(App *app)
 
     switch (purpose) {
     case MODAL_PURPOSE_QUIT:
+        app_cancel_ai(app);
         app->running = false;
         break;
     case MODAL_PURPOSE_RESTART:
+        app_cancel_ai(app);
         if (match_restart(&app->match)) {
             app_reset_match_ui(app);
+            app_maybe_start_ai(app);
         }
         break;
     case MODAL_PURPOSE_RETURN_MENU:
+        app_cancel_ai(app);
         app_request_screen(app, APP_SCREEN_MENU);
         break;
     case MODAL_PURPOSE_NONE:
@@ -477,7 +615,7 @@ static void app_update_game(App *app, const UiInput *input, float dt)
     Match *match = &app->match;
 
 #ifndef NDEBUG
-    if (app->autoplay) {
+    if (app->autoplay && match->config.mode == GAME_MODE_PVP) {
         if (match->phase == MATCH_PHASE_PASSING_TURN) {
             (void)match_finish_pass(match);
         }
@@ -496,6 +634,36 @@ static void app_update_game(App *app, const UiInput *input, float dt)
         }
     }
 #endif
+
+    app_maybe_start_ai(app);
+
+    if (match->phase == MATCH_PHASE_AI_THINKING) {
+        if (app_poll_ai(app)) {
+            return;
+        }
+
+        const GameViewAction action = game_view_update(
+            &app->game_view, match, input, true, dt);
+        switch (action.type) {
+        case GAME_VIEW_UNDO:
+            app_cancel_ai(app);
+            app_undo(app);
+            break;
+        case GAME_VIEW_RESTART:
+            modal_open(&app->modal, MODAL_PURPOSE_RESTART);
+            break;
+        case GAME_VIEW_MENU:
+            modal_open(&app->modal, MODAL_PURPOSE_RETURN_MENU);
+            break;
+        case GAME_VIEW_NONE:
+        case GAME_VIEW_MOVE:
+        case GAME_VIEW_REDO:
+        case GAME_VIEW_PAUSE:
+        default:
+            break;
+        }
+        return;
+    }
 
     if (match->phase == MATCH_PHASE_ANIMATING) {
         ui_animation_update(&app->animation, dt);
@@ -625,6 +793,11 @@ static void app_update(App *app, const UiInput *input, float dt)
         const SetupAction action = setup_view_update(
             &app->setup_view, input, true, dt);
         if (action == SETUP_ACTION_START) {
+            if (app->setup_view.mode == GAME_MODE_PVE) {
+                app->ai_difficulty = app_ai_difficulty_from_setup(
+                    app->setup_view.difficulty);
+                app->ai = ai_controller_for_difficulty(app->ai_difficulty);
+            }
             MatchConfig config = {
                 .mode = app->setup_view.mode,
                 .human_color = app->setup_view.human_color,
@@ -791,6 +964,11 @@ int app_run(int max_frames)
         }
     }
 
+    app_cancel_ai(&app);
+    if (app.ai_worker != NULL) {
+        ai_worker_destroy(app.ai_worker);
+        app.ai_worker = NULL;
+    }
     ui_fonts_unload(&app.fonts);
     CloseWindow();
     return 0;

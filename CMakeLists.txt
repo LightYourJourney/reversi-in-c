@@ -87,6 +87,8 @@ if(NOT REVERSI_RAYLIB_TARGET)
     message(STATUS "Reversi: using fetched raylib ${REVERSI_RAYLIB_VERSION}")
 endif()
 
+find_package(Threads REQUIRED)
+
 # ---------------------------------------------------------------------------
 # Optional sanitizers. Applied after raylib is configured so third-party
 # sources are not instrumented by these flags.
@@ -144,6 +146,16 @@ add_library(reversi_core STATIC
 target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
+add_library(reversi_ai STATIC
+    src/ai/ai.c
+    src/ai/ai_eval.c
+    src/ai/ai_search.c
+    src/ai/ai_worker.c)
+target_include_directories(reversi_ai PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(reversi_ai
+    PUBLIC reversi_core
+    PRIVATE reversi_warnings Threads::Threads)
+
 add_library(reversi_ui STATIC
     src/ui/animation.c
     src/ui/board_view.c
@@ -169,7 +181,7 @@ add_library(reversi_app STATIC
     src/app/app.c)
 target_include_directories(reversi_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_app
-    PUBLIC reversi_core reversi_ui
+    PUBLIC reversi_core reversi_ui reversi_ai
     PRIVATE reversi_warnings)
 
 add_executable(reversi src/main.c)
@@ -214,6 +226,19 @@ function(reversi_add_ui_test target source test_name)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endfunction()
 
+function(reversi_add_ai_test target source test_name)
+    add_executable(${target} ${source})
+    target_include_directories(${target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(${target} PRIVATE
+        reversi_ai reversi_warnings Threads::Threads)
+
+    add_test(NAME ${test_name} COMMAND ${target})
+    set_tests_properties(${test_name} PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+endfunction()
+
 if(REVERSI_BUILD_TESTS)
     enable_testing()
 
@@ -226,12 +251,25 @@ if(REVERSI_BUILD_TESTS)
         core.history)
     reversi_add_core_test(reversi_match_tests tests/test_match.c
         core.match)
+    reversi_add_ai_test(reversi_ai_tests tests/test_ai.c core.ai)
+    reversi_add_ai_test(reversi_ai_worker_tests tests/test_ai_worker.c
+        ai.worker)
 
     # UI logic tests use synthetic input and create no window.
     reversi_add_ui_test(reversi_ui_button_tests
         tests/test_ui_button.c ui.button)
     reversi_add_ui_test(reversi_ui_helper_tests
         tests/test_ui_helpers.c ui.helpers)
+
+    # Benchmark tool: not registered with CTest (it runs many full games).
+    add_executable(reversi_ai_bench tests/bench_ai.c)
+    target_include_directories(reversi_ai_bench PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_ai_bench PRIVATE
+        reversi_ai reversi_warnings)
+    set_target_properties(reversi_ai_bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
     if(REVERSI_ENABLE_GUI_TESTS)
         add_test(NAME app.smoke COMMAND reversi --frames 2)

@@ -26,7 +26,8 @@ typedef enum MatchPhase {
     MATCH_PHASE_ANIMATING,
     MATCH_PHASE_PASSING_TURN,
     MATCH_PHASE_PAUSED,
-    MATCH_PHASE_GAME_OVER
+    MATCH_PHASE_GAME_OVER,
+    MATCH_PHASE_AI_THINKING
 } MatchPhase;
 
 typedef struct MatchConfig {
@@ -68,6 +69,16 @@ bool match_finish_pass(Match *match);
 
 bool match_pause(Match *match);
 bool match_resume(Match *match);
+
+/*
+ * PVE only: enters AI_THINKING when it is the computer's turn and it has at
+ * least one legal move. Leaves the board untouched; the caller owns the
+ * actual search. match_apply_move() accepts a move in AI_THINKING.
+ */
+bool match_begin_ai_turn(Match *match);
+
+/* AI_THINKING -> PLAYER_TURN, e.g. when a search is cancelled. */
+bool match_cancel_ai_turn(Match *match);
 
 /*
  * PVP undoes one move. PVE undoes until the human player's previous decision

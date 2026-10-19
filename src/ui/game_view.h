@@ -33,6 +33,7 @@ typedef struct GameView {
     bool has_last_mouse;
     Vector2 last_mouse;
     float reject_timer;
+    float thinking_time;
     Move reject_move;
 } GameView;
 

@@ -46,15 +46,15 @@
 | Game | `src/core/game.[ch]` | Phase 1 已实现 | 当前玩家、落子应用、自动跳过、主动跳过限制、终局、结果、一致性检查 | Board、Rules |
 | History | `src/core/history.[ch]` | Phase 3 已实现 | 局面快照栈、撤销/重做游标、重做分支截断、跳过事件记录 | Game |
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
-| AI | `src/ai/` | Phase 4 | 局面评估、搜索、难度分级 | Board、Rules、Game（只读） |
-| UI | `src/ui/` | Phase 2/3 已实现 | 设计令牌、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算视图、动画、模态 | raylib、core 的只读视图类型 |
-| App | `src/app/` | Phase 2/3 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时 | 所有下层模块 |
+| AI | `src/ai/` | Phase 4 已实现 | 局面评估、Negamax/Alpha-Beta 搜索、难度配置、后台搜索工作者 | Board、Rules、Game（只读）、C 标准库、POSIX/Windows 线程 |
+| UI | `src/ui/` | Phase 2/3/4 已实现 | 设计令牌、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算视图、动画、模态 | raylib、core 的只读视图类型 |
+| App | `src/app/` | Phase 2/3/4 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时、AI 回合生命周期 | 所有下层模块 |
 | Storage | `src/storage/` | Phase 5 | 存档/读档、格式版本校验 | Game、History、C 标准库 |
 | Settings | `src/settings/` | Phase 5 | 用户偏好读写 | C 标准库 / Storage |
 | Utils | `src/utils/` | 按需 | 无业务含义的纯工具函数 | C 标准库 |
 
-说明：`ai/`、`storage/`、`settings/`、`utils/` 目前没有目录。它们会在拥有
-真实实现时创建，而不是先放空文件占位。这符合“禁止无意义单文件目录”的要求。
+说明：`storage/`、`settings/`、`utils/` 目前没有目录。它们会在拥有真实实现
+时创建，而不是先放空文件占位。
 
 ## 4. 数据流
 
@@ -100,6 +100,8 @@ PLAYER_TURN ────────────────> ANIMATING
      └─────────────────────────────────────────────────────────────┘
 
 PLAYER_TURN ──match_pause──> PAUSED ──match_resume──> PLAYER_TURN
+PLAYER_TURN ──轮到 AI──> AI_THINKING ──落子──> ANIMATING
+AI_THINKING ──match_cancel_ai_turn──> PLAYER_TURN
 GAME_OVER   ──match_undo / match_redo──> PLAYER_TURN / GAME_OVER
 ```
 
@@ -109,8 +111,11 @@ GAME_OVER   ──match_undo / match_redo──> PLAYER_TURN / GAME_OVER
   只是把“对手无子可下”暴露成一个可被 UI 显示、可被撤销的阶段。
 - 暂停只允许从 `PLAYER_TURN` 进入，继续时回到 `PLAYER_TURN`；没有额外的
   来源阶段字段需要维护。
-- 撤销/重做只允许在 `PLAYER_TURN` 与 `GAME_OVER` 进行；两个阶段的恢复目标
-  由快照本身决定，不需要 UI 参与。
+- `AI_THINKING` 只可能出现在人机模式、轮到电脑且棋盘仍有合法着法时。进入
+  该阶段后棋盘与暂停被禁用，但撤销、重开、返回菜单仍可取消搜索。
+- 撤销只允许在 `PLAYER_TURN`、`AI_THINKING` 与 `GAME_OVER` 进行；重做只允许
+  在 `PLAYER_TURN` 与 `GAME_OVER`。恢复目标由快照本身决定，不需要 UI 参与；
+  人机模式会继续回退到玩家上一个决策点。
 
 ### 4.3 UI 状态与动画
 
@@ -128,21 +133,56 @@ UI 的瞬时状态（悬停、光标位置、按钮按压、动画进度、页�
 ### 4.4 AI 落子
 
 ```text
-app ──只读快照──> ai ──候选落子──> app
-                                     │
-                                     ▼
-                        与人类落子完全相同的校验与
-                        应用路径（match/game/rules/history）
+app ──只读状态快照 + AiConfig──> ai_worker（后台线程）
+app <──候选落子/AiStats──（轮询，不阻塞事件循环）
+  │
+  ▼
+与人类落子完全相同的校验与应用路径（match/game/rules/history）
 ```
 
 AI 返回的落子即使非法，也会被规则层拒绝；AI 不拥有跳过校验的特权。
+`ai_worker` 只复制 `GameState` 与 `AiConfig`，不持有 `Match`、UI 或视图指针，
+因此后台线程无法写入对局或界面状态。
 
 `MatchConfig.ai` 是该边界的占位：`Match` 只保存指向 `AiController` 的指针，
-不调用它、也不拥有它。Phase 4 由 `app` 在 AI 该走子时调用控制器，再把返回的
-落子交给 `match_apply_move()`。人机模式下 `match_undo()` 会一次回退到玩家
-上一个决策点，使“撤销”始终对应玩家自己的一步。
+不调用它、也不拥有它。Phase 4 中 `app` 在轮到电脑时：
 
-### 4.5 存档与读档
+1. 调用 `match_begin_ai_turn()` 进入 `AI_THINKING`；
+2. 把状态快照与难度配置交给 `AiWorker`；
+3. 每帧轮询；搜索完成后再调用 `match_apply_move()` 校验并应用；
+4. 撤销、重开、返回菜单、退出或新对局时先取消并回收工作者，再改状态。
+
+`AiWorker` 的取消标志与完成标志使用 C11 原子变量；工作者在搜索中每 1024 个
+节点检查一次取消。线程后端在 POSIX 上使用 `pthread`，Windows 上使用
+`CreateThread`，不依赖 C11 `<threads.h>`。即使线程创建失败，`app` 仍会同步
+调用 `ai_choose_move()`，再退化为“第一个合法着法”，保证对局继续。
+
+人机模式下 `match_undo()` 会一次回退到玩家上一个决策点，使“撤销”始终对应
+玩家自己的一步；在 `AI_THINKING` 中撤销会先取消搜索。
+
+### 4.5 AI 评估与搜索
+
+- **搜索**：Negamax + Alpha-Beta；无合法着法的节点显式切换到对手（pass
+  node），双方都无着法时返回精确终局分。搜索不调用 `game_apply_move()` 的
+  自动跳过，而是自己控制回合，保证负极大极小的视角一致。
+- **迭代加深**：从深度 1 开始逐层加深，保留上一层最佳着法用于排序；时间预算
+  用 `timespec_get()`（UTC 毫秒）检查，每 1024 个节点检查一次取消回调。
+- **置换表（Hard）**：Zobrist 哈希（棋盘 + 行棋方），`1<<16` 项直接映射；
+  保存精确/下界/上界标志与最佳着法，用于剪枝与着法排序。
+- **着法排序**：置换表最佳着法优先，其次角点，再按静态位置分排序。
+- **终局**：Hard 在空格 ≤12 时把搜索深度扩展到剩余空格数；时间不足时保留
+  最后一个完整深度的结果。
+- **评估**（始终从行棋方视角，own - opponent）：角点、机动性、潜在机动性、
+  位置表、边稳定子、前沿子、棋子数、奇偶。位置表不含角点（角点单独计分），
+  前沿子不计角点；各分量权重随开局/中局/残局切换。
+
+| 难度 | 算法 | 深度/预算 | 随机性 |
+|---|---|---|---|
+| Easy | 单层静态评估 | 深度 1 / 30 ms | ±40 分，仍只返回合法着法 |
+| Medium | Alpha-Beta + 基础评估 | 深度 4 / 200 ms | 无 |
+| Hard | 迭代加深 + 置换表 + 完整评估 | 深度 10 / 500 ms，残局扩展 | 无 |
+
+### 4.6 存档与读档
 
 ```text
 app ──> storage ──> 文件（带格式版本号）
@@ -155,6 +195,8 @@ app <── storage <── 校验后的状态
 
 - `Match`、`History`、`Settings` 的实例由 `app` 拥有，生命周期与
   应用一致。
+- `AiWorker` 由 `app` 创建并在退出时销毁；其任务对象在搜索结束时回收，
+  不跨对局存活。AI 搜索只拥有状态与配置副本。
 - `MenuView`、`SetupView`、`GameView`、`PauseView`、`HistoryView`、
   `SettingsView`、`ResultView`、`Modal`、`UiMoveAnimation`、`UiFonts` 与
   `AppSettings` 同样由 `app` 拥有；设置当前只在进程内有效，Phase 5 再交给
@@ -199,7 +241,8 @@ app <── storage <── 校验后的状态
 | 状态机 | 非法转换被拒绝、暂停/继续回到来源阶段、终局与满盘/非满盘两种结束方式 | 否 |
 | 撤销/重做 | 快照恢复一致、新落子截断重做分支、终局撤销、跳过事件恢复 | 否 |
 | 随机对局 | 500 局确定性随机对局：每步合法、占用数一致、有限步结束 | 否 |
-| AI 合法性 | 所有难度在大量局面上只能返回合法着法（Phase 4） | 否 |
+| AI 合法性 | 所有难度在大量局面与完整人机对局中只能返回合法着法 | 否 |
+| AI 搜索 | 配置校验、评估分量、pass 节点、终局分、取消、确定性、后台工作者快照 | 否 |
 | 存档往返 | 保存后读取得到等价状态；损坏文件被拒绝（Phase 5） | 否 |
 | UI 按钮 | 合成 `UiInput` 验证悬停、按下、释放、移出取消、禁用与输入阻断 | 否（链接 raylib，不建窗口） |
 | UI 纯逻辑 | 缓动/颜色、棋盘命中、合法格判断、各视图动作映射、动画插值 | 否（链接 raylib，不建窗口） |
@@ -217,7 +260,7 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 |---|---|
 | 不创建 `include/` | 头文件与实现同目录，通过 `src/` 作为包含根；避免重复的公共/私有头文件树 |
 | 暂不创建 `cmake/` | 当前单个 `CMakeLists.txt` 足够清晰；出现可复用模块时再拆分 |
-| 暂不创建空的 `ai/`、`storage/`、`settings/` | 禁止为模块化制造无意义空目录；有真实代码时再加入 |
+| 暂不创建空的 `storage/`、`settings/` | 禁止为模块化制造无意义空目录；有真实代码时再加入 |
 | `tests/` 独立于 `src/` | core 测试只链接 `reversi_core`，保证规则层与 GUI 解耦；`ui.button` 单独链接 `reversi_ui` 但不创建窗口 |
 | `assets/` 在构建后复制 | 运行时与源码目录、当前工作目录彻底解耦 |
 
@@ -318,3 +361,29 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    并说明原因，而不是提供一个点了没有反应的选项。
 8. **计时留在 app**：跳过提示时长与终局延迟是展示参数，放在 `app` 而不是
    `Match`，使核心层保持无计时器、可确定性测试。
+
+## 15. Phase 4 关键决策
+
+1. **显式 `AI_THINKING` 阶段**：AI 回合不再借用 `PLAYER_TURN` 加布尔标志，
+   而是成为状态机的一等阶段。这样输入门控、暂停/撤销/重开的前置条件、
+   一致性检查都能集中表达；AI 落子由 `match_apply_move()` 在
+   `AI_THINKING` 中接受，人机模式之外该阶段不可进入。
+2. **搜索自己处理 pass**：Negamax 不调用 `game_apply_move()` 的自动跳过，
+   而是显式把行棋方切换给对手。若依赖自动跳过，pass 会被规则层静默吞掉，
+   负极大极小的视角与深度计数都会出错。
+3. **时间预算与取消检查分离**：时间用 UTC 毫秒计算，取消通过回调检查；
+   两者都在固定的节点间隔触发，避免每节点查询时钟。根节点每一步都检查，
+   保证预算耗尽时不会把半层结果当成完整结果。
+4. **置换表只给 Hard**：Zobrist 表约 2 MiB，Easy/Medium 的收益不足以抵消
+   分配与复杂度；Hard 的迭代加深可从置换表获得排序与剪枝收益。
+5. **评估分量显式暴露**：`AiEvaluation` 保存每个分量的原值（行棋方视角），
+   测试与基准可以直接检查分量而不是只看总分；位置表排除角点，避免与角点
+   权重重复计算。
+6. **后台工作者只持有副本**：`AiWorker` 复制 `GameState` 与 `AiConfig`，
+   搜索线程不接触 `Match`、`App` 或 UI。取消/完成用 C11 原子变量同步，
+   结果由主线程取回后仍走 `match_apply_move()`。
+7. **失败路径必须仍能落子**：线程创建失败时同步搜索；搜索失败时选择第一个
+   合法着法；任何情况下都不会把非法着法交给规则层或让 AI 回合卡死。
+8. **难度差异来自参数而非标签**：Easy 单层 + 随机扰动、Medium 固定深度
+   Alpha-Beta、Hard 迭代加深 + 置换表 + 残局扩展；基准用固定种子对局记录
+   实际胜负、节点数、剪枝率与耗时，不用人工编写的胜率。

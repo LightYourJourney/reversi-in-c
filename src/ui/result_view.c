@@ -105,7 +105,7 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
     if (input->up_pressed || input->down_pressed) {
         view->focus = ui_focus_step(
             view->focus, input->down_pressed ? 1 : -1, 3,
-            can_undo ? -1 : 1);
+            can_undo ? 0u : (1u << 1));
         view->focus_visible = true;
     }
 
