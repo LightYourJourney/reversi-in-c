@@ -21,7 +21,8 @@ typedef struct ResultView {
 void result_view_init(ResultView *view);
 void result_view_reset(ResultView *view);
 ResultAction result_view_update(ResultView *view, const UiInput *input,
-                                bool accept_input, float dt);
+                                bool accept_input, bool animations,
+                                float dt);
 void result_view_draw(const ResultView *view, const UiFonts *fonts,
                       const GameState *game);
 

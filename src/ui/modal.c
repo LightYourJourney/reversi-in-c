@@ -39,30 +39,26 @@ static ModalLayout modal_layout(void)
     return layout;
 }
 
-static void modal_texts(ModalPurpose purpose, const char **title,
-                        const char **body, const char **confirm)
+typedef struct ModalText {
+    const char *title;
+    const char *body;
+    const char *confirm;
+} ModalText;
+
+static ModalText modal_texts(ModalPurpose purpose)
 {
     switch (purpose) {
     case MODAL_PURPOSE_QUIT:
-        *title = "Quit Reversi?";
-        *body = "Your current game will close.";
-        *confirm = "Quit";
-        break;
+        return (ModalText){"Quit Reversi?",
+                           "Your current game will close.", "Quit"};
     case MODAL_PURPOSE_RESTART:
-        *title = "Restart this game?";
-        *body = "The current board will be reset.";
-        *confirm = "Restart";
-        break;
+        return (ModalText){"Restart this game?",
+                           "The current board will be reset.", "Restart"};
     case MODAL_PURPOSE_RETURN_MENU:
-        *title = "Return to main menu?";
-        *body = "The current game will be lost.";
-        *confirm = "Leave";
-        break;
+        return (ModalText){"Return to main menu?",
+                           "The current game will be lost.", "Leave"};
     default:
-        *title = "";
-        *body = "";
-        *confirm = "Confirm";
-        break;
+        return (ModalText){"", "", "Confirm"};
     }
 }
 
@@ -89,16 +85,11 @@ void modal_open(Modal *modal, ModalPurpose purpose)
         return;
     }
 
-    const char *title = "";
-    const char *body = "";
-    const char *confirm = "Confirm";
-    modal_texts(purpose, &title, &body, &confirm);
-    (void)title;
-    (void)body;
+    const ModalText text = modal_texts(purpose);
 
     modal->purpose = purpose;
     modal->appear = 0.0f;
-    ui_button_init(&modal->confirm, confirm, true);
+    ui_button_init(&modal->confirm, text.confirm, true);
     ui_button_init(&modal->cancel, "Cancel", false);
 
     const ModalLayout layout = modal_layout();
@@ -120,15 +111,21 @@ ModalAction modal_update(Modal *modal, const UiInput *input, float dt)
         return MODAL_ACTION_NONE;
     }
 
-    modal->appear += dt;
+    modal->appear = input->reduce_motion
+        ? REVERSI_UI_DUR_MODAL : modal->appear + dt;
+    const bool ready = modal->appear >= REVERSI_UI_DUR_MODAL;
     const ModalLayout layout = modal_layout();
     ui_button_set_bounds(&modal->confirm, layout.confirm);
     ui_button_set_bounds(&modal->cancel, layout.cancel);
 
     const bool confirm_clicked = ui_button_update(
-        &modal->confirm, input, true, dt);
+        &modal->confirm, input, ready, dt);
     const bool cancel_clicked = ui_button_update(
-        &modal->cancel, input, true, dt);
+        &modal->cancel, input, ready, dt);
+
+    if (!ready) {
+        return MODAL_ACTION_NONE;
+    }
 
     if (confirm_clicked || input->enter_pressed) {
         return MODAL_ACTION_CONFIRM;
@@ -147,31 +144,27 @@ void modal_draw(const Modal *modal, const UiFonts *fonts)
 
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
-    const float fade = ui_clamp01(modal->appear / 0.16f);
+    const float fade = ui_clamp01(modal->appear / REVERSI_UI_DUR_MODAL);
 
     DrawRectangle(0, 0, (int)width, (int)height,
-                  ui_color_alpha(UI_COLOR_OVERLAY, 0.82f * fade));
+                  ui_color_alpha(REVERSI_UI_COLOR_OVERLAY, 0.82f * fade));
 
     const ModalLayout layout = modal_layout();
-    ui_draw_panel(layout.panel, UI_RADIUS_LG,
-                  UI_COLOR_SURFACE, UI_COLOR_BORDER_STRONG);
+    ui_draw_panel(layout.panel, REVERSI_UI_RADIUS_LG,
+                  REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER_STRONG);
 
-    const char *title = "";
-    const char *body = "";
-    const char *confirm = "";
-    modal_texts(modal->purpose, &title, &body, &confirm);
-    (void)confirm;
+    const ModalText text = modal_texts(modal->purpose);
 
     ui_draw_text_aligned(
-        fonts, UI_TEXT_SEMIBOLD, title,
+        fonts, UI_TEXT_SEMIBOLD, text.title,
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 28.0f,
                     layout.panel.width - 48.0f, 34.0f},
-        UI_FONT_HEADING, UI_COLOR_TEXT, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_HEADING, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
     ui_draw_text_aligned(
-        fonts, UI_TEXT_REGULAR, body,
+        fonts, UI_TEXT_REGULAR, text.body,
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 72.0f,
                     layout.panel.width - 48.0f, 24.0f},
-        UI_FONT_SMALL, UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
     ui_button_draw(&modal->confirm, fonts, false);
     ui_button_draw(&modal->cancel, fonts, false);

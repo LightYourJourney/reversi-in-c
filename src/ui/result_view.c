@@ -73,34 +73,31 @@ void result_view_reset(ResultView *view)
 }
 
 ResultAction result_view_update(ResultView *view, const UiInput *input,
-                                bool accept_input, float dt)
+                                bool accept_input, bool animations,
+                                float dt)
 {
     if (view == NULL || input == NULL) {
         return RESULT_ACTION_NONE;
     }
 
-    view->appear += dt;
+    view->appear = animations
+        ? view->appear + dt : REVERSI_UI_DUR_RESULT;
+    const bool ready = view->appear >= REVERSI_UI_DUR_RESULT;
+    const bool buttons_accept = accept_input && ready;
     const ResultLayout layout = result_layout();
     ui_button_set_bounds(&view->again, layout.again);
     ui_button_set_bounds(&view->menu, layout.menu);
 
     const bool again_clicked = ui_button_update(
-        &view->again, input, accept_input, dt);
+        &view->again, input, buttons_accept, dt);
     const bool menu_clicked = ui_button_update(
-        &view->menu, input, accept_input, dt);
+        &view->menu, input, buttons_accept, dt);
 
-    if (!accept_input) {
+    if (!buttons_accept) {
         return RESULT_ACTION_NONE;
     }
 
-    if (input->mouse_pressed) {
-        view->focus_visible = false;
-    }
-    if (input->up_pressed || input->down_pressed) {
-        view->focus = (view->focus
-                       + (input->down_pressed ? 1 : -1) + 2) % 2;
-        view->focus_visible = true;
-    }
+    ui_focus_update(&view->focus, &view->focus_visible, 2, input);
 
     if (again_clicked) {
         return RESULT_ACTION_PLAY_AGAIN;
@@ -122,14 +119,14 @@ static void draw_score(const UiFonts *fonts, Rectangle box, Stone player,
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, label,
         (Rectangle){box.x, box.y, box.width, 18.0f},
-        UI_FONT_TINY, UI_COLOR_TEXT_FAINT, UI_ALIGN_CENTER);
+        REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_CENTER);
 
     char text[8];
     snprintf(text, sizeof(text), "%d", score);
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, text,
         (Rectangle){box.x, box.y + 18.0f, box.width, 52.0f},
-        UI_FONT_DISPLAY, UI_COLOR_TEXT, UI_ALIGN_CENTER);
+        REVERSI_UI_FONT_DISPLAY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_CENTER);
 }
 
 void result_view_draw(const ResultView *view, const UiFonts *fonts,
@@ -140,12 +137,12 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
     }
 
     const ResultLayout layout = result_layout();
-    ui_draw_panel(layout.panel, UI_RADIUS_LG,
-                  UI_COLOR_SURFACE, UI_COLOR_BORDER);
+    ui_draw_panel(layout.panel, REVERSI_UI_RADIUS_LG,
+                  REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
 
     const float center_x = layout.panel.x + layout.panel.width * 0.5f;
     const float center_y = layout.panel.y + 82.0f;
-    const float appear = ui_clamp01(view->appear / 0.42f);
+    const float appear = ui_clamp01(view->appear / REVERSI_UI_DUR_RESULT);
     const float scale = 0.72f + 0.28f * ui_ease_out_back(appear);
 
     if (game->result == GAME_RESULT_DRAW) {
@@ -158,7 +155,7 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
         const Stone winner = game->result == GAME_RESULT_BLACK_WIN
             ? STONE_BLACK : STONE_WHITE;
         ui_draw_ring((Vector2){center_x, center_y}, 32.0f, 2.0f,
-                     ui_color_alpha(UI_COLOR_ACCENT, 0.55f * appear));
+                     ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.55f * appear));
         ui_draw_disc((Vector2){center_x, center_y}, 24.0f,
                      winner, 1.0f, scale, scale);
     }
@@ -176,12 +173,12 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
         fonts, UI_TEXT_SEMIBOLD, title,
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 122.0f,
                     layout.panel.width - 48.0f, 52.0f},
-        UI_FONT_TITLE, UI_COLOR_TEXT, UI_ALIGN_CENTER);
+        REVERSI_UI_FONT_TITLE, REVERSI_UI_COLOR_TEXT, UI_ALIGN_CENTER);
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, "Final score",
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 174.0f,
                     layout.panel.width - 48.0f, 22.0f},
-        UI_FONT_SMALL, UI_COLOR_TEXT_MUTED, UI_ALIGN_CENTER);
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_CENTER);
 
     draw_score(fonts, layout.black_score, STONE_BLACK,
                board_count(&game->board, STONE_BLACK));
@@ -191,7 +188,7 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
     DrawLineEx(
         (Vector2){center_x, layout.black_score.y + 8.0f},
         (Vector2){center_x, layout.black_score.y + 72.0f},
-        1.0f, UI_COLOR_BORDER);
+        1.0f, REVERSI_UI_COLOR_BORDER);
 
     ui_button_draw(&view->again, fonts,
                    view->focus_visible && view->focus == 0);

@@ -196,6 +196,19 @@ function(reversi_add_core_test target source test_name)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endfunction()
 
+function(reversi_add_ui_test target source test_name)
+    add_executable(${target} ${source})
+    target_include_directories(${target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(${target} PRIVATE
+        reversi_ui reversi_core reversi_warnings)
+
+    add_test(NAME ${test_name} COMMAND ${target})
+    set_tests_properties(${test_name} PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+endfunction()
+
 if(REVERSI_BUILD_TESTS)
     enable_testing()
 
@@ -205,16 +218,11 @@ if(REVERSI_BUILD_TESTS)
     reversi_add_core_test(reversi_random_tests tests/test_random_games.c
         core.random)
 
-    # Button input is pure logic over UiInput; no window is created.
-    add_executable(reversi_ui_button_tests tests/test_ui_button.c)
-    target_include_directories(reversi_ui_button_tests PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-    target_link_libraries(reversi_ui_button_tests
-        PRIVATE reversi_ui reversi_warnings)
-    add_test(NAME ui.button COMMAND reversi_ui_button_tests)
-    set_tests_properties(ui.button PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    # UI logic tests use synthetic input and create no window.
+    reversi_add_ui_test(reversi_ui_button_tests
+        tests/test_ui_button.c ui.button)
+    reversi_add_ui_test(reversi_ui_helper_tests
+        tests/test_ui_helpers.c ui.helpers)
 
     if(REVERSI_ENABLE_GUI_TESTS)
         add_test(NAME app.smoke COMMAND reversi --frames 2)

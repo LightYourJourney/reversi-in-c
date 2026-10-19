@@ -1,6 +1,5 @@
 #include "ui/game_view.h"
 
-#include "core/rules.h"
 #include "ui/board_view.h"
 #include "ui/theme.h"
 
@@ -25,7 +24,7 @@ static GameLayout game_layout(void)
     const bool wide = width >= 1000.0f && height >= 680.0f;
 
     if (wide) {
-        const float margin = UI_SPACE_XL;
+        const float margin = REVERSI_UI_SPACE_XL;
         const float panel_width = fminf(320.0f, fmaxf(260.0f,
                                                         width * 0.26f));
         const float gap = 28.0f;
@@ -56,7 +55,7 @@ static GameLayout game_layout(void)
         return layout;
     }
 
-    const float margin = UI_SPACE_LG;
+    const float margin = REVERSI_UI_SPACE_LG;
     const float top_height = 74.0f;
     const float bottom_height = 74.0f;
     const float area_top = margin + top_height + 12.0f;
@@ -91,19 +90,6 @@ static GameLayout game_layout(void)
     };
     layout.compact = true;
     return layout;
-}
-
-static bool view_cell_legal(const GameState *game, int row, int col)
-{
-    if (game == NULL || game->result != GAME_RESULT_ONGOING) {
-        return false;
-    }
-    if (!board_in_bounds(row, col)
-        || board_get(&game->board, row, col) != STONE_EMPTY) {
-        return false;
-    }
-    return rules_is_legal_move(&game->board, game->current_player,
-                               (Move){.row = row, .col = col});
 }
 
 void game_view_init(GameView *view)
@@ -186,6 +172,9 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
         ui_button_set_bounds(&view->menu, menu);
     }
 
+    view->restart.enabled = accept_input;
+    view->menu.enabled = accept_input;
+
     const bool restart_clicked = ui_button_update(
         &view->restart, input, accept_input, dt);
     const bool menu_clicked = ui_button_update(
@@ -265,20 +254,21 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
         view->cursor_col = hover_col;
         view->cursor_visible = true;
 
-        if (view_cell_legal(game, hover_row, hover_col)) {
+        if (board_view_cell_is_legal(game, hover_row, hover_col)) {
             action.type = GAME_VIEW_MOVE;
             action.move = (Move){.row = hover_row, .col = hover_col};
         } else {
-            view->reject_timer = 0.24f;
+            view->reject_timer = REVERSI_UI_DUR_REJECT;
             view->reject_move = (Move){.row = hover_row, .col = hover_col};
         }
-    } else if (input->enter_pressed) {
-        if (view_cell_legal(game, view->cursor_row, view->cursor_col)) {
+    } else if (input->enter_pressed && view->cursor_visible) {
+        if (board_view_cell_is_legal(game, view->cursor_row,
+                                     view->cursor_col)) {
             action.type = GAME_VIEW_MOVE;
             action.move = (Move){.row = view->cursor_row,
                                  .col = view->cursor_col};
         } else {
-            view->reject_timer = 0.24f;
+            view->reject_timer = REVERSI_UI_DUR_REJECT;
             view->reject_move = (Move){.row = view->cursor_row,
                                        .col = view->cursor_col};
         }
@@ -290,9 +280,9 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
 static void draw_turn_card(const UiFonts *fonts, Rectangle card,
                            Stone player)
 {
-    ui_draw_rounded_rect(card, UI_RADIUS_SM, UI_COLOR_ACCENT_SOFT);
-    ui_draw_rounded_outline(card, UI_RADIUS_SM, 1.0f,
-                            ui_color_alpha(UI_COLOR_ACCENT, 0.24f));
+    ui_draw_rounded_rect(card, REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_ACCENT_SOFT);
+    ui_draw_rounded_outline(card, REVERSI_UI_RADIUS_SM, 1.0f,
+                            ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.24f));
     ui_draw_disc((Vector2){card.x + 30.0f, card.y + card.height * 0.5f},
                  14.0f, player, 1.0f, 1.0f, 1.0f);
 
@@ -302,18 +292,18 @@ static void draw_turn_card(const UiFonts *fonts, Rectangle card,
     ui_draw_text_aligned(fonts, UI_TEXT_SEMIBOLD, text,
                          (Rectangle){card.x + 54.0f, card.y,
                                      card.width - 68.0f, card.height},
-                         UI_FONT_BODY, UI_COLOR_TEXT, UI_ALIGN_LEFT);
+                         REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
 }
 
 static void draw_player_row(const UiFonts *fonts, Rectangle row,
                             Stone player, int score, bool active)
 {
     if (active) {
-        ui_draw_rounded_rect(row, UI_RADIUS_SM, UI_COLOR_SURFACE_ALT);
+        ui_draw_rounded_rect(row, REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_SURFACE_ALT);
         ui_draw_rounded_rect(
             (Rectangle){row.x + 1.0f, row.y + 9.0f, 3.0f,
                         row.height - 18.0f},
-            1.5f, UI_COLOR_ACCENT);
+            1.5f, REVERSI_UI_COLOR_ACCENT);
     }
 
     ui_draw_disc((Vector2){row.x + 28.0f, row.y + row.height * 0.5f},
@@ -323,15 +313,15 @@ static void draw_player_row(const UiFonts *fonts, Rectangle row,
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, label,
         (Rectangle){row.x + 50.0f, row.y, row.width - 130.0f, row.height},
-        UI_FONT_BODY,
-        active ? UI_COLOR_TEXT : UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_BODY,
+        active ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
     char score_text[8];
     snprintf(score_text, sizeof(score_text), "%d", score);
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, score_text,
         (Rectangle){row.x + row.width - 76.0f, row.y, 56.0f, row.height},
-        UI_FONT_HEADING, UI_COLOR_TEXT, UI_ALIGN_RIGHT);
+        REVERSI_UI_FONT_HEADING, REVERSI_UI_COLOR_TEXT, UI_ALIGN_RIGHT);
 }
 
 static void draw_score_chip(const UiFonts *fonts, Rectangle box,
@@ -344,8 +334,8 @@ static void draw_score_chip(const UiFonts *fonts, Rectangle box,
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, text,
         (Rectangle){box.x + 28.0f, box.y, box.width - 28.0f, box.height},
-        UI_FONT_HEADING,
-        active ? UI_COLOR_TEXT : UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_HEADING,
+        active ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 }
 
 static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
@@ -353,7 +343,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
                              const char *status, const char *last_move)
 {
     const Rectangle top = layout->top_bar;
-    ui_draw_panel(top, UI_RADIUS_MD, UI_COLOR_SURFACE, UI_COLOR_BORDER);
+    ui_draw_panel(top, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
 
     ui_draw_disc((Vector2){top.x + 32.0f, top.y + top.height * 0.5f},
                  15.0f, game->current_player, 1.0f, 1.0f, 1.0f);
@@ -363,7 +353,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, turn,
         (Rectangle){top.x + 58.0f, top.y, top.width * 0.45f, top.height},
-        UI_FONT_BODY, UI_COLOR_TEXT, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
 
     const Rectangle black_chip = {
         .x = top.x + top.width - 210.0f,
@@ -383,7 +373,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
                     game->current_player == STONE_WHITE);
 
     const Rectangle bottom = layout->bottom_bar;
-    ui_draw_panel(bottom, UI_RADIUS_MD, UI_COLOR_SURFACE, UI_COLOR_BORDER);
+    ui_draw_panel(bottom, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
 
     char detail[96];
     snprintf(detail, sizeof(detail), "%s  /  %s", status, last_move);
@@ -391,7 +381,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
         fonts, UI_TEXT_REGULAR, detail,
         (Rectangle){bottom.x + 18.0f, bottom.y,
                     bottom.width - 330.0f, bottom.height},
-        UI_FONT_SMALL, UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 }
 
 static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
@@ -399,13 +389,13 @@ static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
                             const char *status, const char *last_move)
 {
     const Rectangle panel = layout->panel;
-    ui_draw_panel(panel, UI_RADIUS_LG, UI_COLOR_SURFACE, UI_COLOR_BORDER);
+    ui_draw_panel(panel, REVERSI_UI_RADIUS_LG, REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
 
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, "MATCH",
         (Rectangle){panel.x + 24.0f, panel.y + 18.0f,
                     panel.width - 48.0f, 18.0f},
-        UI_FONT_TINY, UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
 
     const Rectangle turn_card = {
         .x = panel.x + 24.0f,
@@ -435,18 +425,18 @@ static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
     const float divider_y = white_row.y + white_row.height + 16.0f;
     DrawLineEx((Vector2){panel.x + 24.0f, divider_y},
                (Vector2){panel.x + panel.width - 24.0f, divider_y},
-               1.0f, UI_COLOR_BORDER);
+               1.0f, REVERSI_UI_COLOR_BORDER);
 
     ui_draw_text_clipped(
         fonts, UI_TEXT_REGULAR, status,
         (Rectangle){panel.x + 24.0f, divider_y + 14.0f,
                     panel.width - 48.0f, 22.0f},
-        UI_FONT_SMALL, UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
     ui_draw_text_clipped(
         fonts, UI_TEXT_REGULAR, last_move,
         (Rectangle){panel.x + 24.0f, divider_y + 40.0f,
                     panel.width - 48.0f, 20.0f},
-        UI_FONT_TINY, UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
 }
 
 void game_view_draw(const GameView *view, const GameState *game,
@@ -454,7 +444,7 @@ void game_view_draw(const GameView *view, const GameState *game,
                     const UiFonts *fonts,
                     bool show_legal_moves, bool show_last_move,
                     Move last_move, bool has_last_move,
-                    float last_move_age)
+                    float last_move_age, bool animations)
 {
     if (view == NULL || game == NULL || fonts == NULL) {
         return;
@@ -468,11 +458,12 @@ void game_view_draw(const GameView *view, const GameState *game,
                     show_legal_moves, show_last_move,
                     last_move, has_last_move, last_move_age,
                     view->cursor_row, view->cursor_col,
-                    view->cursor_visible, board_input);
+                    view->cursor_visible, board_input, animations);
 
     if (view->reject_timer > 0.0f
         && board_in_bounds(view->reject_move.row, view->reject_move.col)) {
-        const float alpha = ui_clamp01(view->reject_timer / 0.24f);
+        const float alpha = ui_clamp01(
+            view->reject_timer / REVERSI_UI_DUR_REJECT);
         const Rectangle cell = {
             .x = layout.board.x
                 + (float)view->reject_move.col * layout.cell + 3.0f,
@@ -482,7 +473,7 @@ void game_view_draw(const GameView *view, const GameState *game,
             .height = layout.cell - 6.0f
         };
         ui_draw_rounded_outline(cell, 8.0f, 2.0f,
-                                ui_color_alpha(UI_COLOR_DANGER, alpha));
+                                ui_color_alpha(REVERSI_UI_COLOR_DANGER, alpha));
     }
 
     const int black = board_count(&game->board, STONE_BLACK);

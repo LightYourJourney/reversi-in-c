@@ -17,8 +17,8 @@ void ui_animation_reset(UiMoveAnimation *animation)
     animation->move = (Move){0, 0};
     animation->elapsed = 0.0f;
     animation->duration = 0.0f;
-    animation->place_duration = UI_DUR_PLACE;
-    animation->flip_duration = UI_DUR_FLIP;
+    animation->place_duration = REVERSI_UI_DUR_PLACE;
+    animation->flip_duration = REVERSI_UI_DUR_FLIP;
     animation->flip_count = 0;
 }
 
@@ -34,8 +34,8 @@ void ui_animation_start(UiMoveAnimation *animation,
     animation->active = true;
     animation->player = player;
     animation->move = move;
-    animation->place_duration = UI_DUR_PLACE;
-    animation->flip_duration = UI_DUR_FLIP;
+    animation->place_duration = REVERSI_UI_DUR_PLACE;
+    animation->flip_duration = REVERSI_UI_DUR_FLIP;
 
     const Stone opponent = stone_opponent(player);
     int count = 0;
@@ -47,7 +47,7 @@ void ui_animation_start(UiMoveAnimation *animation,
             }
             if (board_get(before, row, col) == opponent
                 && board_get(after, row, col) == player) {
-                if (count < UI_ANIM_MAX_FLIPS) {
+                if (count < REVERSI_UI_ANIM_MAX_FLIPS) {
                     animation->flips[count].row = row;
                     animation->flips[count].col = col;
                     animation->flips[count].delay = 0.0f;
@@ -57,8 +57,8 @@ void ui_animation_start(UiMoveAnimation *animation,
         }
     }
 
-    animation->flip_count = count > UI_ANIM_MAX_FLIPS
-        ? UI_ANIM_MAX_FLIPS : count;
+    animation->flip_count = count > REVERSI_UI_ANIM_MAX_FLIPS
+        ? REVERSI_UI_ANIM_MAX_FLIPS : count;
 
     float stagger = 0.0f;
     if (animation->flip_count > 1) {

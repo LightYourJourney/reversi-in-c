@@ -86,15 +86,7 @@ MenuAction menu_view_update(MenuView *view, const UiInput *input,
         return MENU_ACTION_NONE;
     }
 
-    if (input->mouse_pressed) {
-        view->focus_visible = false;
-    }
-
-    if (input->up_pressed || input->down_pressed) {
-        view->focus = (view->focus
-                       + (input->down_pressed ? 1 : -1) + 3) % 3;
-        view->focus_visible = true;
-    }
+    ui_focus_update(&view->focus, &view->focus_visible, 3, input);
 
     MenuAction action = MENU_ACTION_NONE;
     if (play_clicked) {
@@ -126,8 +118,8 @@ void menu_view_draw(const MenuView *view, const UiFonts *fonts)
         .width = 44.0f,
         .height = 44.0f
     };
-    ui_draw_rounded_rect(mark, 13.0f, UI_COLOR_BOARD);
-    ui_draw_rounded_outline(mark, 13.0f, 1.0f, UI_COLOR_BOARD_EDGE);
+    ui_draw_rounded_rect(mark, 13.0f, REVERSI_UI_COLOR_BOARD);
+    ui_draw_rounded_outline(mark, 13.0f, 1.0f, REVERSI_UI_COLOR_BOARD_EDGE);
     ui_draw_disc((Vector2){center_x - 8.0f, layout.mark_y}, 11.0f,
                  STONE_WHITE, 1.0f, 1.0f, 1.0f);
     ui_draw_disc((Vector2){center_x + 8.0f, layout.mark_y}, 11.0f,
@@ -135,18 +127,18 @@ void menu_view_draw(const MenuView *view, const UiFonts *fonts)
 
     ui_draw_text_aligned(fonts, UI_TEXT_SEMIBOLD, "REVERSI",
                          (Rectangle){0, layout.title_y, width, 72.0f},
-                         UI_FONT_DISPLAY, UI_COLOR_TEXT, UI_ALIGN_CENTER);
+                         REVERSI_UI_FONT_DISPLAY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_CENTER);
     ui_draw_text_aligned(fonts, UI_TEXT_REGULAR,
                          "A quiet game of strategy",
                          (Rectangle){0, layout.subtitle_y, width, 24.0f},
-                         UI_FONT_SMALL, UI_COLOR_TEXT_MUTED,
+                         REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED,
                          UI_ALIGN_CENTER);
 
     const float accent_width = 42.0f;
     ui_draw_rounded_rect(
         (Rectangle){center_x - accent_width * 0.5f,
                     layout.subtitle_y + 30.0f, accent_width, 2.0f},
-        1.0f, ui_color_alpha(UI_COLOR_ACCENT, 0.7f));
+        1.0f, ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.7f));
 
     ui_button_draw(&view->play, fonts,
                    view->focus_visible && view->focus == 0);
@@ -157,6 +149,6 @@ void menu_view_draw(const MenuView *view, const UiFonts *fonts)
 
     ui_draw_text_aligned(fonts, UI_TEXT_REGULAR, "C11 / raylib 6.2",
                          (Rectangle){0, layout.footer_y, width, 20.0f},
-                         UI_FONT_TINY, UI_COLOR_TEXT_FAINT,
+                         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT,
                          UI_ALIGN_CENTER);
 }

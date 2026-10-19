@@ -118,12 +118,16 @@ static void app_init(App *app)
     app->autoplay_timer = 0.0f;
     app->start_game_pending = false;
 
+#ifndef NDEBUG
     const char *autoplay = getenv("REVERSI_AUTOPLAY");
     app->autoplay = autoplay != NULL && autoplay[0] != '\0'
         && strcmp(autoplay, "0") != 0;
     if (app->autoplay) {
         app->settings.animations = false;
     }
+#else
+    app->autoplay = false;
+#endif
 
     game_init(&app->game);
     ui_animation_reset(&app->animation);
@@ -147,6 +151,15 @@ static void app_new_game(App *app)
     game_view_reset(&app->game_view);
 }
 
+static void app_switch_screen(App *app, AppScreen target)
+{
+    app->screen = target;
+    if (target == APP_SCREEN_GAME && app->start_game_pending) {
+        app_new_game(app);
+        app->start_game_pending = false;
+    }
+}
+
 static void app_start_game(App *app)
 {
     if (app->screen == APP_SCREEN_GAME && !app->transition.active) {
@@ -168,10 +181,18 @@ static void app_request_screen(App *app, AppScreen target)
         return;
     }
 
+    if (!app->settings.animations) {
+        app->transition.active = false;
+        app->transition.target = target;
+        app_switch_screen(app, target);
+        app_update_passive(app, 0.0f);
+        return;
+    }
+
     app->transition.active = true;
     app->transition.switched = false;
     app->transition.t = 0.0f;
-    app->transition.duration = UI_DUR_TRANSITION;
+    app->transition.duration = REVERSI_UI_DUR_TRANSITION;
     app->transition.target = target;
 }
 
@@ -184,16 +205,11 @@ static void app_update_transition(App *app, float dt)
 
     transition->t += dt / transition->duration;
     if (!transition->switched && transition->t >= 0.5f) {
-        app->screen = transition->target;
         transition->switched = true;
 
         /* Reset only once the new screen is visible: the outgoing result
            screen must keep showing the finished game while it fades out. */
-        if (app->screen == APP_SCREEN_GAME && app->start_game_pending) {
-            app_new_game(app);
-            app->start_game_pending = false;
-        }
-
+        app_switch_screen(app, transition->target);
         app_update_passive(app, dt);
     }
     if (transition->t >= 1.0f) {
@@ -204,7 +220,7 @@ static void app_update_transition(App *app, float dt)
 
 static void app_update_passive(App *app, float dt)
 {
-    const UiInput input = {0};
+    const UiInput input = {.reduce_motion = !app->settings.animations};
 
     switch (app->screen) {
     case APP_SCREEN_MENU:
@@ -224,7 +240,8 @@ static void app_update_passive(App *app, float dt)
             app->settings.last_move_highlight);
         break;
     case APP_SCREEN_RESULT:
-        (void)result_view_update(&app->result_view, &input, false, dt);
+        (void)result_view_update(&app->result_view, &input, false,
+                                 app->settings.animations, dt);
         break;
     }
 }
@@ -335,10 +352,13 @@ static void app_update(App *app, const UiInput *input, float dt)
             }
         }
 
-        const bool board_accept = !ui_animation_is_active(&app->animation)
+        const bool animating = ui_animation_is_active(&app->animation);
+        const bool interactive = !animating;
+        const bool board_accept = interactive
             && !game_is_over(&app->game);
         const GameViewAction action = game_view_update(
-            &app->game_view, &app->game, input, true, board_accept, dt);
+            &app->game_view, &app->game, input, interactive,
+            board_accept, dt);
 
         if (action.type == GAME_VIEW_MOVE) {
             app_apply_move(app, action.move);
@@ -386,7 +406,8 @@ static void app_update(App *app, const UiInput *input, float dt)
     }
     case APP_SCREEN_RESULT: {
         const ResultAction action = result_view_update(
-            &app->result_view, input, true, dt);
+            &app->result_view, input, true,
+            app->settings.animations, dt);
         if (action == RESULT_ACTION_PLAY_AGAIN) {
             app_start_game(app);
         } else if (action == RESULT_ACTION_MENU) {
@@ -408,7 +429,7 @@ static void app_draw(const App *app)
                        &app->fonts, app->settings.legal_hints,
                        app->settings.last_move_highlight,
                        app->last_move, app->has_last_move,
-                       app->last_move_age);
+                       app->last_move_age, app->settings.animations);
         break;
     case APP_SCREEN_SETTINGS:
         settings_view_draw(&app->settings_view, &app->fonts);
@@ -432,7 +453,7 @@ static void app_draw_transition(const App *app)
     const float t = ui_clamp01(app->transition.t);
     const float alpha = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                  (Color){0, 0, 0, (unsigned char)(255.0f * alpha)});
+                  ui_color_alpha(REVERSI_UI_COLOR_SCRIM, alpha));
 }
 
 int app_run(int max_frames)
@@ -446,7 +467,7 @@ int app_run(int max_frames)
         return 1;
     }
 
-    SetWindowMinSize(UI_MIN_WINDOW_WIDTH, UI_MIN_WINDOW_HEIGHT);
+    SetWindowMinSize(REVERSI_UI_MIN_WINDOW_WIDTH, REVERSI_UI_MIN_WINDOW_HEIGHT);
     SetExitKey(KEY_NULL);
     SetTargetFPS(REVERSI_TARGET_FPS);
 
@@ -460,7 +481,8 @@ int app_run(int max_frames)
             dt = 0.1f;
         }
 
-        const UiInput input = read_input();
+        UiInput input = read_input();
+        input.reduce_motion = !app.settings.animations;
         app_update(&app, &input, dt);
 
         BeginDrawing();
@@ -469,6 +491,7 @@ int app_run(int max_frames)
         app_draw_transition(&app);
         EndDrawing();
 
+#ifndef NDEBUG
         const char *shot_dir = getenv("REVERSI_SHOT_DIR");
         if (shot_dir != NULL && shot_dir[0] != '\0'
             && IsKeyPressed(KEY_F12)) {
@@ -478,6 +501,7 @@ int app_run(int max_frames)
             TakeScreenshot(path);
             TraceLog(LOG_INFO, "Reversi: screenshot %s", path);
         }
+#endif
 
         ++rendered_frames;
         if (max_frames > 0 && rendered_frames >= max_frames) {

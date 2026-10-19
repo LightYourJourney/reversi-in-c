@@ -31,6 +31,7 @@ typedef struct UiInput {
     bool right_pressed;
     bool restart_pressed;
     bool menu_pressed;
+    bool reduce_motion;
 } UiInput;
 
 typedef struct UiButton {
@@ -56,25 +57,21 @@ void ui_draw_panel(Rectangle rect, float radius, Color fill, Color border);
 void ui_draw_rounded_rect(Rectangle rect, float radius, Color color);
 void ui_draw_rounded_outline(Rectangle rect, float radius, float thickness,
                              Color color);
-void ui_draw_text(const UiFonts *fonts, UiTextWeight weight,
-                  const char *text, Vector2 position, float size, Color color);
 void ui_draw_text_aligned(const UiFonts *fonts, UiTextWeight weight,
                           const char *text, Rectangle box, float size,
                           Color color, UiAlign align);
 void ui_draw_text_clipped(const UiFonts *fonts, UiTextWeight weight,
                           const char *text, Rectangle box, float size,
                           Color color, UiAlign align);
-float ui_text_width(const UiFonts *fonts, UiTextWeight weight,
-                    const char *text, float size);
 
 void ui_draw_disc(Vector2 center, float radius, Stone stone,
                   float alpha, float scale_x, float scale_y);
 void ui_draw_ring(Vector2 center, float radius, float thickness, Color color);
 
 float ui_clamp01(float value);
-float ui_ease_out_cubic(float value);
-float ui_ease_in_out_cubic(float value);
 float ui_ease_out_back(float value);
 Color ui_color_alpha(Color color, float alpha);
+void ui_focus_update(int *focus, bool *visible, int count,
+                     const UiInput *input);
 
 #endif

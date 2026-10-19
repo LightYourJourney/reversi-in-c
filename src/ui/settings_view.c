@@ -59,8 +59,12 @@ static void update_toggles(SettingsView *view, float dt,
     const bool values[3] = {animations, hints, last_move};
     for (int i = 0; i < 3; ++i) {
         const float target = values[i] ? 1.0f : 0.0f;
-        view->toggle_t[i] += (target - view->toggle_t[i])
-            * ui_clamp01(dt * 14.0f);
+        if (animations) {
+            view->toggle_t[i] += (target - view->toggle_t[i])
+                * ui_clamp01(dt * REVERSI_UI_MOTION_RATE);
+        } else {
+            view->toggle_t[i] = target;
+        }
     }
 }
 
@@ -110,14 +114,7 @@ SettingsAction settings_view_update(SettingsView *view,
         return SETTINGS_ACTION_NONE;
     }
 
-    if (input->mouse_pressed) {
-        view->focus_visible = false;
-    }
-    if (input->up_pressed || input->down_pressed) {
-        view->focus = (view->focus
-                       + (input->down_pressed ? 1 : -1) + 4) % 4;
-        view->focus_visible = true;
-    }
+    ui_focus_update(&view->focus, &view->focus_visible, 4, input);
 
     if (back_clicked || input->escape_pressed) {
         return SETTINGS_ACTION_BACK;
@@ -143,9 +140,9 @@ SettingsAction settings_view_update(SettingsView *view,
 static void draw_toggle(Rectangle track, float value)
 {
     const float t = ui_clamp01(value);
-    Color fill = UI_COLOR_SURFACE_HOVER;
+    Color fill = REVERSI_UI_COLOR_SURFACE_HOVER;
     if (t > 0.0f) {
-        fill = ui_color_alpha(UI_COLOR_ACCENT, 0.35f + 0.65f * t);
+        fill = ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.35f + 0.65f * t);
     }
     DrawRectangleRounded(track, 0.5f, 18, fill);
 
@@ -156,7 +153,7 @@ static void draw_toggle(Rectangle track, float value)
     DrawCircleV((Vector2){knob.x, knob.y + 1.5f}, knob_radius,
                 (Color){0, 0, 0, 50});
     DrawCircleV(knob, knob_radius,
-                t > 0.5f ? UI_COLOR_TEXT : UI_COLOR_TEXT_MUTED);
+                t > 0.5f ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED);
 }
 
 void settings_view_draw(const SettingsView *view, const UiFonts *fonts)
@@ -166,19 +163,19 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts)
     }
 
     const SettingsLayout layout = settings_layout();
-    ui_draw_panel(layout.panel, UI_RADIUS_LG,
-                  UI_COLOR_SURFACE, UI_COLOR_BORDER);
+    ui_draw_panel(layout.panel, REVERSI_UI_RADIUS_LG,
+                  REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
 
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, "Settings",
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 26.0f,
                     layout.panel.width - 48.0f, 40.0f},
-        UI_FONT_TITLE, UI_COLOR_TEXT, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_TITLE, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, "Make the table your own.",
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 68.0f,
                     layout.panel.width - 48.0f, 22.0f},
-        UI_FONT_SMALL, UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
     const char *labels[3] = {
         "Animations",
@@ -186,28 +183,28 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts)
         "Last move highlight"
     };
     const char *descriptions[3] = {
-        "Disc placement and flip motion",
+        "Placement, flips and transitions",
         "Show available moves on the board",
         "Mark the most recent move"
     };
     for (int i = 0; i < 3; ++i) {
         if (view->focus_visible && view->focus == i) {
-            ui_draw_rounded_rect(layout.rows[i], UI_RADIUS_SM,
-                                 ui_color_alpha(UI_COLOR_ACCENT, 0.08f));
-            ui_draw_rounded_outline(layout.rows[i], UI_RADIUS_SM, 1.0f,
-                                    ui_color_alpha(UI_COLOR_FOCUS, 0.65f));
+            ui_draw_rounded_rect(layout.rows[i], REVERSI_UI_RADIUS_SM,
+                                 ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.08f));
+            ui_draw_rounded_outline(layout.rows[i], REVERSI_UI_RADIUS_SM, 1.0f,
+                                    ui_color_alpha(REVERSI_UI_COLOR_FOCUS, 0.65f));
         }
 
         ui_draw_text_aligned(
             fonts, UI_TEXT_SEMIBOLD, labels[i],
             (Rectangle){layout.rows[i].x, layout.rows[i].y + 8.0f,
                         layout.rows[i].width - 90.0f, 24.0f},
-            UI_FONT_BODY, UI_COLOR_TEXT, UI_ALIGN_LEFT);
+            REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
         ui_draw_text_aligned(
             fonts, UI_TEXT_REGULAR, descriptions[i],
             (Rectangle){layout.rows[i].x, layout.rows[i].y + 32.0f,
                         layout.rows[i].width - 90.0f, 20.0f},
-            UI_FONT_TINY, UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+            REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
         draw_toggle(layout.toggles[i], view->toggle_t[i]);
 
@@ -217,7 +214,7 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts)
                           layout.rows[i].y + layout.rows[i].height},
                 (Vector2){layout.rows[i].x + layout.rows[i].width,
                           layout.rows[i].y + layout.rows[i].height},
-                1.0f, UI_COLOR_BORDER);
+                1.0f, REVERSI_UI_COLOR_BORDER);
         }
     }
 

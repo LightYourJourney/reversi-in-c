@@ -110,6 +110,25 @@ static void test_blocked_and_disabled(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, !button.pressed);
 }
 
+static void test_reduced_motion(TestStats *stats)
+{
+    UiButton button;
+    ui_button_init(&button, "Play", false);
+    ui_button_set_bounds(&button, (Rectangle){10.0f, 10.0f, 100.0f, 40.0f});
+
+    UiInput input = input_at(60.0f, 30.0f);
+    input.reduce_motion = true;
+    (void)ui_button_update(&button, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, button.hovered);
+    REVERSI_TEST_ASSERT(stats, button.hover_t == 1.0f);
+
+    input = input_at(200.0f, 30.0f);
+    input.reduce_motion = true;
+    (void)ui_button_update(&button, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, !button.hovered);
+    REVERSI_TEST_ASSERT(stats, button.hover_t == 0.0f);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -119,6 +138,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_release_outside_cancels);
     REVERSI_RUN_TEST(&stats, test_release_without_press);
     REVERSI_RUN_TEST(&stats, test_blocked_and_disabled);
+    REVERSI_RUN_TEST(&stats, test_reduced_motion);
 
     return reversi_test_summary(&stats, "ui.button");
 }

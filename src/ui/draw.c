@@ -37,23 +37,6 @@ float ui_clamp01(float value)
     return value;
 }
 
-float ui_ease_out_cubic(float value)
-{
-    const float t = ui_clamp01(value);
-    const float inverse = 1.0f - t;
-    return 1.0f - inverse * inverse * inverse;
-}
-
-float ui_ease_in_out_cubic(float value)
-{
-    const float t = ui_clamp01(value);
-    if (t < 0.5f) {
-        return 4.0f * t * t * t;
-    }
-    const float inverse = -2.0f * t + 2.0f;
-    return 1.0f - (inverse * inverse * inverse) * 0.5f;
-}
-
 float ui_ease_out_back(float value)
 {
     const float t = ui_clamp01(value);
@@ -71,10 +54,26 @@ Color ui_color_alpha(Color color, float alpha)
     return result;
 }
 
+void ui_focus_update(int *focus, bool *visible, int count,
+                     const UiInput *input)
+{
+    if (focus == NULL || visible == NULL || input == NULL || count <= 0) {
+        return;
+    }
+
+    if (input->mouse_pressed) {
+        *visible = false;
+    }
+    if (input->up_pressed || input->down_pressed) {
+        *focus = (*focus + (input->down_pressed ? 1 : -1) + count) % count;
+        *visible = true;
+    }
+}
+
 void ui_draw_background(void)
 {
     DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(),
-                           UI_COLOR_BG_TOP, UI_COLOR_BG_BOTTOM);
+                           REVERSI_UI_COLOR_BG_TOP, REVERSI_UI_COLOR_BG_BOTTOM);
 }
 
 void ui_draw_shadow(Rectangle rect, float radius, float offset, float alpha)
@@ -90,8 +89,8 @@ void ui_draw_shadow(Rectangle rect, float radius, float offset, float alpha)
         };
         const float layer_alpha = strength * (0.32f - (float)i * 0.07f);
         DrawRectangleRounded(layer, ui_roundness(layer, radius + spread),
-                             18, (Color){0, 0, 0,
-                                         (unsigned char)(layer_alpha * 255.0f)});
+                             18, ui_color_alpha(REVERSI_UI_COLOR_SHADOW,
+                                                layer_alpha));
     }
 }
 
@@ -114,26 +113,6 @@ void ui_draw_panel(Rectangle rect, float radius, Color fill, Color border)
     if (border.a > 0) {
         ui_draw_rounded_outline(rect, radius, 1.0f, border);
     }
-}
-
-float ui_text_width(const UiFonts *fonts, UiTextWeight weight,
-                    const char *text, float size)
-{
-    if (text == NULL || text[0] == '\0') {
-        return 0.0f;
-    }
-    const Font font = ui_font_for(fonts, weight);
-    return MeasureTextEx(font, text, size, ui_spacing_for(size)).x;
-}
-
-void ui_draw_text(const UiFonts *fonts, UiTextWeight weight,
-                  const char *text, Vector2 position, float size, Color color)
-{
-    if (text == NULL || text[0] == '\0') {
-        return;
-    }
-    const Font font = ui_font_for(fonts, weight);
-    DrawTextEx(font, text, position, size, ui_spacing_for(size), color);
 }
 
 void ui_draw_text_aligned(const UiFonts *fonts, UiTextWeight weight,
@@ -187,13 +166,13 @@ void ui_draw_disc(Vector2 center, float radius, Stone stone,
     }
 
     const Color fill = stone == STONE_BLACK
-        ? UI_COLOR_BLACK_DISC : UI_COLOR_WHITE_DISC;
+        ? REVERSI_UI_COLOR_BLACK_DISC : REVERSI_UI_COLOR_WHITE_DISC;
     const Color rim = stone == STONE_BLACK
-        ? UI_COLOR_BLACK_RIM : UI_COLOR_WHITE_RIM;
+        ? REVERSI_UI_COLOR_BLACK_RIM : REVERSI_UI_COLOR_WHITE_RIM;
 
     DrawEllipseV((Vector2){center.x, center.y + radius * 0.10f},
                  rx * 0.98f, ry * 0.98f,
-                 ui_color_alpha((Color){0, 0, 0, 255}, alpha * 0.35f));
+                 ui_color_alpha(REVERSI_UI_COLOR_SHADOW, alpha * 0.35f));
     DrawEllipseV(center, rx + 1.5f, ry + 1.5f,
                  ui_color_alpha(rim, alpha));
     DrawEllipseV(center, rx, ry, ui_color_alpha(fill, alpha));
@@ -202,13 +181,13 @@ void ui_draw_disc(Vector2 center, float radius, Stone stone,
         DrawEllipseV((Vector2){center.x - rx * 0.28f,
                                center.y - ry * 0.30f},
                      rx * 0.34f, ry * 0.24f,
-                     ui_color_alpha((Color){255, 255, 255, 255},
+                     ui_color_alpha(REVERSI_UI_COLOR_HIGHLIGHT,
                                     alpha * 0.07f));
     } else {
         DrawEllipseV((Vector2){center.x - rx * 0.26f,
                                center.y - ry * 0.28f},
                      rx * 0.42f, ry * 0.30f,
-                     ui_color_alpha((Color){255, 255, 255, 255},
+                     ui_color_alpha(REVERSI_UI_COLOR_HIGHLIGHT,
                                     alpha * 0.35f));
     }
 }
@@ -255,8 +234,9 @@ bool ui_button_update(UiButton *button, const UiInput *input,
 
     button->hovered = hover;
     const float target = hover ? 1.0f : 0.0f;
-    button->hover_t += (target - button->hover_t)
-        * ui_clamp01(dt * 14.0f);
+    const float blend = (input != NULL && input->reduce_motion)
+        ? 1.0f : ui_clamp01(dt * REVERSI_UI_MOTION_RATE);
+    button->hover_t += (target - button->hover_t) * blend;
 
     if (!interactive) {
         button->pressed = false;
@@ -290,35 +270,36 @@ void ui_button_draw(const UiButton *button, const UiFonts *fonts,
         rect.y += 1.0f;
     }
 
-    const float alpha = button->enabled ? 1.0f : 0.38f;
-    Color fill = UI_COLOR_SURFACE;
-    Color label = UI_COLOR_TEXT;
-    Color border = UI_COLOR_BORDER;
+    const float alpha = button->enabled
+        ? 1.0f : REVERSI_UI_ALPHA_DISABLED;
+    Color fill = REVERSI_UI_COLOR_SURFACE;
+    Color label = REVERSI_UI_COLOR_TEXT;
+    Color border = REVERSI_UI_COLOR_BORDER;
 
     if (button->primary) {
-        fill = UI_COLOR_ACCENT;
-        label = UI_COLOR_ACCENT_TEXT;
+        fill = REVERSI_UI_COLOR_ACCENT;
+        label = REVERSI_UI_COLOR_ACCENT_TEXT;
         border = (Color){0, 0, 0, 0};
         if (button->hovered) {
-            fill = UI_COLOR_ACCENT_HOVER;
+            fill = REVERSI_UI_COLOR_ACCENT_HOVER;
         }
         if (button->pressed) {
-            fill = UI_COLOR_ACCENT_PRESSED;
+            fill = REVERSI_UI_COLOR_ACCENT_PRESSED;
         }
     } else {
         if (button->hovered) {
-            fill = UI_COLOR_SURFACE_HOVER;
+            fill = REVERSI_UI_COLOR_SURFACE_HOVER;
         }
         if (button->pressed) {
-            fill = UI_COLOR_SURFACE_PRESSED;
+            fill = REVERSI_UI_COLOR_SURFACE_PRESSED;
         }
     }
 
-    ui_draw_shadow(rect, UI_RADIUS_SM, button->pressed ? 2.0f : 6.0f,
+    ui_draw_shadow(rect, REVERSI_UI_RADIUS_SM, button->pressed ? 2.0f : 6.0f,
                    button->primary ? 0.24f : 0.16f);
-    ui_draw_rounded_rect(rect, UI_RADIUS_SM, ui_color_alpha(fill, alpha));
+    ui_draw_rounded_rect(rect, REVERSI_UI_RADIUS_SM, ui_color_alpha(fill, alpha));
     if (border.a > 0) {
-        ui_draw_rounded_outline(rect, UI_RADIUS_SM, 1.0f,
+        ui_draw_rounded_outline(rect, REVERSI_UI_RADIUS_SM, 1.0f,
                                 ui_color_alpha(border, alpha));
     }
 
@@ -329,11 +310,11 @@ void ui_button_draw(const UiButton *button, const UiFonts *fonts,
             .width = rect.width + 6.0f,
             .height = rect.height + 6.0f
         };
-        ui_draw_rounded_outline(focus, UI_RADIUS_SM + 3.0f, 2.0f,
-                                UI_COLOR_FOCUS);
+        ui_draw_rounded_outline(focus, REVERSI_UI_RADIUS_SM + 3.0f, 2.0f,
+                                REVERSI_UI_COLOR_FOCUS);
     }
 
     ui_draw_text_aligned(fonts, UI_TEXT_SEMIBOLD, button->label, rect,
-                         UI_FONT_BODY, ui_color_alpha(label, alpha),
+                         REVERSI_UI_FONT_BODY, ui_color_alpha(label, alpha),
                          UI_ALIGN_CENTER);
 }

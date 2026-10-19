@@ -53,7 +53,8 @@
 │   ├── test_rules.c      core.rules 测试
 │   ├── test_game.c       core.game 测试
 │   ├── test_random_games.c 随机合法对局测试
-│   └── test_ui_button.c  按钮悬停/按下/释放/禁用测试
+│   ├── test_ui_button.c  按钮悬停/按下/释放/禁用测试
+│   └── test_ui_helpers.c 缓动/颜色、命中、合法判断与动画插值测试
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── ROADMAP.md        分阶段交付计划
@@ -83,17 +84,19 @@
 - **对局页**：8×8 棋盘与坐标、当前回合、双方实时棋子数、合法着法提示、
   最后一步脉冲标记、状态文本；宽窗口使用侧栏，窄窗口使用上下信息栏。
 - **操作**：鼠标悬停/点击；方向键移动棋盘光标、Enter/Space 落子；
-  `R` 重开、`M`/`Esc` 返回菜单；所有按钮同时支持键盘焦点与鼠标。
+  `R` 重开、`M`/`Esc` 返回菜单；菜单/设置/结算按钮支持方向键 + Enter，
+  对局页按钮提供 R/M 快捷键，模态支持 Enter/Esc；所有按钮均支持鼠标悬停/点击。
 - **反馈**：非法落点红色闪框；落子缩放、翻转与最后一步动画只影响渲染，
-  不修改 `GameState`；动画期间棋盘输入被禁用。
+  不修改 `GameState`；落子动画期间棋盘与操作按钮均被禁用。
 - **设置（内存内，尚未持久化）**：动画、合法着法提示、最后一步高亮开关。
+  Animations 同时控制落子/翻转、页面转场、模态/结算淡入与按钮缓动。
 - **布局**：最小窗口 760×600，支持任意缩放；宽/窄两套布局；HiDPI 按显示器
   缩放加载字体；超长状态文本使用裁剪区域。
 - **字体**：内置 Inter 4.1 Regular/SemiBold（SIL OFL 1.1）。资源缺失时自动
   回退到 raylib 默认字体并记录警告，不阻断启动。
 - **程序化资源**：棋子、棋盘、阴影、按钮与提示均为绘制生成，不依赖贴图。
 
-开发辅助（不影响正常游玩）：
+开发辅助（仅 Debug 构建；Release 不编译这些钩子）：
 
 ```bash
 # 自动落子，用于快速走完一局并检查结算页
@@ -211,16 +214,18 @@ ctest --test-dir build --output-on-failure
 - `core.random`：557,924 项断言；500 局确定性随机对局，用独立合法性 oracle
   校验每步，并检查棋子占用数、总数与终局不变量
 
-`ui.button`（26 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
-悬停、按下、释放、移出取消、禁用与输入阻断语义。
+`ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
+悬停、按下、释放、移出取消、禁用、输入阻断与 reduced-motion 语义。
+`ui.helpers`（65 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、对局输入
+门控与落子/翻转动画插值，并确认动画不修改棋盘快照。
 
-实际结果（2026-10-19，macOS arm64）：
+实际结果（2026-10-19，macOS arm64，代码审查修正后）：
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug（`REVERSI_ENABLE_GUI_TESTS=ON`） | 6/6，含 `app.smoke` |
-| Release | 5/5 |
-| ASan+UBSan（`ASAN_OPTIONS=detect_leaks=0`） | 5/5，另运行 `--frames 5` 无报告 |
+| Debug（`REVERSI_ENABLE_GUI_TESTS=ON`） | 7/7，含 `app.smoke` |
+| Release | 6/6 |
+| ASan+UBSan（`ASAN_OPTIONS=detect_leaks=0`） | 6/6，另运行 `--frames 5` 无报告 |
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
 

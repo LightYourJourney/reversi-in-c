@@ -5,7 +5,7 @@
 
 #include <stdbool.h>
 
-#define UI_ANIM_MAX_FLIPS 32
+#define REVERSI_UI_ANIM_MAX_FLIPS 32
 
 typedef struct UiFlipCell {
     int row;
@@ -22,7 +22,7 @@ typedef struct UiMoveAnimation {
     float place_duration;
     float flip_duration;
     int flip_count;
-    UiFlipCell flips[UI_ANIM_MAX_FLIPS];
+    UiFlipCell flips[REVERSI_UI_ANIM_MAX_FLIPS];
 } UiMoveAnimation;
 
 void ui_animation_reset(UiMoveAnimation *animation);

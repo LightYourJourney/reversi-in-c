@@ -43,6 +43,6 @@ void game_view_draw(const GameView *view, const GameState *game,
                     const UiFonts *fonts,
                     bool show_legal_moves, bool show_last_move,
                     Move last_move, bool has_last_move,
-                    float last_move_age);
+                    float last_move_age, bool animations);
 
 #endif
