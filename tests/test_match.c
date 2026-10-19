@@ -63,6 +63,21 @@ static Move first_legal_move(const Match *match)
     return count > 0 ? moves[0] : (Move){0, 0};
 }
 
+static bool play_to_game_over(TestStats *stats, Match *match)
+{
+    int guard = 0;
+    while (match->phase != MATCH_PHASE_GAME_OVER && guard < 100) {
+        if (match->phase == MATCH_PHASE_PLAYER_TURN) {
+            REVERSI_TEST_ASSERT(stats,
+                match_apply_move(match, first_legal_move(match)));
+        }
+        finish_phases(stats, match);
+        ++guard;
+    }
+    REVERSI_TEST_ASSERT(stats, guard < 100);
+    return match->phase == MATCH_PHASE_GAME_OVER;
+}
+
 static void test_start_and_config(TestStats *stats)
 {
     Match match;
@@ -165,6 +180,14 @@ static void test_phase_gating_and_pause(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
     REVERSI_TEST_ASSERT(stats, !match_resume(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_pause(&match));
+    REVERSI_TEST_ASSERT(stats, match_restart(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, history_count(&match.history) == 1);
+    REVERSI_TEST_ASSERT(stats, !match_can_undo(&match));
+    REVERSI_TEST_ASSERT(stats, !match_can_redo(&match));
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
 }
 
 static void build_auto_pass(GameState *state)
@@ -223,22 +246,18 @@ static void test_terminal_and_restart(TestStats *stats)
     MatchConfig config = pvp_config();
     REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
 
-    int guard = 0;
-    while (match.phase != MATCH_PHASE_GAME_OVER && guard < 100) {
-        if (match.phase == MATCH_PHASE_PLAYER_TURN) {
-            const Move move = first_legal_move(&match);
-            REVERSI_TEST_ASSERT(stats, match_apply_move(&match, move));
-        }
-        finish_phases(stats, &match);
-        ++guard;
-    }
-
-    REVERSI_TEST_ASSERT(stats, guard < 100);
+    REVERSI_TEST_ASSERT(stats, play_to_game_over(stats, &match));
     REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_GAME_OVER);
     REVERSI_TEST_ASSERT(stats, match.state.result != GAME_RESULT_ONGOING);
     REVERSI_TEST_ASSERT(stats, !match_is_active(&match));
     REVERSI_TEST_ASSERT(stats, match_can_undo(&match));
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_restart(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, history_count(&match.history) == 1);
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+    REVERSI_TEST_ASSERT(stats, play_to_game_over(stats, &match));
 
     REVERSI_TEST_ASSERT(stats, match_undo(&match));
     REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
@@ -372,6 +391,30 @@ static void test_terminal_without_full_board(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
 }
 
+static void test_pve_redo_branch_end(TestStats *stats)
+{
+    Match match;
+    MatchConfig pve = pve_config(STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &pve));
+
+    play_move(stats, &match, (Move){5, 3}); /* human move; AI to move */
+    REVERSI_TEST_ASSERT(stats, !match_is_human_turn(&match));
+    REVERSI_TEST_ASSERT(stats, history_position(&match.history) == 1);
+    REVERSI_TEST_ASSERT(stats, match_can_undo(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_undo(&match));
+    REVERSI_TEST_ASSERT(stats, history_position(&match.history) == 0);
+    REVERSI_TEST_ASSERT(stats, match_is_human_turn(&match));
+    REVERSI_TEST_ASSERT(stats, match_can_redo(&match));
+
+    REVERSI_TEST_ASSERT(stats, match_redo(&match));
+    REVERSI_TEST_ASSERT(stats, history_position(&match.history) == 1);
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, !match_is_human_turn(&match));
+    REVERSI_TEST_ASSERT(stats, !match_can_redo(&match));
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -382,6 +425,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_auto_pass_and_undo);
     REVERSI_RUN_TEST(&stats, test_terminal_and_restart);
     REVERSI_RUN_TEST(&stats, test_mode_switch_and_pve_undo);
+    REVERSI_RUN_TEST(&stats, test_pve_redo_branch_end);
     REVERSI_RUN_TEST(&stats, test_terminal_without_full_board);
 
     return reversi_test_summary(&stats, "core.match");

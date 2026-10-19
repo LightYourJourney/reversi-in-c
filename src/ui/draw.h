@@ -2,6 +2,7 @@
 #define REVERSI_UI_DRAW_H
 
 #include "core/board.h"
+#include "core/game.h"
 #include "ui/fonts.h"
 
 #include <raylib.h>
@@ -78,5 +79,17 @@ float ui_ease_out_back(float value);
 Color ui_color_alpha(Color color, float alpha);
 void ui_focus_update(int *focus, bool *visible, int count,
                      const UiInput *input);
+
+/* Display name for a side ("Black"/"White"); EMPTY maps to "None". */
+const char *ui_player_name(Stone stone);
+
+/* Win/draw title, or NULL while the game is still ongoing. */
+const char *ui_result_title(GameResult result);
+
+/*
+ * Advances a focus index by direction (+1/-1), wrapping within [0, count)
+ * and skipping disabled_index. A negative disabled_index disables skipping.
+ */
+int ui_focus_step(int focus, int direction, int count, int disabled_index);
 
 #endif

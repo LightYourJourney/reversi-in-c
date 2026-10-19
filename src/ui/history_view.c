@@ -64,11 +64,6 @@ static int clamp_scroll(int scroll, const Match *match, int visible_rows)
     return scroll;
 }
 
-static const char *player_name(Stone player)
-{
-    return player == STONE_WHITE ? "White" : "Black";
-}
-
 void history_view_init(HistoryView *view)
 {
     if (view == NULL) {
@@ -193,7 +188,7 @@ void history_view_draw(const HistoryView *view, const Match *match,
             char notation[3] = "??";
             (void)move_to_notation(entry->move, notation);
             snprintf(label, sizeof(label), "%02d   %s   %s",
-                     index, player_name(entry->mover), notation);
+                     index, ui_player_name(entry->mover), notation);
             size_t used = strlen(label);
             if (entry->flips > 0) {
                 snprintf(label + used, sizeof(label) - used,
@@ -204,7 +199,7 @@ void history_view_draw(const HistoryView *view, const Match *match,
             if (entry->pass.occurred) {
                 snprintf(label + used, sizeof(label) - used,
                          "   |   %s passed",
-                         player_name(entry->pass.player));
+                         ui_player_name(entry->pass.player));
             }
         }
 

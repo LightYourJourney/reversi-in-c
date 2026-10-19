@@ -39,7 +39,6 @@ typedef struct Match {
     GameState state;
     History history;
     MatchPhase phase;
-    MatchPhase paused_from;
     MatchConfig config;
     Move last_move;
     Stone last_mover;
@@ -72,7 +71,9 @@ bool match_resume(Match *match);
 
 /*
  * PVP undoes one move. PVE undoes until the human player's previous decision
- * point (or the start of the history). Redo restores the next decision point.
+ * point (or the start of the history). Redo restores the next decision point;
+ * when the recorded branch ends immediately after the human's move, redo
+ * restores that position and the AI is to move.
  */
 bool match_undo(Match *match);
 bool match_redo(Match *match);
@@ -85,6 +86,5 @@ bool match_is_human_turn(const Match *match);
 bool match_can_undo(const Match *match);
 bool match_can_redo(const Match *match);
 bool match_is_consistent(const Match *match);
-const char *match_phase_name(MatchPhase phase);
 
 #endif

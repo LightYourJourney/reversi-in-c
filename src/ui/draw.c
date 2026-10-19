@@ -70,6 +70,48 @@ void ui_focus_update(int *focus, bool *visible, int count,
     }
 }
 
+const char *ui_player_name(Stone stone)
+{
+    if (stone == STONE_BLACK) {
+        return "Black";
+    }
+    if (stone == STONE_WHITE) {
+        return "White";
+    }
+    return "None";
+}
+
+const char *ui_result_title(GameResult result)
+{
+    switch (result) {
+    case GAME_RESULT_BLACK_WIN:
+        return "Black wins";
+    case GAME_RESULT_WHITE_WIN:
+        return "White wins";
+    case GAME_RESULT_DRAW:
+        return "Draw";
+    case GAME_RESULT_ONGOING:
+    default:
+        return NULL;
+    }
+}
+
+int ui_focus_step(int focus, int direction, int count, int disabled_index)
+{
+    if (count <= 0) {
+        return focus;
+    }
+
+    const int step = direction < 0 ? -1 : 1;
+    for (int attempt = 0; attempt < count; ++attempt) {
+        focus = (focus + step + count) % count;
+        if (focus != disabled_index) {
+            return focus;
+        }
+    }
+    return focus;
+}
+
 void ui_draw_background(void)
 {
     DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(),

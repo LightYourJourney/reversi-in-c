@@ -36,7 +36,7 @@ src/ui/setup_view.[ch]     新游戏页（模式、先手颜色）
 src/ui/pause_view.[ch]     暂停浮层
 src/ui/history_view.[ch]   着法历史列表
 tests/test_history.c       core.history 测试（124 项断言）
-tests/test_match.c         core.match 测试（441 项断言）
+tests/test_match.c         core.match 测试（653 项断言）
 docs/PHASE_3_REPORT.md     本报告
 ```
 
@@ -51,7 +51,7 @@ src/ui/result_view.[ch]    改为接收 const Match *；新增“撤销最后一
 src/app/app.c              新增 AppScreen（Setup/History）、Match 取代 GameState、
                            跳过与终局计时、重开/撤销的待执行转场、自动对局种子
 tests/test_ui_helpers.c    改为 Match 驱动；新增撤销/重做、新游戏、暂停/历史、
-                           结算四个视图的动作映射（65 → 108 项断言）
+                           结算四个视图的动作映射与共享 UI 辅助（65 → 128 项断言）
 README.md                  状态、状态机说明、操作、测试计数、已知限制
 docs/ARCHITECTURE.md       History/Match 模块、状态机小节、测试策略、Phase 3 决策
 docs/ROADMAP.md            Phase 3 完成；Phase 4/5 目标调整
@@ -121,9 +121,9 @@ core.rules      227 checks
 core.game       115 checks
 core.random 557,924 checks
 core.history    124 checks
-core.match      441 checks
+core.match      653 checks
 ui.button        30 checks
-ui.helpers      108 checks
+ui.helpers      128 checks
 ```
 
 `core.history` 覆盖：快照初始化与空历史、撤销/重做完整恢复、新落子截断重做
@@ -178,17 +178,20 @@ ui.helpers      108 checks
 - 结算页选 “Undo last move” → 回到对局页、`PLAYER_TURN`、历史 60 → 59，
   重做可用，状态自检通过；
 - 结算页选 “Play again” → 历史重置为 1 项、游标 0、无最后一步；
-- 暂停浮层选 Restart → 打开重开确认模态（`MODAL_PURPOSE_RESTART`）。
+- 暂停浮层选 Restart → 打开重开确认模态（`MODAL_PURPOSE_RESTART`）；
+  再按 Enter 确认 → 回到对局页、`PLAYER_TURN`、历史重置为 1 项、模态关闭、
+  状态自检通过；
+- 对局中按 M 打开返回菜单确认框（`MODAL_PURPOSE_RETURN_MENU`）；确认后回到
+  主菜单（`APP_SCREEN_MENU`）且模态关闭；
+- 落子动画进行中按 M → 立即结束动画并打开返回菜单确认框，而不是进入暂停；
+- 落子动画进行中按 Esc/P → 立即结束动画并暂停（`PAUSED`）。
 
 未验证：
 
-- **重开/返回菜单/退出三个模态的“确认”在本阶段的端到端点击**：验证进行到
-  该步骤时桌面会话失去图形上下文（`Failed to get primary monitor`），
-  窗口无法再初始化。三个确认分支是对 `match_restart()` / `app_request_screen()`
-  的直接调用，前者有 `core.match` 断言覆盖，模态确认本身在 Phase 2 已验证。
 - **真实鼠标按下/释放完成一次按钮激活**：与 Phase 2 相同的限制，其语义由
   `ui.button`（30 项断言）覆盖，未覆盖窗口坐标换算。
-- **人机对局**：没有 AI，无法人工验证；撤销语义由 `core.match` 断言覆盖。
+- **人机对局**：没有 AI，无法人工验证；`App` 已接好 `const AiController *`
+  注入点，模式与撤销语义由 `core.match` 断言覆盖。
 - Windows 与 Linux 实机运行。
 
 ## 6. 修正的问题
@@ -207,13 +210,43 @@ ui.helpers      108 checks
    从未设置 `enabled`，在仅做了 `BeginDrawing()` 的调试截图里呈现为置灰。
    现在按 `buttons_accept` 显式设置，并新增结算页焦点/撤销可用性的断言。
 
+### 6.1 代码审查后的修正
+
+Phase 3 合并前执行了 Standards 与 Spec 两轴审查，并按发现修正：
+
+- **删除死代码**：`match_phase_name()` 无调用者，已从 `match.h/.c` 移除。
+- **补齐公开函数测试**：`ui_animation_finish()` 新增单元测试（完成即失活、
+  重复调用幂等、NULL 安全）；`ui_player_name()`、`ui_result_title()`、
+  `ui_focus_step()` 均有断言覆盖。
+- **合并重复实现**：显示名称、终局标题、跳过禁用项的焦点推进提取为
+  `ui_*` 共享函数；`match_undo()`/`match_redo()` 共用一个内部
+  `travel_history()`；`app_undo()`/`app_redo()` 共用
+  `app_after_history_change()`。
+- **消除隐式布尔**：`start_match_pending` / `undo_to_game_pending` 合并为
+  `PendingGameAction` 枚举；`app_switch_screen()` 在 `match_start` /
+  `match_undo` 失败时回退到新游戏页/结算页，而不是停在一个状态未改变的页面。
+- **接通 PvE 预留点**：`App` 持有 `const AiController *ai`，开始人机对局时写入
+  `MatchConfig`；控制器非空才允许 PvE 开始。Phase 4 只需在 `app_init` 中注入
+  控制器并按 `ai != NULL` 设置 `setup_view_set_ai_available()`。
+- **修正动画中退出语义**：动画进行中按 M/R 现在会在结束动画后打开对应的
+  返回/重开确认框；只有 Esc/P 才转入暂停。
+- **删除冗余状态**：`Match.paused_from` 恒为 `PLAYER_TURN`，已移除，继续时
+  直接回到 `PLAYER_TURN`。
+- **计时令牌归位**：跳过提示与终局延迟移入 `theme.h`
+  （`REVERSI_UI_DUR_PASS_NOTICE` / `..._GAME_OVER` / `..._GAME_OVER_FAST`）。
+- **补充状态转换测试**：从 `PAUSED` 与 `GAME_OVER` 重开、人机重做停在
+  分支末端（轮到 AI）的语义均有断言。
+
+修正后：Debug 9/9、Release 8/8、ASan+UBSan 8/8 全部通过；`core.match`
+653 项、`ui.helpers` 128 项断言。
+
 ## 7. 已知问题与风险
 
 - AI 尚未实现：新游戏页的 Computer 与颜色选项按构建禁用。
 - 历史容量为 65 项（起始局面 + 64 步）；Reversi 单局最多 60 手，因此不会触顶。
   若触顶，`match_apply_move()` 会回滚并返回 `false`，界面表现为该次点击无效。
-- 动画期间会刻意阻断操作输入，快速连点需要等待落子/翻转动画结束（Esc/P 可
-  立即结束动画并暂停）。
+- 动画期间会刻意阻断操作输入，快速连点需要等待落子/翻转动画结束
+  （Esc/P 可立即结束动画并暂停，M/R 可立即结束动画并打开确认框）。
 - 设置与对局仍不持久化（Phase 5）。
 - 锁屏、显示器休眠时 GLFW 无法获取主显示器，`app.smoke` 与手动运行都会以
   `Failed to get primary monitor` 失败；唤醒显示后重跑即可。
@@ -226,5 +259,6 @@ Phase 4（AI）可以直接复用：
   返回的落子仍交给 `match_apply_move()` 校验，非法即被拒绝；
 - `match_is_human_turn()` 判断当前是否该玩家操作；
 - 人机撤销/重做的“决策点”语义已实现并有测试，Phase 4 不需要改动撤销代码；
-- 新游戏页只需在提供真实控制器时调用 `setup_view_set_ai_available(view, true)`
-  即可启用 Computer 与颜色选项。
+- `App` 已持有 `const AiController *ai` 并写入 `MatchConfig`；Phase 4 在
+  `app_init` 中注入控制器，并按 `ai != NULL` 调用
+  `setup_view_set_ai_available(view, true)` 即可启用 Computer 与颜色选项。

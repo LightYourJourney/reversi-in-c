@@ -58,7 +58,6 @@ static bool match_initialize(Match *match, const MatchConfig *config,
     match->state = *initial;
     match->phase = initial->result == GAME_RESULT_ONGOING
         ? MATCH_PHASE_PLAYER_TURN : MATCH_PHASE_GAME_OVER;
-    match->paused_from = MATCH_PHASE_PLAYER_TURN;
     match->last_move = (Move){0, 0};
     match->last_mover = STONE_EMPTY;
     match->last_flips = 0;
@@ -177,7 +176,6 @@ bool match_pause(Match *match)
         return false;
     }
 
-    match->paused_from = match->phase;
     match->phase = MATCH_PHASE_PAUSED;
     return true;
 }
@@ -188,8 +186,7 @@ bool match_resume(Match *match)
         return false;
     }
 
-    match->phase = match->paused_from;
-    match->paused_from = MATCH_PHASE_PLAYER_TURN;
+    match->phase = MATCH_PHASE_PLAYER_TURN;
     return true;
 }
 
@@ -227,62 +224,52 @@ static bool restore_current(Match *match)
     match->last_pass = entry->pass;
     match->phase = entry->state.result == GAME_RESULT_ONGOING
         ? MATCH_PHASE_PLAYER_TURN : MATCH_PHASE_GAME_OVER;
-    match->paused_from = MATCH_PHASE_PLAYER_TURN;
     return true;
 }
 
-bool match_undo(Match *match)
+static bool travel_history(Match *match, bool forward)
 {
-    if (!phase_allows_history(match) || !history_can_undo(&match->history)) {
+    if (!phase_allows_history(match)) {
         return false;
     }
-    if (match->config.mode == GAME_MODE_PVE
+    if (forward ? !history_can_redo(&match->history)
+                : !history_can_undo(&match->history)) {
+        return false;
+    }
+    if (!forward && match->config.mode == GAME_MODE_PVE
         && !pve_has_prior_human_decision(match)) {
         return false;
     }
 
+    const bool pvp = match->config.mode == GAME_MODE_PVP;
     do {
-        if (!history_undo(&match->history)) {
+        const bool moved = forward
+            ? history_redo(&match->history)
+            : history_undo(&match->history);
+        if (!moved) {
             return false;
         }
 
-        if (match->config.mode == GAME_MODE_PVP) {
-            break;
-        }
-
         const HistoryEntry *entry = history_current(&match->history);
-        if (entry == NULL || entry->state.result != GAME_RESULT_ONGOING
+        if (entry == NULL || pvp
+            || entry->state.result != GAME_RESULT_ONGOING
             || entry->state.current_player == match->config.human_color) {
             break;
         }
-    } while (history_can_undo(&match->history));
+    } while (forward ? history_can_redo(&match->history)
+                     : history_can_undo(&match->history));
 
     return restore_current(match);
 }
 
+bool match_undo(Match *match)
+{
+    return travel_history(match, false);
+}
+
 bool match_redo(Match *match)
 {
-    if (!phase_allows_history(match) || !history_can_redo(&match->history)) {
-        return false;
-    }
-
-    do {
-        if (!history_redo(&match->history)) {
-            return false;
-        }
-
-        if (match->config.mode == GAME_MODE_PVP) {
-            break;
-        }
-
-        const HistoryEntry *entry = history_current(&match->history);
-        if (entry == NULL || entry->state.result != GAME_RESULT_ONGOING
-            || entry->state.current_player == match->config.human_color) {
-            break;
-        }
-    } while (history_can_redo(&match->history));
-
-    return restore_current(match);
+    return travel_history(match, true);
 }
 
 bool match_restart(Match *match)
@@ -369,29 +356,10 @@ bool match_is_consistent(const Match *match)
         return match->state.result == GAME_RESULT_ONGOING
             && match->last_pass.occurred;
     case MATCH_PHASE_PAUSED:
-        return match->state.result == GAME_RESULT_ONGOING
-            && match->paused_from == MATCH_PHASE_PLAYER_TURN;
+        return match->state.result == GAME_RESULT_ONGOING;
     case MATCH_PHASE_GAME_OVER:
         return match->state.result != GAME_RESULT_ONGOING;
     default:
         return false;
-    }
-}
-
-const char *match_phase_name(MatchPhase phase)
-{
-    switch (phase) {
-    case MATCH_PHASE_PLAYER_TURN:
-        return "PlayerTurn";
-    case MATCH_PHASE_ANIMATING:
-        return "Animating";
-    case MATCH_PHASE_PASSING_TURN:
-        return "PassingTurn";
-    case MATCH_PHASE_PAUSED:
-        return "Paused";
-    case MATCH_PHASE_GAME_OVER:
-        return "GameOver";
-    default:
-        return "Unknown";
     }
 }

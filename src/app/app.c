@@ -28,7 +28,6 @@
 #define REVERSI_WINDOW_WIDTH 1100
 #define REVERSI_WINDOW_HEIGHT 800
 #define REVERSI_TARGET_FPS 60
-#define REVERSI_PASS_NOTICE_SECONDS 0.9f
 
 typedef enum AppScreen {
     APP_SCREEN_MENU = 0,
@@ -38,6 +37,12 @@ typedef enum AppScreen {
     APP_SCREEN_SETTINGS,
     APP_SCREEN_RESULT
 } AppScreen;
+
+typedef enum PendingGameAction {
+    PENDING_GAME_NONE = 0,
+    PENDING_GAME_START,
+    PENDING_GAME_UNDO
+} PendingGameAction;
 
 typedef struct AppSettings {
     bool animations;
@@ -74,9 +79,9 @@ typedef struct App {
     bool running;
     bool autoplay;
     float autoplay_timer;
-    bool start_match_pending;
-    bool undo_to_game_pending;
+    PendingGameAction pending_action;
     MatchConfig pending_config;
+    const AiController *ai;
 } App;
 
 static UiInput read_input(void);
@@ -94,6 +99,7 @@ static void app_finish_animation(App *app);
 static void app_apply_move(App *app, Move move);
 static void app_undo(App *app);
 static void app_redo(App *app);
+static void app_after_history_change(App *app);
 static void app_handle_menu_action(App *app, MenuAction action);
 static void app_handle_pause_action(App *app, PauseAction action);
 static void app_handle_modal_confirm(App *app);
@@ -151,13 +157,13 @@ static void app_init(App *app)
     app->pass_notice_timer = 0.0f;
     app->running = true;
     app->autoplay_timer = 0.0f;
-    app->start_match_pending = false;
-    app->undo_to_game_pending = false;
+    app->pending_action = PENDING_GAME_NONE;
     app->pending_config = (MatchConfig){
         .mode = GAME_MODE_PVP,
         .human_color = STONE_BLACK,
         .ai = NULL
     };
+    app->ai = NULL;
 
 #ifndef NDEBUG
     const char *autoplay = getenv("REVERSI_AUTOPLAY");
@@ -175,7 +181,7 @@ static void app_init(App *app)
     ui_fonts_load(&app->fonts);
     menu_view_init(&app->menu);
     setup_view_init(&app->setup_view);
-    setup_view_set_ai_available(&app->setup_view, false);
+    setup_view_set_ai_available(&app->setup_view, app->ai != NULL);
     game_view_init(&app->game_view);
     pause_view_init(&app->pause_view);
     history_view_init(&app->history_view);
@@ -214,18 +220,26 @@ static void app_switch_screen(App *app, AppScreen target)
         return;
     }
 
-    if (app->start_match_pending) {
+    switch (app->pending_action) {
+    case PENDING_GAME_START:
         if (match_start(&app->match, &app->pending_config)) {
             app_reset_match_ui(app);
+        } else {
+            app->screen = APP_SCREEN_SETUP;
         }
-        app->start_match_pending = false;
-        app->undo_to_game_pending = false;
-    } else if (app->undo_to_game_pending) {
+        break;
+    case PENDING_GAME_UNDO:
         if (match_undo(&app->match)) {
             app_reset_match_ui(app);
+        } else {
+            app->screen = APP_SCREEN_RESULT;
         }
-        app->undo_to_game_pending = false;
+        break;
+    case PENDING_GAME_NONE:
+    default:
+        break;
     }
+    app->pending_action = PENDING_GAME_NONE;
 }
 
 static void app_begin_match(App *app, const MatchConfig *config)
@@ -242,8 +256,7 @@ static void app_begin_match(App *app, const MatchConfig *config)
     }
 
     app->pending_config = *config;
-    app->start_match_pending = true;
-    app->undo_to_game_pending = false;
+    app->pending_action = PENDING_GAME_START;
     app_request_screen(app, APP_SCREEN_GAME);
 }
 
@@ -339,10 +352,11 @@ static void app_finish_animation(App *app)
     switch (app->match.phase) {
     case MATCH_PHASE_PASSING_TURN:
         app->pass_notice_timer = app->autoplay
-            ? 0.0f : REVERSI_PASS_NOTICE_SECONDS;
+            ? 0.0f : REVERSI_UI_DUR_PASS_NOTICE;
         break;
     case MATCH_PHASE_GAME_OVER:
-        app->outcome_delay = app->settings.animations ? 0.75f : 0.20f;
+        app->outcome_delay = app->settings.animations
+            ? REVERSI_UI_DUR_GAME_OVER : REVERSI_UI_DUR_GAME_OVER_FAST;
         break;
     default:
         break;
@@ -369,34 +383,29 @@ static void app_apply_move(App *app, Move move)
     }
 }
 
-static void app_undo(App *app)
+static void app_after_history_change(App *app)
 {
-    if (!match_undo(&app->match)) {
-        return;
-    }
-
     ui_animation_reset(&app->animation);
     app->last_move_age = 0.0f;
-    app->outcome_delay = 0.0f;
     app->pass_notice_timer = 0.0f;
     game_view_reset(&app->game_view);
+    app->outcome_delay = app->match.phase == MATCH_PHASE_GAME_OVER
+        ? (app->settings.animations
+            ? REVERSI_UI_DUR_GAME_OVER : REVERSI_UI_DUR_GAME_OVER_FAST)
+        : 0.0f;
+}
+
+static void app_undo(App *app)
+{
+    if (match_undo(&app->match)) {
+        app_after_history_change(app);
+    }
 }
 
 static void app_redo(App *app)
 {
-    if (!match_redo(&app->match)) {
-        return;
-    }
-
-    ui_animation_reset(&app->animation);
-    app->last_move_age = 0.0f;
-    app->pass_notice_timer = 0.0f;
-    game_view_reset(&app->game_view);
-
-    if (app->match.phase == MATCH_PHASE_GAME_OVER) {
-        app->outcome_delay = app->settings.animations ? 0.75f : 0.20f;
-    } else {
-        app->outcome_delay = 0.0f;
+    if (match_redo(&app->match)) {
+        app_after_history_change(app);
     }
 }
 
@@ -494,15 +503,19 @@ static void app_update_game(App *app, const UiInput *input, float dt)
             app_finish_animation(app);
         }
 
+        const bool leave_animation = input->menu_pressed
+            || input->restart_pressed;
         if (match->phase == MATCH_PHASE_ANIMATING
             && (input->escape_pressed || input->pause_pressed
-                || input->menu_pressed)) {
+                || leave_animation)) {
             ui_animation_finish(&app->animation);
             app_finish_animation(app);
             if (match->phase == MATCH_PHASE_PASSING_TURN) {
                 (void)match_finish_pass(match);
             }
             if (match->phase == MATCH_PHASE_PLAYER_TURN
+                && !leave_animation
+                && (input->escape_pressed || input->pause_pressed)
                 && match_pause(match)) {
                 pause_view_reset(&app->pause_view);
             }
@@ -615,9 +628,9 @@ static void app_update(App *app, const UiInput *input, float dt)
             MatchConfig config = {
                 .mode = app->setup_view.mode,
                 .human_color = app->setup_view.human_color,
-                .ai = NULL
+                .ai = app->setup_view.mode == GAME_MODE_PVE ? app->ai : NULL
             };
-            if (config.mode == GAME_MODE_PVP) {
+            if (config.mode == GAME_MODE_PVP || config.ai != NULL) {
                 app_begin_match(app, &config);
             }
         } else if (action == SETUP_ACTION_BACK) {
@@ -669,8 +682,7 @@ static void app_update(App *app, const UiInput *input, float dt)
         if (action == RESULT_ACTION_PLAY_AGAIN) {
             app_begin_match(app, &app->match.config);
         } else if (action == RESULT_ACTION_UNDO) {
-            app->undo_to_game_pending = true;
-            app->start_match_pending = false;
+            app->pending_action = PENDING_GAME_UNDO;
             app_request_screen(app, APP_SCREEN_GAME);
         } else if (action == RESULT_ACTION_MENU) {
             app_request_screen(app, APP_SCREEN_MENU);

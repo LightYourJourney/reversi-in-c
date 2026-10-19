@@ -107,8 +107,8 @@ GAME_OVER   ──match_undo / match_redo──> PLAYER_TURN / GAME_OVER
   `match_is_consistent()` 会重复检查这些前提，供测试与调试使用。
 - `PASSING_TURN` 是**展示用**的中间态：规则层的自动跳过已经发生，`Match`
   只是把“对手无子可下”暴露成一个可被 UI 显示、可被撤销的阶段。
-- 暂停只允许从 `PLAYER_TURN` 进入，`paused_from` 记录来源（当前恒为
-  `PLAYER_TURN`），继续时恢复它而不是硬编码目标。
+- 暂停只允许从 `PLAYER_TURN` 进入，继续时回到 `PLAYER_TURN`；没有额外的
+  来源阶段字段需要维护。
 - 撤销/重做只允许在 `PLAYER_TURN` 与 `GAME_OVER` 进行；两个阶段的恢复目标
   由快照本身决定，不需要 UI 参与。
 
@@ -309,9 +309,11 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    `PASSING_TURN` 与 `last_pass`，让 UI 能提示“对手无子可下”，并允许从该
    阶段撤销。终局（双方都无子可下）不会被记成跳过。
 6. **AI 边界先于 AI 实现**：`AiController` 只是函数指针占位，`Match` 不调用
-   它；`MatchConfig` 校验要求人机模式必须带合法控制器，因此 Phase 4 不会
-   出现“模式已存在但没有对手”的中间状态。人机撤销语义（一次回退到玩家
-   上一个决策点）在本阶段就实现并测试，避免 Phase 4 再改撤销代码。
+   它；`App` 持有 `const AiController *ai` 并在启动人机对局时写入
+   `MatchConfig`，新游戏页只在控制器非空时允许 PvE 开始。`MatchConfig` 校验
+   要求人机模式必须带合法控制器，因此 Phase 4 不会出现“模式已存在但没有
+   对手”的中间状态。人机撤销语义（一次回退到玩家上一个决策点）在本阶段就
+   实现并测试，避免 Phase 4 再改撤销代码。
 7. **UI 不伪造不可用能力**：新游戏页的 Computer 与颜色按钮在 AI 缺失时禁用
    并说明原因，而不是提供一个点了没有反应的选项。
 8. **计时留在 app**：跳过提示时长与终局延迟是展示参数，放在 `app` 而不是

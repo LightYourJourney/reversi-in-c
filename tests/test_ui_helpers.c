@@ -14,10 +14,38 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <string.h>
 
 static bool nearly_equal(float a, float b)
 {
     return fabsf(a - b) < 0.0001f;
+}
+
+static void test_ui_labels_and_focus(TestStats *stats)
+{
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_player_name(STONE_BLACK), "Black") == 0);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_player_name(STONE_WHITE), "White") == 0);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_player_name(STONE_EMPTY), "None") == 0);
+
+    REVERSI_TEST_ASSERT(stats, ui_result_title(GAME_RESULT_ONGOING) == NULL);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_result_title(GAME_RESULT_BLACK_WIN), "Black wins") == 0);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_result_title(GAME_RESULT_WHITE_WIN), "White wins") == 0);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_result_title(GAME_RESULT_DRAW), "Draw") == 0);
+
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 4, 1) == 2);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(3, 1, 4, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(2, -1, 4, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 3, -1) == 1);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(1, 1, 3, 1) == 2);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(1, -1, 3, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 0, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 1, 0) == 0);
 }
 
 static void test_clamp_and_easing(TestStats *stats)
@@ -413,10 +441,33 @@ static void test_game_view_enter_and_gating(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, view.restart.enabled);
 }
 
+static void test_animation_finish(TestStats *stats)
+{
+    Board before;
+    Board after;
+    Move move;
+    build_d3_move(stats, &before, &after, &move);
+
+    UiMoveAnimation animation;
+    ui_animation_start(&animation, &before, &after, move, STONE_BLACK, true);
+    REVERSI_TEST_ASSERT(stats, ui_animation_is_active(&animation));
+
+    ui_animation_finish(&animation);
+    REVERSI_TEST_ASSERT(stats, !ui_animation_is_active(&animation));
+    REVERSI_TEST_ASSERT(stats,
+        nearly_equal(animation.elapsed, animation.duration));
+
+    const float elapsed = animation.elapsed;
+    ui_animation_finish(&animation);
+    REVERSI_TEST_ASSERT(stats, nearly_equal(animation.elapsed, elapsed));
+    ui_animation_finish(NULL);
+}
+
 int main(void)
 {
     TestStats stats = {0};
 
+    REVERSI_RUN_TEST(&stats, test_ui_labels_and_focus);
     REVERSI_RUN_TEST(&stats, test_clamp_and_easing);
     REVERSI_RUN_TEST(&stats, test_color_alpha);
     REVERSI_RUN_TEST(&stats, test_focus_update);
@@ -429,6 +480,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_result_view_actions);
     REVERSI_RUN_TEST(&stats, test_animation_requires_enabled);
     REVERSI_RUN_TEST(&stats, test_animation_placement_and_flip);
+    REVERSI_RUN_TEST(&stats, test_animation_finish);
 
     return reversi_test_summary(&stats, "ui.helpers");
 }

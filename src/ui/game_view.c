@@ -321,26 +321,6 @@ GameViewAction game_view_update(GameView *view, const Match *match,
     return action;
 }
 
-static const char *player_name(Stone player)
-{
-    return player == STONE_WHITE ? "White" : "Black";
-}
-
-static const char *result_title(const Match *match)
-{
-    switch (match->state.result) {
-    case GAME_RESULT_BLACK_WIN:
-        return "Black wins";
-    case GAME_RESULT_WHITE_WIN:
-        return "White wins";
-    case GAME_RESULT_DRAW:
-        return "Draw";
-    case GAME_RESULT_ONGOING:
-    default:
-        return NULL;
-    }
-}
-
 static void draw_result_discs(Vector2 center, GameResult result)
 {
     if (result == GAME_RESULT_DRAW) {
@@ -366,7 +346,7 @@ static void draw_turn_card(const UiFonts *fonts, Rectangle card,
     const Vector2 center = {
         card.x + 30.0f, card.y + card.height * 0.5f
     };
-    const char *title = result_title(match);
+    const char *title = ui_result_title(match->state.result);
     char text[48];
     if (title != NULL) {
         draw_result_discs(center, match->state.result);
@@ -375,7 +355,7 @@ static void draw_turn_card(const UiFonts *fonts, Rectangle card,
         ui_draw_disc(center, 14.0f, match->state.current_player,
                      1.0f, 1.0f, 1.0f);
         snprintf(text, sizeof(text), "%s to move",
-                 player_name(match->state.current_player));
+                 ui_player_name(match->state.current_player));
     }
 
     ui_draw_text_aligned(fonts, UI_TEXT_SEMIBOLD, text,
@@ -401,7 +381,7 @@ static void draw_player_row(const UiFonts *fonts, Rectangle row,
                  13.0f, player, 1.0f, 1.0f, 1.0f);
 
     ui_draw_text_aligned(
-        fonts, UI_TEXT_REGULAR, player_name(player),
+        fonts, UI_TEXT_REGULAR, ui_player_name(player),
         (Rectangle){row.x + 50.0f, row.y, row.width - 130.0f, row.height},
         REVERSI_UI_FONT_BODY,
         active ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED,
@@ -484,7 +464,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
     const Vector2 center = {
         top.x + 32.0f, top.y + top.height * 0.5f
     };
-    const char *title = result_title(match);
+    const char *title = ui_result_title(match->state.result);
     char turn[48];
     if (title != NULL) {
         draw_result_discs(center, match->state.result);
@@ -493,7 +473,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
         ui_draw_disc(center, 15.0f, match->state.current_player,
                      1.0f, 1.0f, 1.0f);
         snprintf(turn, sizeof(turn), "%s to move",
-                 player_name(match->state.current_player));
+                 ui_player_name(match->state.current_player));
     }
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, turn,
@@ -538,10 +518,10 @@ static void draw_pass_toast(const UiFonts *fonts, const GameLayout *layout,
 
     char title[64];
     snprintf(title, sizeof(title), "%s has no legal moves",
-             player_name(match->last_pass.player));
+             ui_player_name(match->last_pass.player));
     char body[64];
     snprintf(body, sizeof(body), "Turn passed to %s",
-             player_name(match->state.current_player));
+             ui_player_name(match->state.current_player));
 
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, title,
@@ -601,7 +581,7 @@ void game_view_draw(const GameView *view, const Match *match,
         break;
     case MATCH_PHASE_PASSING_TURN:
         snprintf(status, sizeof(status), "%s must pass",
-                 player_name(match->last_pass.player));
+                 ui_player_name(match->last_pass.player));
         break;
     case MATCH_PHASE_PAUSED:
         snprintf(status, sizeof(status), "Paused");
@@ -610,7 +590,7 @@ void game_view_draw(const GameView *view, const Match *match,
     default:
         if (game_must_pass(&match->state)) {
             snprintf(status, sizeof(status), "%s must pass",
-                     player_name(match->state.current_player));
+                     ui_player_name(match->state.current_player));
         } else {
             snprintf(status, sizeof(status), "Select a highlighted cell");
         }
@@ -626,7 +606,7 @@ void game_view_draw(const GameView *view, const Match *match,
             snprintf(last_move_text + strlen(last_move_text),
                      sizeof(last_move_text) - strlen(last_move_text),
                      "  /  %s passed",
-                     player_name(match->last_pass.player));
+                     ui_player_name(match->last_pass.player));
         }
     }
 

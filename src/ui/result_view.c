@@ -68,17 +68,6 @@ void result_view_reset(ResultView *view)
     }
 }
 
-static int step_focus(int focus, int direction, bool can_undo)
-{
-    for (int step = 0; step < 3; ++step) {
-        focus = (focus + direction + 3) % 3;
-        if (focus != 1 || can_undo) {
-            return focus;
-        }
-    }
-    return focus;
-}
-
 ResultAction result_view_update(ResultView *view, const UiInput *input,
                                 bool accept_input, bool animations,
                                 bool can_undo, float dt)
@@ -114,8 +103,9 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
         view->focus_visible = false;
     }
     if (input->up_pressed || input->down_pressed) {
-        view->focus = step_focus(view->focus,
-                                 input->down_pressed ? 1 : -1, can_undo);
+        view->focus = ui_focus_step(
+            view->focus, input->down_pressed ? 1 : -1, 3,
+            can_undo ? -1 : 1);
         view->focus_visible = true;
     }
 
@@ -191,13 +181,9 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
                      winner, 1.0f, scale, scale);
     }
 
-    const char *title = "Game over";
-    if (result == GAME_RESULT_BLACK_WIN) {
-        title = "Black wins";
-    } else if (result == GAME_RESULT_WHITE_WIN) {
-        title = "White wins";
-    } else if (result == GAME_RESULT_DRAW) {
-        title = "Draw";
+    const char *title = ui_result_title(result);
+    if (title == NULL) {
+        title = "Game over";
     }
 
     ui_draw_text_aligned(

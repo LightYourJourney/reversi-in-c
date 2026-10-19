@@ -86,8 +86,8 @@
 - `ui/result_view`：终局比分、再来一局、撤销最后一步
 - `app`：页面路由与 `AppScreen`/`MatchPhase` 双状态、跳过与终局计时、
   待执行的重开/撤销转场
-- 测试：`core.history` 124 项、`core.match` 441 项断言；`ui.helpers` 扩充到
-  108 项，覆盖新游戏/暂停/历史/结算的输入映射
+- 测试：`core.history` 124 项、`core.match` 653 项断言；`ui.helpers` 扩充到
+  128 项，覆盖新游戏/暂停/历史/结算的输入映射与共享 UI 辅助
 
 验收结果：
 

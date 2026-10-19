@@ -58,17 +58,6 @@ static bool color_available(const SetupView *view)
     return view->ai_available && view->mode == GAME_MODE_PVE;
 }
 
-static int step_focus(int focus, int direction, bool color_enabled)
-{
-    for (int step = 0; step < 4; ++step) {
-        focus = (focus + direction + 4) % 4;
-        if (focus != 1 || color_enabled) {
-            return focus;
-        }
-    }
-    return focus;
-}
-
 void setup_view_init(SetupView *view)
 {
     if (view == NULL) {
@@ -151,8 +140,9 @@ SetupAction setup_view_update(SetupView *view, const UiInput *input,
         view->focus_visible = false;
     }
     if (input->up_pressed || input->down_pressed) {
-        view->focus = step_focus(view->focus,
-                                 input->down_pressed ? 1 : -1, colors);
+        view->focus = ui_focus_step(
+            view->focus, input->down_pressed ? 1 : -1, 4,
+            colors ? -1 : 1);
         view->focus_visible = true;
     }
 
