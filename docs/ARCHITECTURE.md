@@ -19,9 +19,9 @@
                           app
         ┌──────────┬───────┼──────────┬────────────┐
         ▼          ▼       ▼          ▼            ▼
-       ui         ai    storage    settings      core
-        │          │       │          │       (board/rules/
-        ▼          │       │          │        game/history)
+       ui         ai    storage    settings       core
+        │          │       │          │       (board/rules/game/
+        ▼          │       │          │        history/match)
      raylib        └───────┴──────────┴────────────┘
                    （只依赖 core 的只读接口或数据结构）
 ```
@@ -34,6 +34,8 @@
 4. **storage / settings 不包含 ui**，只与数据模型和 C 标准库打交道。
 5. **app 是唯一的组装根（composition root）**：负责创建、连接、销毁所有模块。
 6. 依赖关系只允许沿上图向下，不允许反向引用或跨层回调环。
+7. **对局状态只有一条写路径**：`match_*` 是唯一会改动 `Match`（含棋盘）的
+   接口；UI 层只拿到 `const Match *`，无法直接写棋盘。
 
 ## 3. 模块职责
 
@@ -42,10 +44,11 @@
 | Board | `src/core/board.[ch]` | Phase 0/1 已实现 | 8×8 棋盘、坐标/记谱映射、安全读写、初始局面、棋子计数 | C 标准库 |
 | Rules | `src/core/rules.[ch]` | Phase 1 已实现 | 单步合法性、八方向翻转、合法着法生成/计数、必须跳过查询、无状态落子 | Board |
 | Game | `src/core/game.[ch]` | Phase 1 已实现 | 当前玩家、落子应用、自动跳过、主动跳过限制、终局、结果、一致性检查 | Board、Rules |
-| History | `src/core/history.[ch]` | Phase 3 | 着法记录、撤销、重做、重开 | Game |
+| History | `src/core/history.[ch]` | Phase 3 已实现 | 局面快照栈、撤销/重做游标、重做分支截断、跳过事件记录 | Game |
+| Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4 | 局面评估、搜索、难度分级 | Board、Rules、Game（只读） |
-| UI | `src/ui/` | Phase 2 已实现 | 设计令牌、绘制基础、字体、棋盘/菜单/对局/设置/结算视图、动画、模态 | raylib、core 的只读视图类型 |
-| App | `src/app/` | Phase 2 已实现 | 应用状态机、页面转场、模态编排、输入路由 | 所有下层模块 |
+| UI | `src/ui/` | Phase 2/3 已实现 | 设计令牌、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算视图、动画、模态 | raylib、core 的只读视图类型 |
+| App | `src/app/` | Phase 2/3 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时 | 所有下层模块 |
 | Storage | `src/storage/` | Phase 5 | 存档/读档、格式版本校验 | Game、History、C 标准库 |
 | Settings | `src/settings/` | Phase 5 | 用户偏好读写 | C 标准库 / Storage |
 | Utils | `src/utils/` | 按需 | 无业务含义的纯工具函数 | C 标准库 |
@@ -61,49 +64,85 @@
 raylib 输入事件
       │
       ▼
-app：read_input() 汇总为 UiInput
+app：read_input() 汇总为 UiInput（含快捷键与滚轮）
       │
       ▼
 ui：棋盘命中测试 / 键盘光标 / 按钮状态 → GameViewAction
       │
       ▼
-app：调用 game_apply_move（内部使用 rules 校验与翻转）
+app：调用 match_apply_move（内部走 rules 校验与翻转，并写入 History）
       │
       ▼
 app：比较落子前后棋盘，生成 UiMoveAnimation
       │
       ▼
-ui：从只读 GameState 与动画进度重新绘制
+ui：从只读 Match 与动画进度重新绘制
 ```
 
-Phase 3 会在 `game_apply_move` 成功后追加 `History` 记录，用于撤销/重做；
-该步骤不改变上述输入与校验路径。
+`match_apply_move()` 成功后阶段变为 `ANIMATING`；动画结束由 `app` 调用
+`match_finish_animation()` 落到 `PLAYER_TURN` / `PASSING_TURN` / `GAME_OVER`。
+撤销/重做同样只走 `match_undo()` / `match_redo()`，UI 不自行改动棋盘。
 
-### 4.2 UI 状态与动画
+### 4.2 对局状态机
+
+对局逻辑状态是 `MatchPhase`，与“当前显示哪个页面”（`AppScreen`）完全分离：
+同一页面可以处于不同阶段（对局页在暂停时仍是对局页），同一阶段也可以对应
+不同页面（历史页在暂停中查看）。
+
+```text
+        match_apply_move 成功
+PLAYER_TURN ────────────────> ANIMATING
+     ▲                            │
+     │  match_finish_animation    ├── 终局 ────────> GAME_OVER
+     │  match_finish_pass         ├── 对手必须跳过 ─> PASSING_TURN ─┐
+     │                            └── 否则 ────────> PLAYER_TURN   │
+     │                                                             │
+     └─────────────────────────────────────────────────────────────┘
+
+PLAYER_TURN ──match_pause──> PAUSED ──match_resume──> PLAYER_TURN
+GAME_OVER   ──match_undo / match_redo──> PLAYER_TURN / GAME_OVER
+```
+
+- 每个转换都在 `match.c` 内先校验来源阶段，非法转换返回 `false` 且不改状态；
+  `match_is_consistent()` 会重复检查这些前提，供测试与调试使用。
+- `PASSING_TURN` 是**展示用**的中间态：规则层的自动跳过已经发生，`Match`
+  只是把“对手无子可下”暴露成一个可被 UI 显示、可被撤销的阶段。
+- 暂停只允许从 `PLAYER_TURN` 进入，`paused_from` 记录来源（当前恒为
+  `PLAYER_TURN`），继续时恢复它而不是硬编码目标。
+- 撤销/重做只允许在 `PLAYER_TURN` 与 `GAME_OVER` 进行；两个阶段的恢复目标
+  由快照本身决定，不需要 UI 参与。
+
+### 4.3 UI 状态与动画
 
 UI 的瞬时状态（悬停、光标位置、按钮按压、动画进度、页面转场、模态）
 全部由 `app` 或视图结构体持有：
 
 - `UiMoveAnimation` 只保存落子格与翻转格的渲染进度，来源是落子前后的
-  棋盘快照；它不写回 `GameState`。
-- 动画进行时 `app` 将 `board_accept` 置为 `false`，落子输入被暂时拒绝。
+  棋盘快照；它不写回 `Match`。
+- 动画进行时 `app` 不向对局页传递可接受输入，落子输入被暂时拒绝。
 - 设置开关只影响绘制与动画启动，不改变规则判定。
 - 页面转场期间 `app_update` 只推进被动布局，不读取操作输入。
 - 模态打开时输入只交给模态，背景页面不更新，因此背景按钮与棋盘无法被操作。
+- `PASSING_TURN` 与终局延迟由 `app` 计时，`Match` 不含任何计时器。
 
-### 4.3 AI 落子
+### 4.4 AI 落子
 
 ```text
 app ──只读快照──> ai ──候选落子──> app
                                      │
                                      ▼
                         与人类落子完全相同的校验与
-                        应用路径（game/rules/history）
+                        应用路径（match/game/rules/history）
 ```
 
 AI 返回的落子即使非法，也会被规则层拒绝；AI 不拥有跳过校验的特权。
 
-### 4.4 存档与读档
+`MatchConfig.ai` 是该边界的占位：`Match` 只保存指向 `AiController` 的指针，
+不调用它、也不拥有它。Phase 4 由 `app` 在 AI 该走子时调用控制器，再把返回的
+落子交给 `match_apply_move()`。人机模式下 `match_undo()` 会一次回退到玩家
+上一个决策点，使“撤销”始终对应玩家自己的一步。
+
+### 4.5 存档与读档
 
 ```text
 app ──> storage ──> 文件（带格式版本号）
@@ -114,13 +153,15 @@ app <── storage <── 校验后的状态
 
 ## 5. 状态与所有权
 
-- `Board`、`Game`、`History`、`Settings` 的实例由 `app` 拥有，生命周期与
+- `Match`、`History`、`Settings` 的实例由 `app` 拥有，生命周期与
   应用一致。
-- `MenuView`、`GameView`、`SettingsView`、`ResultView`、`Modal`、
-  `UiMoveAnimation`、`UiFonts` 与 `AppSettings` 同样由 `app` 拥有；
-  设置当前只在进程内有效，Phase 5 再交给 `settings` 持久化。
+- `MenuView`、`SetupView`、`GameView`、`PauseView`、`HistoryView`、
+  `SettingsView`、`ResultView`、`Modal`、`UiMoveAnimation`、`UiFonts` 与
+  `AppSettings` 同样由 `app` 拥有；设置当前只在进程内有效，Phase 5 再交给
+  `settings` 持久化。
 - 下层模块通过指针或 `const` 视图接收状态，不持有隐藏的全局单例。
-- `ui` 仅保有自己的瞬时状态（动画进度、悬停格、光标、布局计算结果）。
+- `ui` 仅保有自己的瞬时状态（动画进度、悬停格、光标、布局计算结果、
+  历史滚动位置）；历史列表只读 `const Match *`，不持有对局副本。
 - 字体在启动时加载一次，退出时统一卸载；绘制循环不加载资源。
 - raylib 的窗口/GPU 状态是进程级的，由 `app` 在启动和退出时统一初始化与释放。
 - 不引入可变的文件作用域全局变量；如确需常量，使用 `static const`。
@@ -152,14 +193,16 @@ app <── storage <── 校验后的状态
 
 | 层级 | 内容 | 是否依赖 GUI |
 |---|---|---|
-| 单元测试 | Board、Rules、Game、History、AI、Storage 的纯逻辑 | 否 |
+| 单元测试 | Board、Rules、Game、History、Match、AI、Storage 的纯逻辑 | 否 |
 | 规则回归 | 开局着法、八方向/多方向翻转、间隙、边界、非法落子 | 否 |
 | 自动跳过/终局 | 当前玩家无着法、双方无着法、棋盘填满、主动跳过限制 | 否 |
+| 状态机 | 非法转换被拒绝、暂停/继续回到来源阶段、终局与满盘/非满盘两种结束方式 | 否 |
+| 撤销/重做 | 快照恢复一致、新落子截断重做分支、终局撤销、跳过事件恢复 | 否 |
 | 随机对局 | 500 局确定性随机对局：每步合法、占用数一致、有限步结束 | 否 |
 | AI 合法性 | 所有难度在大量局面上只能返回合法着法（Phase 4） | 否 |
 | 存档往返 | 保存后读取得到等价状态；损坏文件被拒绝（Phase 5） | 否 |
 | UI 按钮 | 合成 `UiInput` 验证悬停、按下、释放、移出取消、禁用与输入阻断 | 否（链接 raylib，不建窗口） |
-| UI 纯逻辑 | 缓动/颜色、棋盘命中、合法格判断、落子/翻转动画插值 | 否（链接 raylib，不建窗口） |
+| UI 纯逻辑 | 缓动/颜色、棋盘命中、合法格判断、各视图动作映射、动画插值 | 否（链接 raylib，不建窗口） |
 | 冒烟测试 | `reversi --frames N` 验证窗口初始化、渲染、关闭 | 是（需显示环境） |
 
 CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
@@ -247,3 +290,29 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 9. **设置暂存内存**：本阶段只提供三项显示/动画开关；Animations 统一控制
    落子/翻转、页面转场、模态与结算淡入、按钮/开关缓动；Last move highlight
    控制高亮与脉冲。持久化属于 Phase 5，避免在 UI 阶段提前引入存储格式。
+
+## 14. Phase 3 关键决策
+
+1. **页面状态与对局状态分离**：`AppScreen` 管页面，`MatchPhase` 管对局逻辑；
+   两者不互相推导。对局页在 `PAUSED` 时仍是同一个页面，历史页在暂停中查看
+   也不会改变 `MatchPhase`。
+2. **`Match` 是唯一写入口**：`match_apply_move()` 内部完成规则校验、翻转、
+   历史记录与阶段推进；撤销/重做/暂停/重开同样只有 `match_*` 接口。UI 只拿
+   `const Match *`，从类型上排除了“UI 直接改棋盘”。
+3. **历史用快照而非增量**：`HistoryEntry` 保存完整 `GameState` 加落子信息，
+   撤销/重做只需替换状态并重算阶段，避免为“反向翻转”维护第二套规则实现。
+   容量上限 65 项（64 步 + 起始局面），超过 64 步的对局停止记录新历史
+   （`match_apply_move` 会因此返回 `false`），不会出现半条记录。
+4. **重做分支显式截断**：撤销后再次落子会把重做项直接覆盖，语义与常见编辑器
+   一致，并由 `core.history` / `core.match` 两层测试固定。
+5. **自动跳过只做展示**：规则层的自动跳过行为保持不变；`Match` 额外暴露
+   `PASSING_TURN` 与 `last_pass`，让 UI 能提示“对手无子可下”，并允许从该
+   阶段撤销。终局（双方都无子可下）不会被记成跳过。
+6. **AI 边界先于 AI 实现**：`AiController` 只是函数指针占位，`Match` 不调用
+   它；`MatchConfig` 校验要求人机模式必须带合法控制器，因此 Phase 4 不会
+   出现“模式已存在但没有对手”的中间状态。人机撤销语义（一次回退到玩家
+   上一个决策点）在本阶段就实现并测试，避免 Phase 4 再改撤销代码。
+7. **UI 不伪造不可用能力**：新游戏页的 Computer 与颜色按钮在 AI 缺失时禁用
+   并说明原因，而不是提供一个点了没有反应的选项。
+8. **计时留在 app**：跳过提示时长与终局延迟是展示参数，放在 `app` 而不是
+   `Match`，使核心层保持无计时器、可确定性测试。

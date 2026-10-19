@@ -88,6 +88,16 @@ void ui_animation_update(UiMoveAnimation *animation, float dt)
     }
 }
 
+void ui_animation_finish(UiMoveAnimation *animation)
+{
+    if (animation == NULL || !animation->active) {
+        return;
+    }
+
+    animation->elapsed = animation->duration;
+    animation->active = false;
+}
+
 bool ui_animation_is_active(const UiMoveAnimation *animation)
 {
     return animation != NULL && animation->active;

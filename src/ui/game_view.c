@@ -4,7 +4,9 @@
 #include "ui/theme.h"
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 typedef struct GameLayout {
     Rectangle board;
@@ -57,7 +59,7 @@ static GameLayout game_layout(void)
 
     const float margin = REVERSI_UI_SPACE_LG;
     const float top_height = 74.0f;
-    const float bottom_height = 74.0f;
+    const float bottom_height = 84.0f;
     const float area_top = margin + top_height + 12.0f;
     const float area_bottom = height - margin - bottom_height - 12.0f;
     const float available_width = width - margin * 2.0f;
@@ -92,12 +94,67 @@ static GameLayout game_layout(void)
     return layout;
 }
 
+static void set_button_bounds(GameView *view, const GameLayout *layout)
+{
+    if (layout->compact) {
+        const float pad = 16.0f;
+        const float gap = 6.0f;
+        const float button_width = 88.0f;
+        const float button_height = 42.0f;
+        const Rectangle bar = layout->bottom_bar;
+        const float y = bar.y + (bar.height - button_height) * 0.5f;
+        float x = bar.x + bar.width - pad - button_width;
+
+        ui_button_set_bounds(&view->menu, (Rectangle){
+            x, y, button_width, button_height});
+        x -= gap + button_width;
+        ui_button_set_bounds(&view->restart, (Rectangle){
+            x, y, button_width, button_height});
+        x -= gap + button_width;
+        ui_button_set_bounds(&view->pause, (Rectangle){
+            x, y, button_width, button_height});
+        x -= gap + button_width;
+        ui_button_set_bounds(&view->redo, (Rectangle){
+            x, y, button_width, button_height});
+        x -= gap + button_width;
+        ui_button_set_bounds(&view->undo, (Rectangle){
+            x, y, button_width, button_height});
+        return;
+    }
+
+    const float pad = 24.0f;
+    const float gap = 10.0f;
+    const float button_height = 46.0f;
+    const float width = layout->panel.width - pad * 2.0f;
+    const float x = layout->panel.x + pad;
+    const float menu_y = layout->panel.y + layout->panel.height
+        - pad - button_height;
+    const float restart_y = menu_y - gap - button_height;
+    const float pause_y = restart_y - gap - button_height;
+    const float history_y = pause_y - gap - 42.0f;
+    const float half = (width - gap) * 0.5f;
+
+    ui_button_set_bounds(&view->menu, (Rectangle){
+        x, menu_y, width, button_height});
+    ui_button_set_bounds(&view->restart, (Rectangle){
+        x, restart_y, width, button_height});
+    ui_button_set_bounds(&view->pause, (Rectangle){
+        x, pause_y, width, button_height});
+    ui_button_set_bounds(&view->undo, (Rectangle){
+        x, history_y, half, 42.0f});
+    ui_button_set_bounds(&view->redo, (Rectangle){
+        x + half + gap, history_y, half, 42.0f});
+}
+
 void game_view_init(GameView *view)
 {
     if (view == NULL) {
         return;
     }
 
+    ui_button_init(&view->undo, "Undo", false);
+    ui_button_init(&view->redo, "Redo", false);
+    ui_button_init(&view->pause, "Pause", false);
     ui_button_init(&view->restart, "Restart", false);
     ui_button_init(&view->menu, "Main menu", false);
     game_view_reset(view);
@@ -119,66 +176,38 @@ void game_view_reset(GameView *view)
     view->reject_move = (Move){0, 0};
 }
 
-GameViewAction game_view_update(GameView *view, const GameState *game,
+GameViewAction game_view_update(GameView *view, const Match *match,
                                 const UiInput *input,
-                                bool accept_input, bool board_accept,
-                                float dt)
+                                bool accept_input, float dt)
 {
     GameViewAction action = {.type = GAME_VIEW_NONE, .move = {0, 0}};
-    if (view == NULL || game == NULL || input == NULL) {
+    if (view == NULL || match == NULL || input == NULL) {
         return action;
     }
 
     const GameLayout layout = game_layout();
+    set_button_bounds(view, &layout);
 
-    if (layout.compact) {
-        const float pad = 16.0f;
-        const float gap = 10.0f;
-        const float button_height = 42.0f;
-        const float button_width = 132.0f;
-        const Rectangle bar = layout.bottom_bar;
-        const Rectangle menu = {
-            .x = bar.x + bar.width - pad - button_width,
-            .y = bar.y + (bar.height - button_height) * 0.5f,
-            .width = button_width,
-            .height = button_height
-        };
-        const Rectangle restart = {
-            .x = menu.x - gap - button_width,
-            .y = menu.y,
-            .width = button_width,
-            .height = button_height
-        };
-        ui_button_set_bounds(&view->restart, restart);
-        ui_button_set_bounds(&view->menu, menu);
-    } else {
-        const float pad = 24.0f;
-        const float gap = 10.0f;
-        const float button_height = 46.0f;
-        const float width = layout.panel.width - pad * 2.0f;
-        const Rectangle menu = {
-            .x = layout.panel.x + pad,
-            .y = layout.panel.y + layout.panel.height - pad - button_height,
-            .width = width,
-            .height = button_height
-        };
-        const Rectangle restart = {
-            .x = menu.x,
-            .y = menu.y - gap - button_height,
-            .width = width,
-            .height = button_height
-        };
-        ui_button_set_bounds(&view->restart, restart);
-        ui_button_set_bounds(&view->menu, menu);
-    }
+    const bool player_turn = match->phase == MATCH_PHASE_PLAYER_TURN;
+    const bool game_over = match->phase == MATCH_PHASE_GAME_OVER;
+    const bool can_use_actions = accept_input && (player_turn || game_over);
 
-    view->restart.enabled = accept_input;
-    view->menu.enabled = accept_input;
+    view->undo.enabled = can_use_actions && match_can_undo(match);
+    view->redo.enabled = can_use_actions && match_can_redo(match);
+    view->pause.enabled = accept_input && player_turn;
+    view->restart.enabled = can_use_actions;
+    view->menu.enabled = can_use_actions;
 
+    const bool undo_clicked = ui_button_update(
+        &view->undo, input, view->undo.enabled, dt);
+    const bool redo_clicked = ui_button_update(
+        &view->redo, input, view->redo.enabled, dt);
+    const bool pause_clicked = ui_button_update(
+        &view->pause, input, view->pause.enabled, dt);
     const bool restart_clicked = ui_button_update(
-        &view->restart, input, accept_input, dt);
+        &view->restart, input, view->restart.enabled, dt);
     const bool menu_clicked = ui_button_update(
-        &view->menu, input, accept_input, dt);
+        &view->menu, input, view->menu.enabled, dt);
 
     if (view->reject_timer > 0.0f) {
         view->reject_timer -= dt;
@@ -188,17 +217,27 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
     }
 
     if (accept_input) {
-        if (restart_clicked || input->restart_pressed) {
+        if (undo_clicked || (view->undo.enabled && input->undo_pressed)) {
+            action.type = GAME_VIEW_UNDO;
+        } else if (redo_clicked
+                   || (view->redo.enabled && input->redo_pressed)) {
+            action.type = GAME_VIEW_REDO;
+        } else if (pause_clicked
+                   || (player_turn
+                       && (input->pause_pressed
+                           || input->escape_pressed))) {
+            action.type = GAME_VIEW_PAUSE;
+        } else if (restart_clicked || input->restart_pressed) {
             action.type = GAME_VIEW_RESTART;
-        } else if (menu_clicked || input->menu_pressed
-                   || input->escape_pressed) {
+        } else if (menu_clicked || input->menu_pressed) {
             action.type = GAME_VIEW_MENU;
         }
     }
 
+    const bool board_accept = accept_input && player_turn;
     int hover_row = 0;
     int hover_col = 0;
-    const bool over_board = board_view_hit_test(
+    const bool over_board = board_accept && board_view_hit_test(
         layout.board, layout.cell, input->mouse, &hover_row, &hover_col);
 
     const float mouse_dx = input->mouse.x - view->last_mouse.x;
@@ -212,6 +251,11 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
         view->keyboard_mode = false;
     }
 
+    if (!board_accept) {
+        view->cursor_visible = false;
+        return action;
+    }
+
     if (over_board && !view->keyboard_mode) {
         view->cursor_row = hover_row;
         view->cursor_col = hover_col;
@@ -220,7 +264,7 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
         view->cursor_visible = false;
     }
 
-    if (action.type != GAME_VIEW_NONE || !board_accept) {
+    if (action.type != GAME_VIEW_NONE) {
         return action;
     }
 
@@ -254,7 +298,7 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
         view->cursor_col = hover_col;
         view->cursor_visible = true;
 
-        if (board_view_cell_is_legal(game, hover_row, hover_col)) {
+        if (board_view_cell_is_legal(&match->state, hover_row, hover_col)) {
             action.type = GAME_VIEW_MOVE;
             action.move = (Move){.row = hover_row, .col = hover_col};
         } else {
@@ -262,7 +306,7 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
             view->reject_move = (Move){.row = hover_row, .col = hover_col};
         }
     } else if (input->enter_pressed && view->cursor_visible) {
-        if (board_view_cell_is_legal(game, view->cursor_row,
+        if (board_view_cell_is_legal(&match->state, view->cursor_row,
                                      view->cursor_col)) {
             action.type = GAME_VIEW_MOVE;
             action.move = (Move){.row = view->cursor_row,
@@ -277,29 +321,76 @@ GameViewAction game_view_update(GameView *view, const GameState *game,
     return action;
 }
 
-static void draw_turn_card(const UiFonts *fonts, Rectangle card,
-                           Stone player)
+static const char *player_name(Stone player)
 {
-    ui_draw_rounded_rect(card, REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_ACCENT_SOFT);
+    return player == STONE_WHITE ? "White" : "Black";
+}
+
+static const char *result_title(const Match *match)
+{
+    switch (match->state.result) {
+    case GAME_RESULT_BLACK_WIN:
+        return "Black wins";
+    case GAME_RESULT_WHITE_WIN:
+        return "White wins";
+    case GAME_RESULT_DRAW:
+        return "Draw";
+    case GAME_RESULT_ONGOING:
+    default:
+        return NULL;
+    }
+}
+
+static void draw_result_discs(Vector2 center, GameResult result)
+{
+    if (result == GAME_RESULT_DRAW) {
+        ui_draw_disc((Vector2){center.x - 8.0f, center.y}, 12.0f,
+                     STONE_WHITE, 1.0f, 1.0f, 1.0f);
+        ui_draw_disc((Vector2){center.x + 8.0f, center.y}, 12.0f,
+                     STONE_BLACK, 1.0f, 1.0f, 1.0f);
+        return;
+    }
+    ui_draw_disc(center, 14.0f,
+                 result == GAME_RESULT_BLACK_WIN ? STONE_BLACK : STONE_WHITE,
+                 1.0f, 1.0f, 1.0f);
+}
+
+static void draw_turn_card(const UiFonts *fonts, Rectangle card,
+                           const Match *match)
+{
+    ui_draw_rounded_rect(card, REVERSI_UI_RADIUS_SM,
+                         REVERSI_UI_COLOR_ACCENT_SOFT);
     ui_draw_rounded_outline(card, REVERSI_UI_RADIUS_SM, 1.0f,
                             ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.24f));
-    ui_draw_disc((Vector2){card.x + 30.0f, card.y + card.height * 0.5f},
-                 14.0f, player, 1.0f, 1.0f, 1.0f);
 
+    const Vector2 center = {
+        card.x + 30.0f, card.y + card.height * 0.5f
+    };
+    const char *title = result_title(match);
     char text[48];
-    snprintf(text, sizeof(text), "%s to move",
-             player == STONE_BLACK ? "Black" : "White");
+    if (title != NULL) {
+        draw_result_discs(center, match->state.result);
+        snprintf(text, sizeof(text), "%s", title);
+    } else {
+        ui_draw_disc(center, 14.0f, match->state.current_player,
+                     1.0f, 1.0f, 1.0f);
+        snprintf(text, sizeof(text), "%s to move",
+                 player_name(match->state.current_player));
+    }
+
     ui_draw_text_aligned(fonts, UI_TEXT_SEMIBOLD, text,
                          (Rectangle){card.x + 54.0f, card.y,
                                      card.width - 68.0f, card.height},
-                         REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
+                         REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT,
+                         UI_ALIGN_LEFT);
 }
 
 static void draw_player_row(const UiFonts *fonts, Rectangle row,
                             Stone player, int score, bool active)
 {
     if (active) {
-        ui_draw_rounded_rect(row, REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_SURFACE_ALT);
+        ui_draw_rounded_rect(row, REVERSI_UI_RADIUS_SM,
+                             REVERSI_UI_COLOR_SURFACE_ALT);
         ui_draw_rounded_rect(
             (Rectangle){row.x + 1.0f, row.y + 9.0f, 3.0f,
                         row.height - 18.0f},
@@ -309,12 +400,12 @@ static void draw_player_row(const UiFonts *fonts, Rectangle row,
     ui_draw_disc((Vector2){row.x + 28.0f, row.y + row.height * 0.5f},
                  13.0f, player, 1.0f, 1.0f, 1.0f);
 
-    const char *label = player == STONE_BLACK ? "Black" : "White";
     ui_draw_text_aligned(
-        fonts, UI_TEXT_REGULAR, label,
+        fonts, UI_TEXT_REGULAR, player_name(player),
         (Rectangle){row.x + 50.0f, row.y, row.width - 130.0f, row.height},
         REVERSI_UI_FONT_BODY,
-        active ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        active ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED,
+        UI_ALIGN_LEFT);
 
     char score_text[8];
     snprintf(score_text, sizeof(score_text), "%d", score);
@@ -324,72 +415,13 @@ static void draw_player_row(const UiFonts *fonts, Rectangle row,
         REVERSI_UI_FONT_HEADING, REVERSI_UI_COLOR_TEXT, UI_ALIGN_RIGHT);
 }
 
-static void draw_score_chip(const UiFonts *fonts, Rectangle box,
-                            Stone player, int score, bool active)
-{
-    ui_draw_disc((Vector2){box.x + 12.0f, box.y + box.height * 0.5f},
-                 10.0f, player, 1.0f, 1.0f, 1.0f);
-    char text[8];
-    snprintf(text, sizeof(text), "%d", score);
-    ui_draw_text_aligned(
-        fonts, UI_TEXT_SEMIBOLD, text,
-        (Rectangle){box.x + 28.0f, box.y, box.width - 28.0f, box.height},
-        REVERSI_UI_FONT_HEADING,
-        active ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
-}
-
-static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
-                             const GameState *game, int black, int white,
-                             const char *status, const char *last_move)
-{
-    const Rectangle top = layout->top_bar;
-    ui_draw_panel(top, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
-
-    ui_draw_disc((Vector2){top.x + 32.0f, top.y + top.height * 0.5f},
-                 15.0f, game->current_player, 1.0f, 1.0f, 1.0f);
-    char turn[48];
-    snprintf(turn, sizeof(turn), "%s to move",
-             game->current_player == STONE_BLACK ? "Black" : "White");
-    ui_draw_text_aligned(
-        fonts, UI_TEXT_SEMIBOLD, turn,
-        (Rectangle){top.x + 58.0f, top.y, top.width * 0.45f, top.height},
-        REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
-
-    const Rectangle black_chip = {
-        .x = top.x + top.width - 210.0f,
-        .y = top.y,
-        .width = 92.0f,
-        .height = top.height
-    };
-    const Rectangle white_chip = {
-        .x = top.x + top.width - 110.0f,
-        .y = top.y,
-        .width = 92.0f,
-        .height = top.height
-    };
-    draw_score_chip(fonts, black_chip, STONE_BLACK, black,
-                    game->current_player == STONE_BLACK);
-    draw_score_chip(fonts, white_chip, STONE_WHITE, white,
-                    game->current_player == STONE_WHITE);
-
-    const Rectangle bottom = layout->bottom_bar;
-    ui_draw_panel(bottom, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
-
-    char detail[96];
-    snprintf(detail, sizeof(detail), "%s  /  %s", status, last_move);
-    ui_draw_text_clipped(
-        fonts, UI_TEXT_REGULAR, detail,
-        (Rectangle){bottom.x + 18.0f, bottom.y,
-                    bottom.width - 330.0f, bottom.height},
-        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
-}
-
 static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
-                            const GameState *game, int black, int white,
-                            const char *status, const char *last_move)
+                            const Match *match, const char *status,
+                            const char *last_move)
 {
     const Rectangle panel = layout->panel;
-    ui_draw_panel(panel, REVERSI_UI_RADIUS_LG, REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
+    ui_draw_panel(panel, REVERSI_UI_RADIUS_LG, REVERSI_UI_COLOR_SURFACE,
+                  REVERSI_UI_COLOR_BORDER);
 
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, "MATCH",
@@ -403,7 +435,7 @@ static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
         .width = panel.width - 48.0f,
         .height = 64.0f
     };
-    draw_turn_card(fonts, turn_card, game->current_player);
+    draw_turn_card(fonts, turn_card, match);
 
     const Rectangle black_row = {
         .x = panel.x + 16.0f,
@@ -417,10 +449,12 @@ static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
         .width = black_row.width,
         .height = black_row.height
     };
-    draw_player_row(fonts, black_row, STONE_BLACK, black,
-                    game->current_player == STONE_BLACK);
-    draw_player_row(fonts, white_row, STONE_WHITE, white,
-                    game->current_player == STONE_WHITE);
+    draw_player_row(fonts, black_row, STONE_BLACK,
+                    board_count(&match->state.board, STONE_BLACK),
+                    match->state.current_player == STONE_BLACK);
+    draw_player_row(fonts, white_row, STONE_WHITE,
+                    board_count(&match->state.board, STONE_WHITE),
+                    match->state.current_player == STONE_WHITE);
 
     const float divider_y = white_row.y + white_row.height + 16.0f;
     DrawLineEx((Vector2){panel.x + 24.0f, divider_y},
@@ -439,24 +473,104 @@ static void draw_wide_panel(const UiFonts *fonts, const GameLayout *layout,
         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
 }
 
-void game_view_draw(const GameView *view, const GameState *game,
+static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
+                             const Match *match, const char *status,
+                             const char *last_move)
+{
+    const Rectangle top = layout->top_bar;
+    ui_draw_panel(top, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE,
+                  REVERSI_UI_COLOR_BORDER);
+
+    const Vector2 center = {
+        top.x + 32.0f, top.y + top.height * 0.5f
+    };
+    const char *title = result_title(match);
+    char turn[48];
+    if (title != NULL) {
+        draw_result_discs(center, match->state.result);
+        snprintf(turn, sizeof(turn), "%s", title);
+    } else {
+        ui_draw_disc(center, 15.0f, match->state.current_player,
+                     1.0f, 1.0f, 1.0f);
+        snprintf(turn, sizeof(turn), "%s to move",
+                 player_name(match->state.current_player));
+    }
+    ui_draw_text_aligned(
+        fonts, UI_TEXT_SEMIBOLD, turn,
+        (Rectangle){top.x + 58.0f, top.y, top.width * 0.45f, top.height},
+        REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
+
+    char score[32];
+    const int black = board_count(&match->state.board, STONE_BLACK);
+    const int white = board_count(&match->state.board, STONE_WHITE);
+    snprintf(score, sizeof(score), "Black %d    White %d", black, white);
+    ui_draw_text_aligned(
+        fonts, UI_TEXT_REGULAR, score,
+        (Rectangle){top.x + top.width - 260.0f, top.y, 240.0f,
+                    top.height},
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_RIGHT);
+
+    const Rectangle bottom = layout->bottom_bar;
+    ui_draw_panel(bottom, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE,
+                  REVERSI_UI_COLOR_BORDER);
+
+    char detail[128];
+    snprintf(detail, sizeof(detail), "%s  /  %s", status, last_move);
+    const float text_width = bottom.width - 5.0f * 88.0f - 4.0f * 6.0f
+        - 34.0f - 16.0f;
+    ui_draw_text_clipped(
+        fonts, UI_TEXT_REGULAR, detail,
+        (Rectangle){bottom.x + 16.0f, bottom.y, text_width, bottom.height},
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+}
+
+static void draw_pass_toast(const UiFonts *fonts, const GameLayout *layout,
+                            const Match *match)
+{
+    const float width = 360.0f;
+    const float height = 84.0f;
+    const float x = layout->board.x + (layout->board.width - width) * 0.5f;
+    const float y = layout->board.y + 18.0f;
+    const Rectangle panel = {x, y, width, height};
+
+    ui_draw_panel(panel, REVERSI_UI_RADIUS_MD, REVERSI_UI_COLOR_SURFACE,
+                  REVERSI_UI_COLOR_BORDER_STRONG);
+
+    char title[64];
+    snprintf(title, sizeof(title), "%s has no legal moves",
+             player_name(match->last_pass.player));
+    char body[64];
+    snprintf(body, sizeof(body), "Turn passed to %s",
+             player_name(match->state.current_player));
+
+    ui_draw_text_aligned(
+        fonts, UI_TEXT_SEMIBOLD, title,
+        (Rectangle){panel.x + 18.0f, panel.y + 14.0f,
+                    panel.width - 36.0f, 28.0f},
+        REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_CENTER);
+    ui_draw_text_aligned(
+        fonts, UI_TEXT_REGULAR, body,
+        (Rectangle){panel.x + 18.0f, panel.y + 44.0f,
+                    panel.width - 36.0f, 22.0f},
+        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_CENTER);
+}
+
+void game_view_draw(const GameView *view, const Match *match,
                     const UiMoveAnimation *animation,
                     const UiFonts *fonts,
                     bool show_legal_moves, bool show_last_move,
-                    Move last_move, bool has_last_move,
                     float last_move_age, bool animations)
 {
-    if (view == NULL || game == NULL || fonts == NULL) {
+    if (view == NULL || match == NULL || fonts == NULL) {
         return;
     }
 
     const GameLayout layout = game_layout();
-    const bool board_input = !ui_animation_is_active(animation)
-        && game->result == GAME_RESULT_ONGOING;
+    const bool board_input = match->phase == MATCH_PHASE_PLAYER_TURN;
 
-    board_view_draw(game, layout.board, layout.cell, fonts, animation,
-                    show_legal_moves, show_last_move,
-                    last_move, has_last_move, last_move_age,
+    board_view_draw(&match->state, layout.board, layout.cell, fonts,
+                    animation, show_legal_moves, show_last_move,
+                    match->last_move, match->has_last_move, last_move_age,
                     view->cursor_row, view->cursor_col,
                     view->cursor_visible, board_input, animations);
 
@@ -473,41 +587,62 @@ void game_view_draw(const GameView *view, const GameState *game,
             .height = layout.cell - 6.0f
         };
         ui_draw_rounded_outline(cell, 8.0f, 2.0f,
-                                ui_color_alpha(REVERSI_UI_COLOR_DANGER, alpha));
+                                ui_color_alpha(REVERSI_UI_COLOR_DANGER,
+                                               alpha));
     }
-
-    const int black = board_count(&game->board, STONE_BLACK);
-    const int white = board_count(&game->board, STONE_WHITE);
 
     char status[64];
-    if (game->result != GAME_RESULT_ONGOING) {
+    switch (match->phase) {
+    case MATCH_PHASE_GAME_OVER:
         snprintf(status, sizeof(status), "Game over");
-    } else if (ui_animation_is_active(animation)) {
+        break;
+    case MATCH_PHASE_ANIMATING:
         snprintf(status, sizeof(status), "Resolving move...");
-    } else if (game_must_pass(game)) {
+        break;
+    case MATCH_PHASE_PASSING_TURN:
         snprintf(status, sizeof(status), "%s must pass",
-                 game->current_player == STONE_BLACK ? "Black" : "White");
-    } else {
-        snprintf(status, sizeof(status), "Select a highlighted cell");
+                 player_name(match->last_pass.player));
+        break;
+    case MATCH_PHASE_PAUSED:
+        snprintf(status, sizeof(status), "Paused");
+        break;
+    case MATCH_PHASE_PLAYER_TURN:
+    default:
+        if (game_must_pass(&match->state)) {
+            snprintf(status, sizeof(status), "%s must pass",
+                     player_name(match->state.current_player));
+        } else {
+            snprintf(status, sizeof(status), "Select a highlighted cell");
+        }
+        break;
     }
 
-    char last_move_text[48];
-    const char *last_text = "No moves yet";
+    char last_move_text[64] = "No moves yet";
     char notation[3];
-    if (has_last_move && move_to_notation(last_move, notation)) {
+    if (match->has_last_move && move_to_notation(match->last_move, notation)) {
         snprintf(last_move_text, sizeof(last_move_text),
                  "Last move  %s", notation);
-        last_text = last_move_text;
+        if (match->last_pass.occurred) {
+            snprintf(last_move_text + strlen(last_move_text),
+                     sizeof(last_move_text) - strlen(last_move_text),
+                     "  /  %s passed",
+                     player_name(match->last_pass.player));
+        }
     }
 
     if (layout.compact) {
-        draw_compact_bar(fonts, &layout, game, black, white,
-                         status, last_text);
+        draw_compact_bar(fonts, &layout, match, status, last_move_text);
     } else {
-        draw_wide_panel(fonts, &layout, game, black, white,
-                        status, last_text);
+        draw_wide_panel(fonts, &layout, match, status, last_move_text);
     }
 
+    if (match->phase == MATCH_PHASE_PASSING_TURN) {
+        draw_pass_toast(fonts, &layout, match);
+    }
+
+    ui_button_draw(&view->undo, fonts, false);
+    ui_button_draw(&view->redo, fonts, false);
+    ui_button_draw(&view->pause, fonts, false);
     ui_button_draw(&view->restart, fonts, false);
     ui_button_draw(&view->menu, fonts, false);
 }

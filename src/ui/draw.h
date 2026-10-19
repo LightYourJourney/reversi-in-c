@@ -31,6 +31,11 @@ typedef struct UiInput {
     bool right_pressed;
     bool restart_pressed;
     bool menu_pressed;
+    bool pause_pressed;
+    bool undo_pressed;
+    bool redo_pressed;
+    bool history_pressed;
+    float wheel;
     bool reduce_motion;
 } UiInput;
 

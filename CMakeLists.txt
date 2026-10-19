@@ -138,7 +138,9 @@ endif()
 add_library(reversi_core STATIC
     src/core/board.c
     src/core/rules.c
-    src/core/game.c)
+    src/core/game.c
+    src/core/history.c
+    src/core/match.c)
 target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
@@ -148,10 +150,13 @@ add_library(reversi_ui STATIC
     src/ui/draw.c
     src/ui/fonts.c
     src/ui/game_view.c
+    src/ui/history_view.c
     src/ui/menu_view.c
     src/ui/modal.c
+    src/ui/pause_view.c
     src/ui/result_view.c
-    src/ui/settings_view.c)
+    src/ui/settings_view.c
+    src/ui/setup_view.c)
 target_include_directories(reversi_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_ui
     PUBLIC ${REVERSI_RAYLIB_TARGET}
@@ -217,6 +222,10 @@ if(REVERSI_BUILD_TESTS)
     reversi_add_core_test(reversi_game_tests tests/test_game.c core.game)
     reversi_add_core_test(reversi_random_tests tests/test_random_games.c
         core.random)
+    reversi_add_core_test(reversi_history_tests tests/test_history.c
+        core.history)
+    reversi_add_core_test(reversi_match_tests tests/test_match.c
+        core.match)
 
     # UI logic tests use synthetic input and create no window.
     reversi_add_ui_test(reversi_ui_button_tests

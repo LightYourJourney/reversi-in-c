@@ -30,6 +30,7 @@ void ui_animation_start(UiMoveAnimation *animation,
                         const Board *before, const Board *after,
                         Move move, Stone player, bool enabled);
 void ui_animation_update(UiMoveAnimation *animation, float dt);
+void ui_animation_finish(UiMoveAnimation *animation);
 bool ui_animation_is_active(const UiMoveAnimation *animation);
 
 /*

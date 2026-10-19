@@ -2,10 +2,15 @@
 #include "test_helpers.h"
 
 #include "core/game.h"
+#include "core/match.h"
 #include "ui/animation.h"
 #include "ui/board_view.h"
 #include "ui/draw.h"
 #include "ui/game_view.h"
+#include "ui/history_view.h"
+#include "ui/pause_view.h"
+#include "ui/result_view.h"
+#include "ui/setup_view.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -204,19 +209,187 @@ static void test_focus_update(TestStats *stats)
     ui_focus_update(&focus, &visible, 3, NULL);
 }
 
+static void test_game_view_undo_redo_hooks(TestStats *stats)
+{
+    GameView view;
+    game_view_init(&view);
+    Match match;
+    const MatchConfig config = {
+        .mode = GAME_MODE_PVP,
+        .human_color = STONE_BLACK,
+        .ai = NULL
+    };
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
+    REVERSI_TEST_ASSERT(stats,
+        match_apply_move(&match, (Move){.row = 5, .col = 3}));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_ANIMATING);
+    REVERSI_TEST_ASSERT(stats, match_finish_animation(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+
+    UiInput input = {0};
+    input.mouse = (Vector2){-1000.0f, -1000.0f};
+    input.undo_pressed = true;
+    GameViewAction action = game_view_update(
+        &view, &match, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_UNDO);
+    REVERSI_TEST_ASSERT(stats, view.undo.enabled);
+
+    REVERSI_TEST_ASSERT(stats, match_undo(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+    input.undo_pressed = false;
+    input.redo_pressed = true;
+    action = game_view_update(&view, &match, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_REDO);
+    REVERSI_TEST_ASSERT(stats, view.redo.enabled);
+
+    input.redo_pressed = false;
+    input.pause_pressed = true;
+    action = game_view_update(&view, &match, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_PAUSE);
+    REVERSI_TEST_ASSERT(stats, match_pause(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PAUSED);
+    REVERSI_TEST_ASSERT(stats, match_resume(&match));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_PLAYER_TURN);
+
+    input.pause_pressed = false;
+    input.mouse_pressed = true;
+    input.mouse = (Vector2){-1000.0f, -1000.0f};
+    REVERSI_TEST_ASSERT(stats,
+        match_apply_move(&match, (Move){.row = 4, .col = 2}));
+    REVERSI_TEST_ASSERT(stats, match.phase == MATCH_PHASE_ANIMATING);
+    action = game_view_update(&view, &match, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_NONE);
+    REVERSI_TEST_ASSERT(stats, !view.undo.enabled);
+    REVERSI_TEST_ASSERT(stats, !view.pause.enabled);
+}
+
+static void test_setup_view_pvp_flow(TestStats *stats)
+{
+    SetupView view;
+    setup_view_init(&view);
+    setup_view_set_ai_available(&view, false);
+    REVERSI_TEST_ASSERT(stats, view.mode == GAME_MODE_PVP);
+    REVERSI_TEST_ASSERT(stats, view.human_color == STONE_BLACK);
+
+    UiInput input = {0};
+    input.mouse = (Vector2){-1000.0f, -1000.0f};
+    (void)setup_view_update(&view, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, !view.computer.enabled);
+    REVERSI_TEST_ASSERT(stats, view.start.enabled);
+
+    input.enter_pressed = true;
+    SetupAction action = setup_view_update(&view, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action == SETUP_ACTION_NONE);
+
+    input.enter_pressed = false;
+    input.down_pressed = true;
+    action = setup_view_update(&view, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action == SETUP_ACTION_NONE);
+    REVERSI_TEST_ASSERT(stats, view.focus == 2);
+
+    input.down_pressed = false;
+    input.enter_pressed = true;
+    action = setup_view_update(&view, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action == SETUP_ACTION_START);
+
+    input.enter_pressed = false;
+    input.escape_pressed = true;
+    action = setup_view_update(&view, &input, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats, action == SETUP_ACTION_BACK);
+}
+
+static void test_pause_and_history_views(TestStats *stats)
+{
+    PauseView pause;
+    pause_view_init(&pause);
+    UiInput input = {0};
+    input.mouse = (Vector2){-1000.0f, -1000.0f};
+    input.enter_pressed = true;
+    REVERSI_TEST_ASSERT(stats,
+        pause_view_update(&pause, &input, true, 0.016f)
+        == PAUSE_ACTION_RESUME);
+
+    HistoryView history;
+    history_view_init(&history);
+    Match match;
+    const MatchConfig config = {
+        .mode = GAME_MODE_PVP,
+        .human_color = STONE_BLACK,
+        .ai = NULL
+    };
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
+    history_view_open(&history, &match);
+    REVERSI_TEST_ASSERT(stats, history.scroll == 0);
+
+    UiInput back = {0};
+    back.mouse = (Vector2){-1000.0f, -1000.0f};
+    back.escape_pressed = true;
+    REVERSI_TEST_ASSERT(stats,
+        history_view_update(&history, &match, &back, true, 0.016f)
+        == HISTORY_ACTION_BACK);
+}
+
+static void test_result_view_actions(TestStats *stats)
+{
+    ResultView view;
+    result_view_init(&view);
+    Match match;
+    const MatchConfig config = {
+        .mode = GAME_MODE_PVP,
+        .human_color = STONE_BLACK,
+        .ai = NULL
+    };
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
+
+    UiInput input = {0};
+    input.mouse = (Vector2){-1000.0f, -1000.0f};
+    input.enter_pressed = true;
+    REVERSI_TEST_ASSERT(stats,
+        result_view_update(&view, &input, true, false, false, 0.016f)
+        == RESULT_ACTION_PLAY_AGAIN);
+    REVERSI_TEST_ASSERT(stats, !view.undo.enabled);
+
+    result_view_reset(&view);
+    input.enter_pressed = false;
+    input.down_pressed = true;
+    REVERSI_TEST_ASSERT(stats,
+        result_view_update(&view, &input, true, false, true, 0.016f)
+        == RESULT_ACTION_NONE);
+    REVERSI_TEST_ASSERT(stats, view.focus == 1);
+    REVERSI_TEST_ASSERT(stats, view.undo.enabled);
+
+    input.down_pressed = false;
+    input.enter_pressed = true;
+    REVERSI_TEST_ASSERT(stats,
+        result_view_update(&view, &input, true, false, true, 0.016f)
+        == RESULT_ACTION_UNDO);
+
+    result_view_reset(&view);
+    input.enter_pressed = false;
+    input.escape_pressed = true;
+    REVERSI_TEST_ASSERT(stats,
+        result_view_update(&view, &input, true, false, true, 0.016f)
+        == RESULT_ACTION_MENU);
+}
+
 static void test_game_view_enter_and_gating(TestStats *stats)
 {
     GameView view;
     game_view_init(&view);
-    GameState game;
-    game_init(&game);
+    Match match;
+    const MatchConfig config = {
+        .mode = GAME_MODE_PVP,
+        .human_color = STONE_BLACK,
+        .ai = NULL
+    };
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
 
     UiInput input = {0};
     input.mouse = (Vector2){-1000.0f, -1000.0f};
     input.enter_pressed = true;
 
     GameViewAction action = game_view_update(
-        &view, &game, &input, true, true, 0.016f);
+        &view, &match, &input, true, 0.016f);
     REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_NONE);
     REVERSI_TEST_ASSERT(stats, !view.cursor_visible);
 
@@ -224,18 +397,18 @@ static void test_game_view_enter_and_gating(TestStats *stats)
     view.cursor_col = 3;
     view.cursor_visible = true;
     view.keyboard_mode = true;
-    action = game_view_update(&view, &game, &input, true, true, 0.016f);
+    action = game_view_update(&view, &match, &input, true, 0.016f);
     REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_MOVE);
     REVERSI_TEST_ASSERT(stats, action.move.row == 5 && action.move.col == 3);
 
     UiInput restart = {0};
     restart.mouse = (Vector2){-1000.0f, -1000.0f};
     restart.restart_pressed = true;
-    action = game_view_update(&view, &game, &restart, false, true, 0.016f);
+    action = game_view_update(&view, &match, &restart, false, 0.016f);
     REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_NONE);
     REVERSI_TEST_ASSERT(stats, !view.restart.enabled);
 
-    action = game_view_update(&view, &game, &restart, true, true, 0.016f);
+    action = game_view_update(&view, &match, &restart, true, 0.016f);
     REVERSI_TEST_ASSERT(stats, action.type == GAME_VIEW_RESTART);
     REVERSI_TEST_ASSERT(stats, view.restart.enabled);
 }
@@ -250,6 +423,10 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_board_view_hit_test);
     REVERSI_RUN_TEST(&stats, test_board_view_legality);
     REVERSI_RUN_TEST(&stats, test_game_view_enter_and_gating);
+    REVERSI_RUN_TEST(&stats, test_game_view_undo_redo_hooks);
+    REVERSI_RUN_TEST(&stats, test_setup_view_pvp_flow);
+    REVERSI_RUN_TEST(&stats, test_pause_and_history_views);
+    REVERSI_RUN_TEST(&stats, test_result_view_actions);
     REVERSI_RUN_TEST(&stats, test_animation_requires_enabled);
     REVERSI_RUN_TEST(&stats, test_animation_placement_and_flip);
 
