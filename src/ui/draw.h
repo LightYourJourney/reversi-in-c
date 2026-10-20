@@ -3,6 +3,7 @@
 
 #include "core/board.h"
 #include "core/game.h"
+#include "core/match.h"
 #include "ui/fonts.h"
 
 #include <raylib.h>
@@ -36,6 +37,8 @@ typedef struct UiInput {
     bool undo_pressed;
     bool redo_pressed;
     bool history_pressed;
+    bool save_pressed;
+    bool delete_pressed;
     float wheel;
     bool reduce_motion;
 } UiInput;
@@ -85,6 +88,9 @@ const char *ui_player_name(Stone stone);
 
 /* Win/draw title, or NULL while the game is still ongoing. */
 const char *ui_result_title(GameResult result);
+
+/* Match-aware result title: PVE uses the human perspective ("You win"). */
+const char *ui_match_result_title(const Match *match);
 
 /*
  * Advances a focus index by direction (+1/-1), wrapping within [0, count)

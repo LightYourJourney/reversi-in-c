@@ -58,6 +58,14 @@ bool match_start(Match *match, const MatchConfig *config);
 bool match_start_from(Match *match, const MatchConfig *config,
                       const GameState *initial);
 
+/*
+ * Restores a match by replaying a move sequence from the standard opening.
+ * Every move must be legal; the resulting phase is PLAYER_TURN or GAME_OVER.
+ * On failure the destination is left unchanged.
+ */
+bool match_restore(Match *match, const MatchConfig *config,
+                   const Move *moves, int count);
+
 /* Applies a move in PLAYER_TURN and enters ANIMATING. */
 bool match_apply_move(Match *match, Move move);
 

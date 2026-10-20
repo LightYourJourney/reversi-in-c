@@ -36,6 +36,7 @@ typedef struct SetupView {
 
 void setup_view_init(SetupView *view);
 void setup_view_set_ai_available(SetupView *view, bool available);
+void setup_view_set_difficulty(SetupView *view, SetupDifficulty difficulty);
 SetupAction setup_view_update(SetupView *view, const UiInput *input,
                               bool accept_input, float dt);
 void setup_view_draw(const SetupView *view, const UiFonts *fonts);

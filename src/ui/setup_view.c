@@ -108,6 +108,15 @@ void setup_view_set_ai_available(SetupView *view, bool available)
     }
 }
 
+void setup_view_set_difficulty(SetupView *view, SetupDifficulty difficulty)
+{
+    if (view == NULL || difficulty < SETUP_DIFFICULTY_EASY
+        || difficulty > SETUP_DIFFICULTY_HARD) {
+        return;
+    }
+    view->difficulty = difficulty;
+}
+
 SetupAction setup_view_update(SetupView *view, const UiInput *input,
                               bool accept_input, float dt)
 {

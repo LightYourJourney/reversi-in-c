@@ -7,7 +7,8 @@ typedef enum ModalPurpose {
     MODAL_PURPOSE_NONE = 0,
     MODAL_PURPOSE_QUIT,
     MODAL_PURPOSE_RESTART,
-    MODAL_PURPOSE_RETURN_MENU
+    MODAL_PURPOSE_RETURN_MENU,
+    MODAL_PURPOSE_DELETE_SAVE
 } ModalPurpose;
 
 typedef enum ModalAction {

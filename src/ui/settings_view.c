@@ -4,19 +4,33 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
+
+#define SETTINGS_ROW_COUNT 8
+#define SETTINGS_FOCUS_BACK SETTINGS_ROW_COUNT
+
+typedef enum SettingsRow {
+    ROW_ANIMATIONS = 0,
+    ROW_SPEED,
+    ROW_HINTS,
+    ROW_LAST_MOVE,
+    ROW_SFX,
+    ROW_VOLUME,
+    ROW_DIFFICULTY,
+    ROW_THEME
+} SettingsRow;
 
 typedef struct SettingsLayout {
     Rectangle panel;
-    Rectangle rows[3];
-    Rectangle toggles[3];
+    Rectangle rows[SETTINGS_ROW_COUNT];
 } SettingsLayout;
 
 static SettingsLayout settings_layout(void)
 {
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
-    const float panel_width = fminf(560.0f, width - 64.0f);
-    const float panel_height = 420.0f;
+    const float panel_width = fminf(600.0f, width - 64.0f);
+    const float panel_height = fminf(536.0f, height - 64.0f);
     const float panel_x = (width - panel_width) * 0.5f;
     const float panel_y = (height - panel_height) * 0.5f;
 
@@ -24,19 +38,13 @@ static SettingsLayout settings_layout(void)
     layout.panel = (Rectangle){panel_x, panel_y,
                                panel_width, panel_height};
 
-    const float rows_top = panel_y + 108.0f;
-    for (int i = 0; i < 3; ++i) {
+    const float rows_top = panel_y + 96.0f;
+    for (int i = 0; i < SETTINGS_ROW_COUNT; ++i) {
         layout.rows[i] = (Rectangle){
             .x = panel_x + 24.0f,
-            .y = rows_top + (float)i * 66.0f,
+            .y = rows_top + (float)i * 44.0f,
             .width = panel_width - 48.0f,
-            .height = 62.0f
-        };
-        layout.toggles[i] = (Rectangle){
-            .x = layout.rows[i].x + layout.rows[i].width - 66.0f,
-            .y = layout.rows[i].y + 17.0f,
-            .width = 50.0f,
-            .height = 28.0f
+            .height = 40.0f
         };
     }
     return layout;
@@ -46,37 +54,92 @@ static void set_back_bounds(SettingsView *view, const SettingsLayout *layout)
 {
     const Rectangle back = {
         .x = layout->panel.x + 24.0f,
-        .y = layout->panel.y + layout->panel.height - 24.0f - 48.0f,
+        .y = layout->panel.y + layout->panel.height - 24.0f - 44.0f,
         .width = layout->panel.width - 48.0f,
-        .height = 48.0f
+        .height = 44.0f
     };
     ui_button_set_bounds(&view->back, back);
 }
 
-static void update_toggles(SettingsView *view, float dt,
-                           bool animations, bool hints, bool last_move)
+static bool row_is_toggle(int row)
 {
-    const bool values[3] = {animations, hints, last_move};
-    for (int i = 0; i < 3; ++i) {
-        const float target = values[i] ? 1.0f : 0.0f;
-        if (animations) {
-            view->toggle_t[i] += (target - view->toggle_t[i])
+    return row == ROW_ANIMATIONS || row == ROW_HINTS
+        || row == ROW_LAST_MOVE || row == ROW_SFX;
+}
+
+static int toggle_index(int row)
+{
+    switch (row) {
+    case ROW_ANIMATIONS:
+        return 0;
+    case ROW_HINTS:
+        return 1;
+    case ROW_LAST_MOVE:
+        return 2;
+    case ROW_SFX:
+    default:
+        return 3;
+    }
+}
+
+static bool toggle_value(const Settings *settings, int row)
+{
+    switch (row) {
+    case ROW_ANIMATIONS:
+        return settings->animations;
+    case ROW_HINTS:
+        return settings->legal_hints;
+    case ROW_LAST_MOVE:
+        return settings->last_move_highlight;
+    case ROW_SFX:
+    default:
+        return settings->sfx;
+    }
+}
+
+static void update_toggles(SettingsView *view, float dt,
+                           const Settings *settings)
+{
+    for (int row = 0; row < SETTINGS_ROW_COUNT; ++row) {
+        if (!row_is_toggle(row)) {
+            continue;
+        }
+        const int index = toggle_index(row);
+        const float target = toggle_value(settings, row) ? 1.0f : 0.0f;
+        if (settings->animations) {
+            view->toggle_t[index] += (target - view->toggle_t[index])
                 * ui_clamp01(dt * REVERSI_UI_MOTION_RATE);
         } else {
-            view->toggle_t[i] = target;
+            view->toggle_t[index] = target;
         }
     }
 }
 
-static SettingsAction action_for_row(int row)
+static SettingsAction action_for_row(int row, bool forward)
 {
-    if (row == 0) {
+    switch (row) {
+    case ROW_ANIMATIONS:
         return SETTINGS_ACTION_TOGGLE_ANIMATIONS;
-    }
-    if (row == 1) {
+    case ROW_SPEED:
+        return forward ? SETTINGS_ACTION_SPEED_UP
+                       : SETTINGS_ACTION_SPEED_DOWN;
+    case ROW_HINTS:
         return SETTINGS_ACTION_TOGGLE_HINTS;
+    case ROW_LAST_MOVE:
+        return SETTINGS_ACTION_TOGGLE_LAST_MOVE;
+    case ROW_SFX:
+        return SETTINGS_ACTION_TOGGLE_SFX;
+    case ROW_VOLUME:
+        return forward ? SETTINGS_ACTION_VOLUME_UP
+                       : SETTINGS_ACTION_VOLUME_DOWN;
+    case ROW_DIFFICULTY:
+        return forward ? SETTINGS_ACTION_DIFFICULTY_UP
+                       : SETTINGS_ACTION_DIFFICULTY_DOWN;
+    case ROW_THEME:
+    default:
+        return forward ? SETTINGS_ACTION_THEME_UP
+                       : SETTINGS_ACTION_THEME_DOWN;
     }
-    return SETTINGS_ACTION_TOGGLE_LAST_MOVE;
 }
 
 void settings_view_init(SettingsView *view)
@@ -88,24 +151,23 @@ void settings_view_init(SettingsView *view)
     ui_button_init(&view->back, "Back", false);
     view->focus = 0;
     view->focus_visible = false;
-    view->toggle_t[0] = 1.0f;
-    view->toggle_t[1] = 1.0f;
-    view->toggle_t[2] = 1.0f;
+    for (int index = 0; index < 4; ++index) {
+        view->toggle_t[index] = 1.0f;
+    }
 }
 
 SettingsAction settings_view_update(SettingsView *view,
                                     const UiInput *input,
                                     bool accept_input, float dt,
-                                    bool animations, bool hints,
-                                    bool last_move)
+                                    const Settings *settings)
 {
-    if (view == NULL || input == NULL) {
+    if (view == NULL || input == NULL || settings == NULL) {
         return SETTINGS_ACTION_NONE;
     }
 
     const SettingsLayout layout = settings_layout();
     set_back_bounds(view, &layout);
-    update_toggles(view, dt, animations, hints, last_move);
+    update_toggles(view, dt, settings);
 
     const bool back_clicked = ui_button_update(
         &view->back, input, accept_input, dt);
@@ -114,27 +176,63 @@ SettingsAction settings_view_update(SettingsView *view,
         return SETTINGS_ACTION_NONE;
     }
 
-    ui_focus_update(&view->focus, &view->focus_visible, 4, input);
+    ui_focus_update(&view->focus, &view->focus_visible,
+                    SETTINGS_ROW_COUNT + 1, input);
 
     if (back_clicked || input->escape_pressed) {
         return SETTINGS_ACTION_BACK;
     }
 
-    for (int i = 0; i < 3; ++i) {
-        if (CheckCollisionPointRec(input->mouse, layout.rows[i])
+    for (int row = 0; row < SETTINGS_ROW_COUNT; ++row) {
+        if (CheckCollisionPointRec(input->mouse, layout.rows[row])
             && input->mouse_pressed) {
-            return action_for_row(i);
+            return action_for_row(row, true);
         }
+    }
+
+    if ((input->left_pressed || input->right_pressed)
+        && view->focus_visible && view->focus < SETTINGS_ROW_COUNT) {
+        return action_for_row(view->focus, input->right_pressed);
     }
 
     if (input->enter_pressed) {
-        if (view->focus == 3) {
+        if (view->focus == SETTINGS_FOCUS_BACK) {
             return SETTINGS_ACTION_BACK;
         }
-        return action_for_row(view->focus);
+        return action_for_row(view->focus, true);
     }
 
     return SETTINGS_ACTION_NONE;
+}
+
+static const char *speed_label(int speed)
+{
+    switch (speed) {
+    case 50:
+        return "0.5x";
+    case 75:
+        return "0.75x";
+    case 150:
+        return "1.5x";
+    case 200:
+        return "2.0x";
+    case 100:
+    default:
+        return "1.0x";
+    }
+}
+
+static const char *difficulty_label(int difficulty)
+{
+    switch (difficulty) {
+    case 0:
+        return "Easy";
+    case 2:
+        return "Hard";
+    case 1:
+    default:
+        return "Medium";
+    }
 }
 
 static void draw_toggle(Rectangle track, float value)
@@ -146,19 +244,45 @@ static void draw_toggle(Rectangle track, float value)
     }
     DrawRectangleRounded(track, 0.5f, 18, fill);
 
-    const float knob_radius = 10.0f;
-    const float knob_x = track.x + 14.0f
-        + (track.width - 28.0f) * t;
+    const float knob_radius = 9.0f;
+    const float knob_x = track.x + 13.0f
+        + (track.width - 26.0f) * t;
     const Vector2 knob = {knob_x, track.y + track.height * 0.5f};
     DrawCircleV((Vector2){knob.x, knob.y + 1.5f}, knob_radius,
                 (Color){0, 0, 0, 50});
     DrawCircleV(knob, knob_radius,
-                t > 0.5f ? REVERSI_UI_COLOR_TEXT : REVERSI_UI_COLOR_TEXT_MUTED);
+                t > 0.5f ? REVERSI_UI_COLOR_ACCENT_TEXT
+                         : REVERSI_UI_COLOR_TEXT_MUTED);
 }
 
-void settings_view_draw(const SettingsView *view, const UiFonts *fonts)
+static void row_value_text(const Settings *settings, int row,
+                           char *out, size_t cap)
 {
-    if (view == NULL || fonts == NULL) {
+    switch (row) {
+    case ROW_SPEED:
+        snprintf(out, cap, "%s", speed_label(settings->animation_speed));
+        break;
+    case ROW_VOLUME:
+        snprintf(out, cap, "%d%%", settings->volume);
+        break;
+    case ROW_DIFFICULTY:
+        snprintf(out, cap, "%s",
+                 difficulty_label(settings->default_difficulty));
+        break;
+    case ROW_THEME:
+        snprintf(out, cap, "%s",
+                 ui_theme_name((UiThemeKind)settings->theme));
+        break;
+    default:
+        out[0] = '\0';
+        break;
+    }
+}
+
+void settings_view_draw(const SettingsView *view, const UiFonts *fonts,
+                        const Settings *settings)
+{
+    if (view == NULL || fonts == NULL || settings == NULL) {
         return;
     }
 
@@ -168,56 +292,66 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts)
 
     ui_draw_text_aligned(
         fonts, UI_TEXT_SEMIBOLD, "Settings",
-        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 26.0f,
-                    layout.panel.width - 48.0f, 40.0f},
-        REVERSI_UI_FONT_TITLE, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
+        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 22.0f,
+                    layout.panel.width - 48.0f, 36.0f},
+        REVERSI_UI_FONT_HEADING, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
     ui_draw_text_aligned(
-        fonts, UI_TEXT_REGULAR, "Make the table your own.",
-        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 68.0f,
-                    layout.panel.width - 48.0f, 22.0f},
-        REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        fonts, UI_TEXT_REGULAR,
+        "Changes are saved automatically.",
+        (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 62.0f,
+                    layout.panel.width - 48.0f, 20.0f},
+        REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
-    const char *labels[3] = {
+    const char *labels[SETTINGS_ROW_COUNT] = {
         "Animations",
+        "Animation speed",
         "Legal move hints",
-        "Last move highlight"
+        "Last move highlight",
+        "Sound effects",
+        "Volume",
+        "Default AI difficulty",
+        "Theme"
     };
-    const char *descriptions[3] = {
-        "Placement, flips and transitions",
-        "Show available moves on the board",
-        "Mark the most recent move"
-    };
-    for (int i = 0; i < 3; ++i) {
-        if (view->focus_visible && view->focus == i) {
-            ui_draw_rounded_rect(layout.rows[i], REVERSI_UI_RADIUS_SM,
+
+    for (int row = 0; row < SETTINGS_ROW_COUNT; ++row) {
+        if (view->focus_visible && view->focus == row) {
+            ui_draw_rounded_rect(layout.rows[row], REVERSI_UI_RADIUS_SM,
                                  ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.08f));
-            ui_draw_rounded_outline(layout.rows[i], REVERSI_UI_RADIUS_SM, 1.0f,
+            ui_draw_rounded_outline(layout.rows[row], REVERSI_UI_RADIUS_SM, 1.0f,
                                     ui_color_alpha(REVERSI_UI_COLOR_FOCUS, 0.65f));
         }
 
         ui_draw_text_aligned(
-            fonts, UI_TEXT_SEMIBOLD, labels[i],
-            (Rectangle){layout.rows[i].x, layout.rows[i].y + 8.0f,
-                        layout.rows[i].width - 90.0f, 24.0f},
+            fonts, UI_TEXT_SEMIBOLD, labels[row],
+            (Rectangle){layout.rows[row].x + 10.0f,
+                        layout.rows[row].y,
+                        layout.rows[row].width * 0.58f,
+                        layout.rows[row].height},
             REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
-        ui_draw_text_aligned(
-            fonts, UI_TEXT_REGULAR, descriptions[i],
-            (Rectangle){layout.rows[i].x, layout.rows[i].y + 32.0f,
-                        layout.rows[i].width - 90.0f, 20.0f},
-            REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
-        draw_toggle(layout.toggles[i], view->toggle_t[i]);
-
-        if (i < 2) {
-            DrawLineEx(
-                (Vector2){layout.rows[i].x,
-                          layout.rows[i].y + layout.rows[i].height},
-                (Vector2){layout.rows[i].x + layout.rows[i].width,
-                          layout.rows[i].y + layout.rows[i].height},
-                1.0f, REVERSI_UI_COLOR_BORDER);
+        if (row_is_toggle(row)) {
+            const Rectangle track = {
+                .x = layout.rows[row].x + layout.rows[row].width - 58.0f,
+                .y = layout.rows[row].y + 8.0f,
+                .width = 46.0f,
+                .height = 24.0f
+            };
+            draw_toggle(track, view->toggle_t[toggle_index(row)]);
+        } else {
+            char value[32];
+            row_value_text(settings, row, value, sizeof(value));
+            ui_draw_text_aligned(
+                fonts, UI_TEXT_REGULAR, value,
+                (Rectangle){layout.rows[row].x
+                                + layout.rows[row].width * 0.58f,
+                            layout.rows[row].y,
+                            layout.rows[row].width * 0.40f,
+                            layout.rows[row].height},
+                REVERSI_UI_FONT_BODY, REVERSI_UI_COLOR_TEXT_MUTED,
+                UI_ALIGN_RIGHT);
         }
     }
 
     ui_button_draw(&view->back, fonts,
-                   view->focus_visible && view->focus == 3);
+                   view->focus_visible && view->focus == SETTINGS_FOCUS_BACK);
 }

@@ -80,6 +80,42 @@ bool match_start_from(Match *match, const MatchConfig *config,
     return match_initialize(match, config, initial);
 }
 
+bool match_restore(Match *match, const MatchConfig *config,
+                   const Move *moves, int count)
+{
+    if (match == NULL || count < 0 || count > REVERSI_HISTORY_MAX_MOVES
+        || (moves == NULL && count > 0)) {
+        return false;
+    }
+
+    Match restored;
+    if (!match_start(&restored, config)) {
+        return false;
+    }
+
+    for (int index = 0; index < count; ++index) {
+        if (restored.phase != MATCH_PHASE_PLAYER_TURN
+            || !match_apply_move(&restored, moves[index])
+            || !match_finish_animation(&restored)) {
+            return false;
+        }
+        if (restored.phase == MATCH_PHASE_PASSING_TURN
+            && !match_finish_pass(&restored)) {
+            return false;
+        }
+        if (restored.phase != MATCH_PHASE_PLAYER_TURN
+            && restored.phase != MATCH_PHASE_GAME_OVER) {
+            return false;
+        }
+    }
+
+    if (!match_is_consistent(&restored)) {
+        return false;
+    }
+    *match = restored;
+    return true;
+}
+
 static int count_flips(const Board *before, const Board *after,
                        Stone mover, Move move)
 {

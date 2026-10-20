@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 typedef struct MenuLayout {
-    Rectangle buttons[3];
+    Rectangle buttons[REVERSI_MENU_BUTTON_COUNT];
     float mark_y;
     float title_y;
     float subtitle_y;
@@ -17,14 +17,17 @@ static MenuLayout menu_layout(void)
 {
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
-    const float panel_width = fminf(400.0f, width - 64.0f);
-    const float button_height = 52.0f;
-    const float gap = 12.0f;
+    const float panel_width = fminf(410.0f, width - 64.0f);
+    const float button_height = 40.0f;
+    const float gap = 6.0f;
+    const float block_height = (float)REVERSI_MENU_BUTTON_COUNT
+        * button_height + (float)(REVERSI_MENU_BUTTON_COUNT - 1) * gap;
     const float x = (width - panel_width) * 0.5f;
-    const float top = fmaxf(height * 0.50f, 286.0f);
+    const float top = fminf(fmaxf(height * 0.30f, 190.0f),
+                            height - 70.0f - block_height);
 
     MenuLayout layout = {0};
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < REVERSI_MENU_BUTTON_COUNT; ++i) {
         layout.buttons[i] = (Rectangle){
             .x = x,
             .y = top + (float)i * (button_height + gap),
@@ -32,11 +35,37 @@ static MenuLayout menu_layout(void)
             .height = button_height
         };
     }
-    layout.mark_y = top - 150.0f;
-    layout.title_y = top - 112.0f;
-    layout.subtitle_y = top - 38.0f;
-    layout.footer_y = height - 42.0f;
+    layout.mark_y = top - 120.0f;
+    layout.title_y = top - 102.0f;
+    layout.subtitle_y = top - 34.0f;
+    layout.footer_y = height - 34.0f;
     return layout;
+}
+
+static MenuAction action_for_index(int index)
+{
+    switch (index) {
+    case 0:
+        return MENU_ACTION_CONTINUE;
+    case 1:
+        return MENU_ACTION_PLAY;
+    case 2:
+        return MENU_ACTION_LOAD;
+    case 3:
+        return MENU_ACTION_HELP;
+    case 4:
+        return MENU_ACTION_STATS;
+    case 5:
+        return MENU_ACTION_SETTINGS;
+    case 6:
+    default:
+        return MENU_ACTION_QUIT;
+    }
+}
+
+static unsigned disabled_mask(bool has_continue)
+{
+    return has_continue ? 0u : 1u;
 }
 
 void menu_view_init(MenuView *view)
@@ -45,61 +74,65 @@ void menu_view_init(MenuView *view)
         return;
     }
 
-    ui_button_init(&view->play, "Play", true);
-    ui_button_init(&view->settings, "Settings", false);
-    ui_button_init(&view->quit, "Quit", false);
-    view->focus = 0;
+    ui_button_init(&view->buttons[0], "Continue", true);
+    ui_button_init(&view->buttons[1], "New game", false);
+    ui_button_init(&view->buttons[2], "Load game", false);
+    ui_button_init(&view->buttons[3], "How to play", false);
+    ui_button_init(&view->buttons[4], "Statistics", false);
+    ui_button_init(&view->buttons[5], "Settings", false);
+    ui_button_init(&view->buttons[6], "Quit", false);
+    view->focus = 1;
     view->focus_visible = false;
 }
 
-static MenuAction action_for_focus(int focus)
-{
-    if (focus == 0) {
-        return MENU_ACTION_PLAY;
-    }
-    if (focus == 1) {
-        return MENU_ACTION_SETTINGS;
-    }
-    return MENU_ACTION_QUIT;
-}
-
 MenuAction menu_view_update(MenuView *view, const UiInput *input,
-                            bool accept_input, float dt)
+                            bool accept_input, float dt, bool has_continue)
 {
     if (view == NULL || input == NULL) {
         return MENU_ACTION_NONE;
     }
 
     const MenuLayout layout = menu_layout();
-    ui_button_set_bounds(&view->play, layout.buttons[0]);
-    ui_button_set_bounds(&view->settings, layout.buttons[1]);
-    ui_button_set_bounds(&view->quit, layout.buttons[2]);
+    const unsigned disabled = disabled_mask(has_continue);
+    view->buttons[0].enabled = has_continue;
+    view->buttons[0].primary = has_continue;
+    view->buttons[1].primary = !has_continue;
+    for (int index = 0; index < REVERSI_MENU_BUTTON_COUNT; ++index) {
+        ui_button_set_bounds(&view->buttons[index], layout.buttons[index]);
+        if (index != 0) {
+            view->buttons[index].enabled = true;
+        }
+    }
 
-    const bool play_clicked = ui_button_update(
-        &view->play, input, accept_input, dt);
-    const bool settings_clicked = ui_button_update(
-        &view->settings, input, accept_input, dt);
-    const bool quit_clicked = ui_button_update(
-        &view->quit, input, accept_input, dt);
+    bool clicked[REVERSI_MENU_BUTTON_COUNT] = {false};
+    for (int index = 0; index < REVERSI_MENU_BUTTON_COUNT; ++index) {
+        clicked[index] = ui_button_update(
+            &view->buttons[index], input, accept_input, dt);
+    }
 
     if (!accept_input) {
         return MENU_ACTION_NONE;
     }
 
-    ui_focus_update(&view->focus, &view->focus_visible, 3, input);
-
-    MenuAction action = MENU_ACTION_NONE;
-    if (play_clicked) {
-        action = MENU_ACTION_PLAY;
-    } else if (settings_clicked) {
-        action = MENU_ACTION_SETTINGS;
-    } else if (quit_clicked) {
-        action = MENU_ACTION_QUIT;
-    } else if (input->enter_pressed) {
-        action = action_for_focus(view->focus);
+    if (input->mouse_pressed) {
+        view->focus_visible = false;
+    }
+    if (input->up_pressed || input->down_pressed) {
+        view->focus = ui_focus_step(
+            view->focus, input->down_pressed ? 1 : -1,
+            REVERSI_MENU_BUTTON_COUNT, disabled);
+        view->focus_visible = true;
     }
 
-    return action;
+    for (int index = 0; index < REVERSI_MENU_BUTTON_COUNT; ++index) {
+        if (clicked[index]) {
+            return action_for_index(index);
+        }
+    }
+    if (input->enter_pressed && view->buttons[view->focus].enabled) {
+        return action_for_index(view->focus);
+    }
+    return MENU_ACTION_NONE;
 }
 
 void menu_view_draw(const MenuView *view, const UiFonts *fonts)
@@ -127,7 +160,8 @@ void menu_view_draw(const MenuView *view, const UiFonts *fonts)
 
     ui_draw_text_aligned(fonts, UI_TEXT_SEMIBOLD, "REVERSI",
                          (Rectangle){0, layout.title_y, width, 72.0f},
-                         REVERSI_UI_FONT_DISPLAY, REVERSI_UI_COLOR_TEXT, UI_ALIGN_CENTER);
+                         REVERSI_UI_FONT_DISPLAY, REVERSI_UI_COLOR_TEXT,
+                         UI_ALIGN_CENTER);
     ui_draw_text_aligned(fonts, UI_TEXT_REGULAR,
                          "A quiet game of strategy",
                          (Rectangle){0, layout.subtitle_y, width, 24.0f},
@@ -140,12 +174,10 @@ void menu_view_draw(const MenuView *view, const UiFonts *fonts)
                     layout.subtitle_y + 30.0f, accent_width, 2.0f},
         1.0f, ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.7f));
 
-    ui_button_draw(&view->play, fonts,
-                   view->focus_visible && view->focus == 0);
-    ui_button_draw(&view->settings, fonts,
-                   view->focus_visible && view->focus == 1);
-    ui_button_draw(&view->quit, fonts,
-                   view->focus_visible && view->focus == 2);
+    for (int index = 0; index < REVERSI_MENU_BUTTON_COUNT; ++index) {
+        ui_button_draw(&view->buttons[index], fonts,
+                       view->focus_visible && view->focus == index);
+    }
 
     ui_draw_text_aligned(fonts, UI_TEXT_REGULAR, "C11 / raylib 6.2",
                          (Rectangle){0, layout.footer_y, width, 20.0f},

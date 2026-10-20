@@ -10,6 +10,7 @@ typedef struct ResultLayout {
     Rectangle panel;
     Rectangle again;
     Rectangle undo;
+    Rectangle save;
     Rectangle menu;
     Rectangle black_score;
     Rectangle white_score;
@@ -20,7 +21,7 @@ static ResultLayout result_layout(void)
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
     const float panel_width = fminf(560.0f, width - 64.0f);
-    const float panel_height = 500.0f;
+    const float panel_height = 560.0f;
     const float x = (width - panel_width) * 0.5f;
     const float y = (height - panel_height) * 0.5f;
     const float button_height = 48.0f;
@@ -34,8 +35,11 @@ static ResultLayout result_layout(void)
     layout.undo = (Rectangle){
         x + 24.0f, again_y - gap - button_height,
         panel_width - 48.0f, button_height};
-    layout.menu = (Rectangle){
+    layout.save = (Rectangle){
         x + 24.0f, layout.undo.y - gap - button_height,
+        panel_width - 48.0f, button_height};
+    layout.menu = (Rectangle){
+        x + 24.0f, layout.save.y - gap - button_height,
         panel_width - 48.0f, button_height};
     layout.black_score = (Rectangle){
         x + 24.0f, y + 206.0f, panel_width * 0.5f - 36.0f, 86.0f};
@@ -53,6 +57,7 @@ void result_view_init(ResultView *view)
 
     ui_button_init(&view->again, "Play again", true);
     ui_button_init(&view->undo, "Undo last move", false);
+    ui_button_init(&view->save, "Save game", false);
     ui_button_init(&view->menu, "Main menu", false);
     view->focus = 0;
     view->focus_visible = false;
@@ -83,15 +88,19 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
     const ResultLayout layout = result_layout();
     ui_button_set_bounds(&view->again, layout.again);
     ui_button_set_bounds(&view->undo, layout.undo);
+    ui_button_set_bounds(&view->save, layout.save);
     ui_button_set_bounds(&view->menu, layout.menu);
 
     view->again.enabled = buttons_accept;
     view->undo.enabled = buttons_accept && can_undo;
+    view->save.enabled = buttons_accept;
     view->menu.enabled = buttons_accept;
     const bool again_clicked = ui_button_update(
         &view->again, input, buttons_accept, dt);
     const bool undo_clicked = ui_button_update(
         &view->undo, input, view->undo.enabled, dt);
+    const bool save_clicked = ui_button_update(
+        &view->save, input, buttons_accept, dt);
     const bool menu_clicked = ui_button_update(
         &view->menu, input, buttons_accept, dt);
 
@@ -104,7 +113,7 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
     }
     if (input->up_pressed || input->down_pressed) {
         view->focus = ui_focus_step(
-            view->focus, input->down_pressed ? 1 : -1, 3,
+            view->focus, input->down_pressed ? 1 : -1, 4,
             can_undo ? 0u : (1u << 1));
         view->focus_visible = true;
     }
@@ -114,6 +123,9 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
     }
     if (undo_clicked) {
         return RESULT_ACTION_UNDO;
+    }
+    if (save_clicked) {
+        return RESULT_ACTION_SAVE;
     }
     if (menu_clicked || input->escape_pressed) {
         return RESULT_ACTION_MENU;
@@ -126,6 +138,9 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
             return RESULT_ACTION_UNDO;
         }
         if (view->focus == 2) {
+            return RESULT_ACTION_SAVE;
+        }
+        if (view->focus == 3) {
             return RESULT_ACTION_MENU;
         }
     }
@@ -167,6 +182,10 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
     const GameResult result = match->state.result;
 
     if (result == GAME_RESULT_DRAW) {
+        DrawCircleV((Vector2){center_x, center_y}, 44.0f,
+                    ui_color_alpha(REVERSI_UI_COLOR_SURFACE_ALT, appear));
+        ui_draw_ring((Vector2){center_x, center_y}, 44.0f, 1.0f,
+                     ui_color_alpha(REVERSI_UI_COLOR_BORDER_STRONG, appear));
         ui_draw_disc((Vector2){center_x - 15.0f, center_y}, 24.0f,
                      STONE_WHITE, 1.0f, scale, scale);
         ui_draw_disc((Vector2){center_x + 15.0f, center_y}, 24.0f,
@@ -175,13 +194,15 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
                || result == GAME_RESULT_WHITE_WIN) {
         const Stone winner = result == GAME_RESULT_BLACK_WIN
             ? STONE_BLACK : STONE_WHITE;
+        DrawCircleV((Vector2){center_x, center_y}, 38.0f,
+                    ui_color_alpha(REVERSI_UI_COLOR_SURFACE_ALT, appear));
         ui_draw_ring((Vector2){center_x, center_y}, 32.0f, 2.0f,
                      ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.55f * appear));
         ui_draw_disc((Vector2){center_x, center_y}, 24.0f,
                      winner, 1.0f, scale, scale);
     }
 
-    const char *title = ui_result_title(result);
+    const char *title = ui_match_result_title(match);
     if (title == NULL) {
         title = "Game over";
     }
@@ -208,6 +229,8 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
         1.0f, REVERSI_UI_COLOR_BORDER);
 
     ui_button_draw(&view->menu, fonts,
+                   view->focus_visible && view->focus == 3);
+    ui_button_draw(&view->save, fonts,
                    view->focus_visible && view->focus == 2);
     ui_button_draw(&view->undo, fonts,
                    view->focus_visible && view->focus == 1);

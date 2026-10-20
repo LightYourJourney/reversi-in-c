@@ -6,6 +6,7 @@
 typedef enum PauseAction {
     PAUSE_ACTION_NONE = 0,
     PAUSE_ACTION_RESUME,
+    PAUSE_ACTION_SAVE,
     PAUSE_ACTION_HISTORY,
     PAUSE_ACTION_RESTART,
     PAUSE_ACTION_MENU
@@ -13,6 +14,7 @@ typedef enum PauseAction {
 
 typedef struct PauseView {
     UiButton resume;
+    UiButton save;
     UiButton history;
     UiButton restart;
     UiButton menu;

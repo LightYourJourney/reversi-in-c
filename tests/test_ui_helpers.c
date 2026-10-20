@@ -38,6 +38,27 @@ static void test_ui_labels_and_focus(TestStats *stats)
     REVERSI_TEST_ASSERT(stats,
         strcmp(ui_result_title(GAME_RESULT_DRAW), "Draw") == 0);
 
+    Match title_match;
+    memset(&title_match, 0, sizeof(title_match));
+    title_match.config.mode = GAME_MODE_PVE;
+    title_match.config.human_color = STONE_BLACK;
+    title_match.state.result = GAME_RESULT_BLACK_WIN;
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_match_result_title(&title_match), "You win") == 0);
+    title_match.state.result = GAME_RESULT_WHITE_WIN;
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_match_result_title(&title_match), "Computer wins") == 0);
+    title_match.state.result = GAME_RESULT_DRAW;
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_match_result_title(&title_match), "Draw") == 0);
+    title_match.config.mode = GAME_MODE_PVP;
+    title_match.state.result = GAME_RESULT_BLACK_WIN;
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(ui_match_result_title(&title_match), "Black wins") == 0);
+    title_match.state.result = GAME_RESULT_ONGOING;
+    REVERSI_TEST_ASSERT(stats, ui_match_result_title(&title_match) == NULL);
+    REVERSI_TEST_ASSERT(stats, ui_match_result_title(NULL) == NULL);
+
     REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 4, 1) == 1);
     REVERSI_TEST_ASSERT(stats, ui_focus_step(3, 1, 4, 1) == 1);
     REVERSI_TEST_ASSERT(stats, ui_focus_step(2, -1, 4, 1) == 1);
@@ -559,6 +580,14 @@ static void test_result_view_actions(TestStats *stats)
     REVERSI_TEST_ASSERT(stats,
         result_view_update(&view, &input, true, false, true, 0.016f)
         == RESULT_ACTION_UNDO);
+
+    result_view_reset(&view);
+    view.focus = 2;
+    input.enter_pressed = true;
+    input.escape_pressed = false;
+    REVERSI_TEST_ASSERT(stats,
+        result_view_update(&view, &input, true, false, true, 0.016f)
+        == RESULT_ACTION_SAVE);
 
     result_view_reset(&view);
     input.enter_pressed = false;

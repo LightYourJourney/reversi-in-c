@@ -2,20 +2,28 @@
 
 #include "ai/ai.h"
 #include "ai/ai_worker.h"
+#include "audio/audio.h"
 #include "core/game.h"
 #include "core/match.h"
 #include "core/rules.h"
+#include "settings/settings.h"
+#include "storage/save.h"
+#include "storage/stats.h"
+#include "storage/storage.h"
 #include "ui/animation.h"
 #include "ui/draw.h"
 #include "ui/fonts.h"
 #include "ui/game_view.h"
+#include "ui/help_view.h"
 #include "ui/history_view.h"
 #include "ui/menu_view.h"
 #include "ui/modal.h"
 #include "ui/pause_view.h"
 #include "ui/result_view.h"
+#include "ui/saves_view.h"
 #include "ui/settings_view.h"
 #include "ui/setup_view.h"
+#include "ui/stats_view.h"
 #include "ui/theme.h"
 
 #include <raylib.h>
@@ -30,6 +38,7 @@
 #define REVERSI_WINDOW_WIDTH 1100
 #define REVERSI_WINDOW_HEIGHT 800
 #define REVERSI_TARGET_FPS 60
+#define REVERSI_AUTOSAVE_FILE "autosave.rvs"
 
 typedef enum AppScreen {
     APP_SCREEN_MENU = 0,
@@ -37,20 +46,18 @@ typedef enum AppScreen {
     APP_SCREEN_GAME,
     APP_SCREEN_HISTORY,
     APP_SCREEN_SETTINGS,
-    APP_SCREEN_RESULT
+    APP_SCREEN_RESULT,
+    APP_SCREEN_HELP,
+    APP_SCREEN_STATS,
+    APP_SCREEN_SAVES
 } AppScreen;
 
 typedef enum PendingGameAction {
     PENDING_GAME_NONE = 0,
     PENDING_GAME_START,
+    PENDING_GAME_LOAD,
     PENDING_GAME_UNDO
 } PendingGameAction;
-
-typedef struct AppSettings {
-    bool animations;
-    bool legal_hints;
-    bool last_move_highlight;
-} AppSettings;
 
 typedef struct AppTransition {
     bool active;
@@ -62,7 +69,8 @@ typedef struct AppTransition {
 
 typedef struct App {
     AppScreen screen;
-    AppSettings settings;
+    Settings settings;
+    GameStats stats;
     UiFonts fonts;
     MenuView menu;
     SetupView setup_view;
@@ -71,6 +79,16 @@ typedef struct App {
     HistoryView history_view;
     SettingsView settings_view;
     ResultView result_view;
+    HelpView help_view;
+    StatsView stats_view;
+    SavesView saves_view;
+    SaveSlotInfo save_slots[REVERSI_SAVES_ROW_COUNT];
+    bool saves_saving;
+    AppScreen saves_return;
+    bool has_autosave;
+    bool autosave_error_shown;
+    char notice[160];
+    float notice_timer;
     Modal modal;
     AppTransition transition;
     Match match;
@@ -87,6 +105,8 @@ typedef struct App {
     AiWorker *ai_worker;
     AiDifficulty ai_difficulty;
     unsigned ai_seed;
+    bool stats_recorded;
+    int pending_delete_row;
 } App;
 
 static UiInput read_input(void);
@@ -113,6 +133,20 @@ static bool app_start_ai(App *app);
 static bool app_poll_ai(App *app);
 static void app_maybe_start_ai(App *app);
 static AiDifficulty app_ai_difficulty_from_setup(SetupDifficulty difficulty);
+static void app_autosave(App *app);
+static void app_notice(App *app, const char *text);
+static void app_update_notice(App *app, float dt);
+static void app_draw_notice(const App *app);
+static float app_motion_dt(const App *app, float dt);
+static bool app_save_path(int row, char *out, size_t cap);
+static void app_fill_slot(SaveSlotInfo *slot, const char *path);
+static void app_refresh_slots(App *app);
+static bool app_restore_saved(App *app, const char *path);
+static void app_open_saves(App *app, bool saving);
+static void app_handle_settings_action(App *app, SettingsAction action);
+static void app_handle_saves_action(App *app, SavesAction action);
+static void app_maybe_record_result(App *app);
+static void app_play_result_sound(const App *app);
 
 static UiInput read_input(void)
 {
@@ -132,6 +166,10 @@ static UiInput read_input(void)
     input.menu_pressed = IsKeyPressed(KEY_M);
     input.pause_pressed = IsKeyPressed(KEY_P);
     input.history_pressed = IsKeyPressed(KEY_H);
+    input.delete_pressed = IsKeyPressed(KEY_DELETE)
+        || IsKeyPressed(KEY_BACKSPACE);
+    input.undo_pressed = IsKeyPressed(KEY_U);
+    input.redo_pressed = IsKeyPressed(KEY_Y);
     input.wheel = GetMouseWheelMove();
 
     const bool modifier = IsKeyDown(KEY_LEFT_CONTROL)
@@ -149,17 +187,69 @@ static UiInput read_input(void)
     if (modifier && IsKeyPressed(KEY_Y)) {
         input.redo_pressed = true;
     }
+    if (modifier && IsKeyPressed(KEY_S)) {
+        input.save_pressed = true;
+    }
     return input;
+}
+
+static float app_motion_dt(const App *app, float dt)
+{
+    const float scale = (float)app->settings.animation_speed / 100.0f;
+    return dt * (scale > 0.05f ? scale : 0.05f);
+}
+
+static void app_notice(App *app, const char *text)
+{
+    if (app == NULL || text == NULL) {
+        return;
+    }
+    snprintf(app->notice, sizeof(app->notice), "%s", text);
+    app->notice_timer = 3.2f;
+}
+
+static void app_update_notice(App *app, float dt)
+{
+    if (app->notice_timer > 0.0f) {
+        app->notice_timer -= dt;
+        if (app->notice_timer < 0.0f) {
+            app->notice_timer = 0.0f;
+        }
+    }
+}
+
+static void app_draw_notice(const App *app)
+{
+    if (app->notice_timer <= 0.0f || app->notice[0] == '\0') {
+        return;
+    }
+    const float width = (float)GetScreenWidth();
+    const float height = (float)GetScreenHeight();
+    const float alpha = app->notice_timer < 0.4f
+        ? app->notice_timer / 0.4f : 1.0f;
+    const float box_width = fminf(560.0f, width - 64.0f);
+    const Rectangle box = {
+        (width - box_width) * 0.5f, height - 96.0f, box_width, 44.0f
+    };
+    ui_draw_panel(box, REVERSI_UI_RADIUS_SM,
+                  ui_color_alpha(REVERSI_UI_COLOR_SURFACE, 0.97f * alpha),
+                  ui_color_alpha(REVERSI_UI_COLOR_BORDER_STRONG, alpha));
+    ui_draw_text_clipped(
+        &app->fonts, UI_TEXT_REGULAR, app->notice,
+        (Rectangle){box.x + 16.0f, box.y, box.width - 32.0f, box.height},
+        REVERSI_UI_FONT_SMALL,
+        ui_color_alpha(REVERSI_UI_COLOR_TEXT, alpha), UI_ALIGN_LEFT);
 }
 
 static void app_init(App *app)
 {
     app->screen = APP_SCREEN_MENU;
-    app->settings = (AppSettings){
-        .animations = true,
-        .legal_hints = true,
-        .last_move_highlight = true
-    };
+    settings_defaults(&app->settings);
+    (void)settings_load(&app->settings);
+    ui_theme_set((UiThemeKind)app->settings.theme);
+    stats_reset(&app->stats);
+    (void)stats_load(&app->stats);
+
     app->transition = (AppTransition){0};
     app->modal = (Modal){0};
     app->last_move_age = 0.0f;
@@ -177,6 +267,15 @@ static void app_init(App *app)
     app->ai_worker = NULL;
     app->ai_difficulty = AI_DIFFICULTY_MEDIUM;
     app->ai_seed = 0x51ED270Bu;
+    app->stats_recorded = true;
+    app->pending_delete_row = -1;
+    app->saves_saving = false;
+    app->saves_return = APP_SCREEN_MENU;
+    app->has_autosave = false;
+    app->autosave_error_shown = false;
+    app->notice[0] = '\0';
+    app->notice_timer = 0.0f;
+    memset(app->save_slots, 0, sizeof(app->save_slots));
 
 #ifndef NDEBUG
     const char *autoplay = getenv("REVERSI_AUTOPLAY");
@@ -184,6 +283,7 @@ static void app_init(App *app)
         && strcmp(autoplay, "0") != 0;
     if (app->autoplay) {
         app->settings.animations = false;
+        app->stats_recorded = false;
         const unsigned long seed = strtoul(autoplay, NULL, 10);
         srand(seed != 0 ? (unsigned)seed : (unsigned)time(NULL));
     }
@@ -196,13 +296,20 @@ static void app_init(App *app)
     menu_view_init(&app->menu);
     setup_view_init(&app->setup_view);
     setup_view_set_ai_available(&app->setup_view, app->ai != NULL);
+    setup_view_set_difficulty(
+        &app->setup_view, (SetupDifficulty)app->settings.default_difficulty);
     game_view_init(&app->game_view);
     pause_view_init(&app->pause_view);
     history_view_init(&app->history_view);
     settings_view_init(&app->settings_view);
     result_view_init(&app->result_view);
+    help_view_init(&app->help_view);
+    stats_view_init(&app->stats_view);
+    saves_view_init(&app->saves_view);
     modal_init(&app->modal);
     ui_animation_reset(&app->animation);
+
+    (void)audio_init(app->settings.volume, app->settings.sfx);
 
     MatchConfig default_config = {
         .mode = GAME_MODE_PVP,
@@ -211,9 +318,41 @@ static void app_init(App *app)
     };
     (void)match_start(&app->match, &default_config);
 
+    app_refresh_slots(app);
+
     if (app->autoplay) {
         app->screen = APP_SCREEN_GAME;
     }
+
+#ifndef NDEBUG
+    /* Debug-only visual harness: opens a page directly so UI layouts can be
+       captured without synthetic input. Release builds ignore it. */
+    const char *start_screen = getenv("REVERSI_START_SCREEN");
+    if (!app->autoplay && start_screen != NULL) {
+        if (strcmp(start_screen, "game") == 0) {
+            char autosave[1024];
+            if (storage_path(REVERSI_AUTOSAVE_FILE, autosave,
+                             sizeof(autosave))
+                && storage_exists(autosave)) {
+                (void)app_restore_saved(app, autosave);
+            }
+        } else if (strcmp(start_screen, "settings") == 0) {
+            app->screen = APP_SCREEN_SETTINGS;
+        } else if (strcmp(start_screen, "setup") == 0) {
+            app->screen = APP_SCREEN_SETUP;
+        } else if (strcmp(start_screen, "help") == 0) {
+            help_view_reset(&app->help_view);
+            app->screen = APP_SCREEN_HELP;
+        } else if (strcmp(start_screen, "stats") == 0) {
+            app->screen = APP_SCREEN_STATS;
+        } else if (strcmp(start_screen, "saves") == 0) {
+            app_refresh_slots(app);
+            app->saves_saving = false;
+            app->saves_return = APP_SCREEN_MENU;
+            app->screen = APP_SCREEN_SAVES;
+        }
+    }
+#endif
 }
 
 static void app_reset_match_ui(App *app)
@@ -334,6 +473,184 @@ static void app_maybe_start_ai(App *app)
     }
 }
 
+static bool app_save_path(int row, char *out, size_t cap)
+{
+    if (row == 0) {
+        return storage_path(REVERSI_AUTOSAVE_FILE, out, cap);
+    }
+    char name[32];
+    const int written = snprintf(
+        name, sizeof(name), "save%d.rvs", row);
+    if (written <= 0 || (size_t)written >= sizeof(name)) {
+        return false;
+    }
+    return storage_path(name, out, cap);
+}
+
+static void app_fill_slot(SaveSlotInfo *slot, const char *path)
+{
+    *slot = (SaveSlotInfo){0};
+    SavedGame saved;
+    const SaveStatus status = save_read(path, &saved);
+    if (status == SAVE_STATUS_NOT_FOUND) {
+        return;
+    }
+
+    slot->present = true;
+    if (status != SAVE_STATUS_OK) {
+        slot->valid = false;
+        snprintf(slot->summary, sizeof(slot->summary), "Unreadable save");
+        return;
+    }
+
+    slot->valid = true;
+    if (saved.mode == GAME_MODE_PVE) {
+        snprintf(slot->summary, sizeof(slot->summary),
+                 "PvE / %s / %d moves%s",
+                 ai_difficulty_name((AiDifficulty)saved.difficulty),
+                 saved.move_count,
+                 saved.expected.result == GAME_RESULT_ONGOING
+                    ? "" : " / finished");
+    } else {
+        snprintf(slot->summary, sizeof(slot->summary),
+                 "PvP / %d moves%s", saved.move_count,
+                 saved.expected.result == GAME_RESULT_ONGOING
+                    ? "" : " / finished");
+    }
+}
+
+static void app_refresh_slots(App *app)
+{
+    for (int row = 0; row < REVERSI_SAVES_ROW_COUNT; ++row) {
+        char path[1024];
+        if (app_save_path(row, path, sizeof(path))) {
+            app_fill_slot(&app->save_slots[row], path);
+        } else {
+            app->save_slots[row] = (SaveSlotInfo){0};
+        }
+    }
+    app->has_autosave = app->save_slots[0].present
+        && app->save_slots[0].valid;
+}
+
+static void app_autosave(App *app)
+{
+    char path[1024];
+    if (!storage_make_user_dir()
+        || !app_save_path(0, path, sizeof(path))) {
+        return;
+    }
+    if (app->match.phase == MATCH_PHASE_GAME_OVER
+        || app->match.state.result != GAME_RESULT_ONGOING) {
+        (void)storage_remove(path);
+        app->has_autosave = false;
+        return;
+    }
+
+    const SaveStatus status = save_write(
+        path, &app->match, (int)app->ai_difficulty);
+    if (status == SAVE_STATUS_OK) {
+        app->has_autosave = true;
+        app->autosave_error_shown = false;
+    } else if (!app->autosave_error_shown) {
+        app->autosave_error_shown = true;
+        app_notice(app, "Autosave failed. Use Save game from the pause menu.");
+    }
+}
+
+static void app_play_result_sound(const App *app)
+{
+    const GameResult result = app->match.state.result;
+    if (result == GAME_RESULT_DRAW) {
+        audio_play(AUDIO_CUE_DRAW);
+        return;
+    }
+    if (result == GAME_RESULT_ONGOING) {
+        return;
+    }
+    if (app->match.config.mode == GAME_MODE_PVE) {
+        const GameResult human_win =
+            app->match.config.human_color == STONE_BLACK
+                ? GAME_RESULT_BLACK_WIN : GAME_RESULT_WHITE_WIN;
+        audio_play(result == human_win ? AUDIO_CUE_WIN : AUDIO_CUE_LOSE);
+    } else {
+        audio_play(AUDIO_CUE_WIN);
+    }
+}
+
+static void app_maybe_record_result(App *app)
+{
+    if (app->match.phase != MATCH_PHASE_GAME_OVER || app->stats_recorded) {
+        return;
+    }
+    app->stats_recorded = true;
+    stats_record(&app->stats, app->match.config.mode,
+                 app->match.config.human_color, (int)app->ai_difficulty,
+                 app->match.state.result);
+    if (!stats_save(&app->stats)) {
+        app_notice(app, "Statistics could not be saved.");
+    }
+    app_play_result_sound(app);
+}
+
+static bool app_restore_saved(App *app, const char *path)
+{
+    SavedGame saved;
+    const SaveStatus status = save_read(path, &saved);
+    if (status != SAVE_STATUS_OK) {
+        app_notice(app, save_status_message(status));
+        return false;
+    }
+
+    const AiDifficulty difficulty = (AiDifficulty)saved.difficulty;
+    const AiController *ai = saved.mode == GAME_MODE_PVE
+        ? ai_controller_for_difficulty(difficulty) : NULL;
+    if (saved.mode == GAME_MODE_PVE && ai == NULL) {
+        app_notice(app, "Save data is inconsistent");
+        return false;
+    }
+
+    const MatchConfig config = {
+        .mode = saved.mode,
+        .human_color = saved.human_color,
+        .ai = ai
+    };
+    Match restored;
+    if (!match_restore(&restored, &config, saved.moves, saved.move_count)
+        || !game_state_equal(&restored.state, &saved.expected)) {
+        app_notice(app, "Save data is inconsistent");
+        return false;
+    }
+
+    app_cancel_ai(app);
+    app->match = restored;
+    app->ai = ai;
+    app->ai_difficulty = difficulty;
+    app->stats_recorded = restored.phase == MATCH_PHASE_GAME_OVER;
+    app->pending_action = PENDING_GAME_LOAD;
+    app_notice(app, "Game loaded");
+    app_request_screen(app, APP_SCREEN_GAME);
+    return true;
+}
+
+static void app_open_saves(App *app, bool saving)
+{
+    if (saving && app->screen != APP_SCREEN_GAME
+        && app->screen != APP_SCREEN_RESULT) {
+        return;
+    }
+    app->saves_saving = saving;
+    app->saves_return = app->screen == APP_SCREEN_GAME
+        || app->screen == APP_SCREEN_RESULT
+        ? app->screen : APP_SCREEN_MENU;
+    if (saving) {
+        app->saves_view.focus = 1;
+        app->saves_view.focus_visible = false;
+    }
+    app_refresh_slots(app);
+    app_request_screen(app, APP_SCREEN_SAVES);
+}
+
 static void app_switch_screen(App *app, AppScreen target)
 {
     if (target != APP_SCREEN_GAME) {
@@ -349,14 +666,24 @@ static void app_switch_screen(App *app, AppScreen target)
     case PENDING_GAME_START:
         if (match_start(&app->match, &app->pending_config)) {
             app_reset_match_ui(app);
+            app->stats_recorded = false;
             app_maybe_start_ai(app);
+            app_autosave(app);
         } else {
             app->screen = APP_SCREEN_SETUP;
         }
         break;
+    case PENDING_GAME_LOAD:
+        app_reset_match_ui(app);
+        app->outcome_delay = app->match.phase == MATCH_PHASE_GAME_OVER
+            ? REVERSI_UI_DUR_GAME_OVER_FAST : 0.0f;
+        app_maybe_start_ai(app);
+        app_autosave(app);
+        break;
     case PENDING_GAME_UNDO:
         if (match_undo(&app->match)) {
             app_reset_match_ui(app);
+            app_autosave(app);
         } else {
             app->screen = APP_SCREEN_RESULT;
         }
@@ -379,13 +706,16 @@ static void app_begin_match(App *app, const MatchConfig *config)
     if (app->screen == APP_SCREEN_GAME && !app->transition.active) {
         if (match_start(&app->match, config)) {
             app_reset_match_ui(app);
+            app->stats_recorded = false;
             app_maybe_start_ai(app);
+            app_autosave(app);
         }
         return;
     }
 
     app->pending_config = *config;
     app->pending_action = PENDING_GAME_START;
+    app->stats_recorded = false;
     app_request_screen(app, APP_SCREEN_GAME);
 }
 
@@ -439,7 +769,8 @@ static void app_update_passive(App *app, float dt)
 
     switch (app->screen) {
     case APP_SCREEN_MENU:
-        (void)menu_view_update(&app->menu, &input, false, dt);
+        (void)menu_view_update(&app->menu, &input, false, dt,
+                               app->has_autosave);
         break;
     case APP_SCREEN_SETUP:
         (void)setup_view_update(&app->setup_view, &input, false, dt);
@@ -460,14 +791,24 @@ static void app_update_passive(App *app, float dt)
         break;
     case APP_SCREEN_SETTINGS:
         (void)settings_view_update(
-            &app->settings_view, &input, false, dt,
-            app->settings.animations, app->settings.legal_hints,
-            app->settings.last_move_highlight);
+            &app->settings_view, &input, false, dt, &app->settings);
         break;
     case APP_SCREEN_RESULT:
         (void)result_view_update(&app->result_view, &input, false,
                                  app->settings.animations,
-                                 match_can_undo(&app->match), dt);
+                                 match_can_undo(&app->match),
+                                 app_motion_dt(app, dt));
+        break;
+    case APP_SCREEN_HELP:
+        (void)help_view_update(&app->help_view, &input, false, dt);
+        break;
+    case APP_SCREEN_STATS:
+        (void)stats_view_update(&app->stats_view, &input, false, dt);
+        break;
+    case APP_SCREEN_SAVES:
+        (void)saves_view_update(
+            &app->saves_view, &input, false, dt, app->saves_saving,
+            app->save_slots);
         break;
     }
 }
@@ -486,6 +827,8 @@ static void app_finish_animation(App *app)
     case MATCH_PHASE_GAME_OVER:
         app->outcome_delay = app->settings.animations
             ? REVERSI_UI_DUR_GAME_OVER : REVERSI_UI_DUR_GAME_OVER_FAST;
+        app_maybe_record_result(app);
+        app_autosave(app);
         break;
     default:
         break;
@@ -504,6 +847,11 @@ static void app_apply_move(App *app, Move move)
     app->last_move_age = 0.0f;
     app->outcome_delay = 0.0f;
     app->pass_notice_timer = 0.0f;
+    audio_play(AUDIO_CUE_PLACE);
+    if (app->match.last_flips > 0) {
+        audio_play(AUDIO_CUE_FLIP);
+    }
+    app_autosave(app);
     ui_animation_start(&app->animation, &before, &app->match.state.board,
                        move, mover, app->settings.animations);
 
@@ -522,6 +870,8 @@ static void app_after_history_change(App *app)
         ? (app->settings.animations
             ? REVERSI_UI_DUR_GAME_OVER : REVERSI_UI_DUR_GAME_OVER_FAST)
         : 0.0f;
+    app_autosave(app);
+    app_maybe_record_result(app);
 }
 
 static void app_undo(App *app)
@@ -540,9 +890,38 @@ static void app_redo(App *app)
 
 static void app_handle_menu_action(App *app, MenuAction action)
 {
+    if (action == MENU_ACTION_NONE) {
+        return;
+    }
+    audio_play(AUDIO_CUE_BUTTON);
+
     switch (action) {
+    case MENU_ACTION_CONTINUE: {
+        char path[1024];
+        if (!storage_path(REVERSI_AUTOSAVE_FILE, path, sizeof(path))
+            || !storage_exists(path)) {
+            app_notice(app, "No saved game");
+            app->has_autosave = false;
+            break;
+        }
+        (void)app_restore_saved(app, path);
+        break;
+    }
     case MENU_ACTION_PLAY:
+        setup_view_set_difficulty(
+            &app->setup_view,
+            (SetupDifficulty)app->settings.default_difficulty);
         app_request_screen(app, APP_SCREEN_SETUP);
+        break;
+    case MENU_ACTION_LOAD:
+        app_open_saves(app, false);
+        break;
+    case MENU_ACTION_HELP:
+        help_view_reset(&app->help_view);
+        app_request_screen(app, APP_SCREEN_HELP);
+        break;
+    case MENU_ACTION_STATS:
+        app_request_screen(app, APP_SCREEN_STATS);
         break;
     case MENU_ACTION_SETTINGS:
         app_request_screen(app, APP_SCREEN_SETTINGS);
@@ -558,9 +937,17 @@ static void app_handle_menu_action(App *app, MenuAction action)
 
 static void app_handle_pause_action(App *app, PauseAction action)
 {
+    if (action == PAUSE_ACTION_NONE) {
+        return;
+    }
+    audio_play(AUDIO_CUE_BUTTON);
+
     switch (action) {
     case PAUSE_ACTION_RESUME:
         (void)match_resume(&app->match);
+        break;
+    case PAUSE_ACTION_SAVE:
+        app_open_saves(app, true);
         break;
     case PAUSE_ACTION_HISTORY:
         history_view_open(&app->history_view, &app->match);
@@ -585,6 +972,9 @@ static void app_handle_modal_confirm(App *app)
 
     switch (purpose) {
     case MODAL_PURPOSE_QUIT:
+        if (app->screen == APP_SCREEN_GAME) {
+            app_autosave(app);
+        }
         app_cancel_ai(app);
         app->running = false;
         break;
@@ -592,13 +982,30 @@ static void app_handle_modal_confirm(App *app)
         app_cancel_ai(app);
         if (match_restart(&app->match)) {
             app_reset_match_ui(app);
+            app->stats_recorded = false;
             app_maybe_start_ai(app);
+            app_autosave(app);
         }
         break;
     case MODAL_PURPOSE_RETURN_MENU:
+        app_autosave(app);
         app_cancel_ai(app);
         app_request_screen(app, APP_SCREEN_MENU);
         break;
+    case MODAL_PURPOSE_DELETE_SAVE: {
+        char path[1024];
+        if (app->pending_delete_row >= 0
+            && app_save_path(app->pending_delete_row, path, sizeof(path))) {
+            if (storage_remove(path)) {
+                app_notice(app, "Save deleted");
+            } else {
+                app_notice(app, "Could not delete the save");
+            }
+            app_refresh_slots(app);
+        }
+        app->pending_delete_row = -1;
+        break;
+    }
     case MODAL_PURPOSE_NONE:
     default:
         break;
@@ -608,6 +1015,11 @@ static void app_handle_modal_confirm(App *app)
 static void app_update_game(App *app, const UiInput *input, float dt)
 {
     Match *match = &app->match;
+
+    if (input->save_pressed) {
+        app_open_saves(app, true);
+        return;
+    }
 
 #ifndef NDEBUG
     if (app->autoplay && match->config.mode == GAME_MODE_PVP) {
@@ -661,7 +1073,7 @@ static void app_update_game(App *app, const UiInput *input, float dt)
     }
 
     if (match->phase == MATCH_PHASE_ANIMATING) {
-        ui_animation_update(&app->animation, dt);
+        ui_animation_update(&app->animation, app_motion_dt(app, dt));
         if (!ui_animation_is_active(&app->animation)) {
             app_finish_animation(app);
         }
@@ -701,6 +1113,11 @@ static void app_update_game(App *app, const UiInput *input, float dt)
         } else if (app->pass_notice_timer <= 0.0f) {
             (void)match_finish_pass(match);
         }
+    }
+
+    if (match->phase == MATCH_PHASE_GAME_OVER && !app->stats_recorded) {
+        app_autosave(app);
+        app_maybe_record_result(app);
     }
 
     if (match->phase == MATCH_PHASE_PAUSED) {
@@ -760,18 +1177,165 @@ static void app_update_game(App *app, const UiInput *input, float dt)
     }
 }
 
+static const int SETTINGS_SPEEDS[5] = {50, 75, 100, 150, 200};
+
+static int settings_speed_index(int speed)
+{
+    for (int index = 0; index < 5; ++index) {
+        if (SETTINGS_SPEEDS[index] == speed) {
+            return index;
+        }
+    }
+    return 2;
+}
+
+static void app_apply_settings(App *app)
+{
+    ui_theme_set((UiThemeKind)app->settings.theme);
+    audio_set_volume(app->settings.volume);
+    audio_set_enabled(app->settings.sfx);
+}
+
+static void app_persist_settings(App *app)
+{
+    app_apply_settings(app);
+    if (!settings_save(&app->settings)) {
+        app_notice(app, "Settings could not be saved.");
+    }
+}
+
+static void app_handle_settings_action(App *app, SettingsAction action)
+{
+    if (action == SETTINGS_ACTION_NONE) {
+        return;
+    }
+    if (action == SETTINGS_ACTION_BACK) {
+        app_persist_settings(app);
+        audio_play(AUDIO_CUE_BUTTON);
+        app_request_screen(app, APP_SCREEN_MENU);
+        return;
+    }
+
+    switch (action) {
+    case SETTINGS_ACTION_TOGGLE_ANIMATIONS:
+        app->settings.animations = !app->settings.animations;
+        break;
+    case SETTINGS_ACTION_SPEED_DOWN:
+    case SETTINGS_ACTION_SPEED_UP: {
+        int index = settings_speed_index(app->settings.animation_speed);
+        index += action == SETTINGS_ACTION_SPEED_UP ? 1 : -1;
+        if (index < 0) {
+            index = 0;
+        } else if (index > 4) {
+            index = 4;
+        }
+        app->settings.animation_speed = SETTINGS_SPEEDS[index];
+        break;
+    }
+    case SETTINGS_ACTION_TOGGLE_HINTS:
+        app->settings.legal_hints = !app->settings.legal_hints;
+        break;
+    case SETTINGS_ACTION_TOGGLE_LAST_MOVE:
+        app->settings.last_move_highlight =
+            !app->settings.last_move_highlight;
+        break;
+    case SETTINGS_ACTION_TOGGLE_SFX:
+        app->settings.sfx = !app->settings.sfx;
+        break;
+    case SETTINGS_ACTION_VOLUME_DOWN:
+    case SETTINGS_ACTION_VOLUME_UP:
+        app->settings.volume +=
+            action == SETTINGS_ACTION_VOLUME_UP ? 5 : -5;
+        if (app->settings.volume < 0) {
+            app->settings.volume = 0;
+        } else if (app->settings.volume > 100) {
+            app->settings.volume = 100;
+        }
+        break;
+    case SETTINGS_ACTION_DIFFICULTY_DOWN:
+    case SETTINGS_ACTION_DIFFICULTY_UP:
+        app->settings.default_difficulty +=
+            action == SETTINGS_ACTION_DIFFICULTY_UP ? 1 : -1;
+        if (app->settings.default_difficulty < 0) {
+            app->settings.default_difficulty = 2;
+        } else if (app->settings.default_difficulty > 2) {
+            app->settings.default_difficulty = 0;
+        }
+        break;
+    case SETTINGS_ACTION_THEME_DOWN:
+    case SETTINGS_ACTION_THEME_UP:
+        app->settings.theme = app->settings.theme == 0 ? 1 : 0;
+        break;
+    case SETTINGS_ACTION_BACK:
+    case SETTINGS_ACTION_NONE:
+    default:
+        return;
+    }
+
+    app_persist_settings(app);
+    audio_play(AUDIO_CUE_BUTTON);
+}
+
+static void app_handle_saves_action(App *app, SavesAction action)
+{
+    if (action.type == SAVES_ACTION_NONE) {
+        return;
+    }
+    audio_play(AUDIO_CUE_BUTTON);
+
+    if (action.type == SAVES_ACTION_BACK) {
+        app_request_screen(app, app->saves_return);
+        return;
+    }
+
+    char path[1024];
+    if (!app_save_path(action.row, path, sizeof(path))) {
+        app_notice(app, "Could not access the save file");
+        return;
+    }
+
+    switch (action.type) {
+    case SAVES_ACTION_SAVE: {
+        if (action.row <= 0 || !storage_make_user_dir()) {
+            return;
+        }
+        const SaveStatus status = save_write(
+            path, &app->match, (int)app->ai_difficulty);
+        app_notice(app, status == SAVE_STATUS_OK
+            ? "Game saved" : save_status_message(status));
+        app_refresh_slots(app);
+        break;
+    }
+    case SAVES_ACTION_LOAD:
+        (void)app_restore_saved(app, path);
+        break;
+    case SAVES_ACTION_DELETE:
+        app->pending_delete_row = action.row;
+        modal_open(&app->modal, MODAL_PURPOSE_DELETE_SAVE);
+        break;
+    case SAVES_ACTION_BACK:
+    case SAVES_ACTION_NONE:
+    default:
+        break;
+    }
+}
+
 static void app_update(App *app, const UiInput *input, float dt)
 {
+    app_update_notice(app, dt);
     if (app->transition.active) {
-        app_update_transition(app, dt);
+        app_update_transition(app, app_motion_dt(app, dt));
         return;
     }
 
     if (modal_is_open(&app->modal)) {
         const ModalAction action = modal_update(&app->modal, input, dt);
         if (action == MODAL_ACTION_CONFIRM) {
+            audio_play(AUDIO_CUE_BUTTON);
             app_handle_modal_confirm(app);
         } else if (action == MODAL_ACTION_CANCEL) {
+            audio_play(AUDIO_CUE_BUTTON);
+            app->pending_delete_row = -1;
             modal_close(&app->modal);
         }
         return;
@@ -780,7 +1344,7 @@ static void app_update(App *app, const UiInput *input, float dt)
     switch (app->screen) {
     case APP_SCREEN_MENU: {
         const MenuAction action = menu_view_update(
-            &app->menu, input, true, dt);
+            &app->menu, input, true, dt, app->has_autosave);
         app_handle_menu_action(app, action);
         break;
     }
@@ -788,10 +1352,13 @@ static void app_update(App *app, const UiInput *input, float dt)
         const SetupAction action = setup_view_update(
             &app->setup_view, input, true, dt);
         if (action == SETUP_ACTION_START) {
+            audio_play(AUDIO_CUE_BUTTON);
             if (app->setup_view.mode == GAME_MODE_PVE) {
                 app->ai_difficulty = app_ai_difficulty_from_setup(
                     app->setup_view.difficulty);
                 app->ai = ai_controller_for_difficulty(app->ai_difficulty);
+                app->settings.default_difficulty = (int)app->ai_difficulty;
+                (void)settings_save(&app->settings);
             }
             MatchConfig config = {
                 .mode = app->setup_view.mode,
@@ -802,6 +1369,7 @@ static void app_update(App *app, const UiInput *input, float dt)
                 app_begin_match(app, &config);
             }
         } else if (action == SETUP_ACTION_BACK) {
+            audio_play(AUDIO_CUE_BUTTON);
             app_request_screen(app, APP_SCREEN_MENU);
         }
         break;
@@ -813,48 +1381,65 @@ static void app_update(App *app, const UiInput *input, float dt)
         const HistoryAction action = history_view_update(
             &app->history_view, &app->match, input, true, dt);
         if (action == HISTORY_ACTION_BACK) {
+            audio_play(AUDIO_CUE_BUTTON);
             app_request_screen(app, APP_SCREEN_GAME);
         }
         break;
     }
     case APP_SCREEN_SETTINGS: {
         const SettingsAction action = settings_view_update(
-            &app->settings_view, input, true, dt,
-            app->settings.animations, app->settings.legal_hints,
-            app->settings.last_move_highlight);
-
-        switch (action) {
-        case SETTINGS_ACTION_TOGGLE_ANIMATIONS:
-            app->settings.animations = !app->settings.animations;
-            break;
-        case SETTINGS_ACTION_TOGGLE_HINTS:
-            app->settings.legal_hints = !app->settings.legal_hints;
-            break;
-        case SETTINGS_ACTION_TOGGLE_LAST_MOVE:
-            app->settings.last_move_highlight =
-                !app->settings.last_move_highlight;
-            break;
-        case SETTINGS_ACTION_BACK:
-            app_request_screen(app, APP_SCREEN_MENU);
-            break;
-        case SETTINGS_ACTION_NONE:
-        default:
-            break;
-        }
+            &app->settings_view, input, true, dt, &app->settings);
+        app_handle_settings_action(app, action);
         break;
     }
     case APP_SCREEN_RESULT: {
+        if (input->save_pressed) {
+            audio_play(AUDIO_CUE_BUTTON);
+            app_open_saves(app, true);
+            break;
+        }
         const ResultAction action = result_view_update(
             &app->result_view, input, true, app->settings.animations,
-            match_can_undo(&app->match), dt);
+            match_can_undo(&app->match), app_motion_dt(app, dt));
         if (action == RESULT_ACTION_PLAY_AGAIN) {
+            audio_play(AUDIO_CUE_BUTTON);
             app_begin_match(app, &app->match.config);
         } else if (action == RESULT_ACTION_UNDO) {
+            audio_play(AUDIO_CUE_BUTTON);
             app->pending_action = PENDING_GAME_UNDO;
             app_request_screen(app, APP_SCREEN_GAME);
+        } else if (action == RESULT_ACTION_SAVE) {
+            audio_play(AUDIO_CUE_BUTTON);
+            app_open_saves(app, true);
         } else if (action == RESULT_ACTION_MENU) {
+            audio_play(AUDIO_CUE_BUTTON);
             app_request_screen(app, APP_SCREEN_MENU);
         }
+        break;
+    }
+    case APP_SCREEN_HELP: {
+        const HelpAction action = help_view_update(
+            &app->help_view, input, true, dt);
+        if (action == HELP_ACTION_BACK) {
+            audio_play(AUDIO_CUE_BUTTON);
+            app_request_screen(app, APP_SCREEN_MENU);
+        }
+        break;
+    }
+    case APP_SCREEN_STATS: {
+        const StatsAction action = stats_view_update(
+            &app->stats_view, input, true, dt);
+        if (action == STATS_ACTION_BACK) {
+            audio_play(AUDIO_CUE_BUTTON);
+            app_request_screen(app, APP_SCREEN_MENU);
+        }
+        break;
+    }
+    case APP_SCREEN_SAVES: {
+        const SavesAction action = saves_view_update(
+            &app->saves_view, input, true, dt, app->saves_saving,
+            app->save_slots);
+        app_handle_saves_action(app, action);
         break;
     }
     }
@@ -882,12 +1467,24 @@ static void app_draw(const App *app)
         history_view_draw(&app->history_view, &app->match, &app->fonts);
         break;
     case APP_SCREEN_SETTINGS:
-        settings_view_draw(&app->settings_view, &app->fonts);
+        settings_view_draw(&app->settings_view, &app->fonts, &app->settings);
         break;
     case APP_SCREEN_RESULT:
         result_view_draw(&app->result_view, &app->fonts, &app->match);
         break;
+    case APP_SCREEN_HELP:
+        help_view_draw(&app->help_view, &app->fonts);
+        break;
+    case APP_SCREEN_STATS:
+        stats_view_draw(&app->stats_view, &app->fonts, &app->stats);
+        break;
+    case APP_SCREEN_SAVES:
+        saves_view_draw(&app->saves_view, &app->fonts, app->saves_saving,
+                        app->save_slots);
+        break;
     }
+
+    app_draw_notice(app);
 
     if (modal_is_open(&app->modal)) {
         modal_draw(&app->modal, &app->fonts);
@@ -959,11 +1556,17 @@ int app_run(int max_frames)
         }
     }
 
+    if (app.screen == APP_SCREEN_GAME) {
+        app_autosave(&app);
+    }
     app_cancel_ai(&app);
     if (app.ai_worker != NULL) {
         ai_worker_destroy(app.ai_worker);
         app.ai_worker = NULL;
     }
+    (void)settings_save(&app.settings);
+    (void)stats_save(&app.stats);
+    audio_shutdown();
     ui_fonts_unload(&app.fonts);
     CloseWindow();
     return 0;

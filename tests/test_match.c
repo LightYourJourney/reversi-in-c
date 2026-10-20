@@ -474,6 +474,76 @@ static void test_pve_redo_branch_end(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
 }
 
+
+static void test_restore_from_moves(TestStats *stats)
+{
+    Match original;
+    const MatchConfig config = pvp_config();
+    REVERSI_TEST_ASSERT(stats, match_start(&original, &config));
+    play_move(stats, &original, (Move){2, 4});
+    play_move(stats, &original, (Move){2, 5});
+    play_move(stats, &original, (Move){3, 5});
+
+    Move moves[REVERSI_HISTORY_MAX_MOVES];
+    const int count = history_position(&original.history);
+    for (int index = 1; index <= count; ++index) {
+        const HistoryEntry *entry = history_entry(&original.history, index);
+        REVERSI_TEST_ASSERT(stats, entry != NULL);
+        const Move move = entry != NULL ? entry->move : (Move){0, 0};
+        moves[index - 1] = move;
+    }
+
+    Match restored;
+    REVERSI_TEST_ASSERT(stats,
+        match_restore(&restored, &config, moves, count));
+    REVERSI_TEST_ASSERT(stats, restored.phase == original.phase);
+    REVERSI_TEST_ASSERT(stats,
+        restored.history.current == original.history.current);
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&restored.state, &original.state));
+
+    Match untouched;
+    REVERSI_TEST_ASSERT(stats, match_start(&untouched, &config));
+    const GameState sentinel = untouched.state;
+    const Move illegal = {0, 0};
+    REVERSI_TEST_ASSERT(stats,
+        !match_restore(&untouched, &config, &illegal, 1));
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&untouched.state, &sentinel));
+    REVERSI_TEST_ASSERT(stats,
+        !match_restore(&untouched, &config, NULL, 1));
+    REVERSI_TEST_ASSERT(stats,
+        !match_restore(&untouched, &config, moves, -1));
+    REVERSI_TEST_ASSERT(stats,
+        !match_restore(&untouched, &config, moves,
+                       REVERSI_HISTORY_MAX_MOVES + 1));
+}
+
+static void test_restore_terminal(TestStats *stats)
+{
+    Match original;
+    const MatchConfig config = pve_config(STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, match_start(&original, &config));
+    REVERSI_TEST_ASSERT(stats, play_to_game_over(stats, &original));
+
+    Move moves[REVERSI_HISTORY_MAX_MOVES];
+    const int count = history_position(&original.history);
+    for (int index = 1; index <= count; ++index) {
+        const HistoryEntry *entry = history_entry(&original.history, index);
+        REVERSI_TEST_ASSERT(stats, entry != NULL);
+        const Move move = entry != NULL ? entry->move : (Move){0, 0};
+        moves[index - 1] = move;
+    }
+
+    Match restored;
+    REVERSI_TEST_ASSERT(stats,
+        match_restore(&restored, &config, moves, count));
+    REVERSI_TEST_ASSERT(stats, restored.phase == MATCH_PHASE_GAME_OVER);
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&restored.state, &original.state));
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&restored));
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -487,6 +557,8 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_ai_thinking_phase);
     REVERSI_RUN_TEST(&stats, test_pve_redo_branch_end);
     REVERSI_RUN_TEST(&stats, test_terminal_without_full_board);
+    REVERSI_RUN_TEST(&stats, test_restore_from_moves);
+    REVERSI_RUN_TEST(&stats, test_restore_terminal);
 
     return reversi_test_summary(&stats, "core.match");
 }

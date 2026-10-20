@@ -2,12 +2,14 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前状态：Phase 4（AI 与难度）已完成。**
+> **当前状态：Phase 5（产品化功能）已完成。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
-> Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结，
-> 新对局、撤销、重开、返回菜单与退出都会取消旧搜索。
-> 三档 AI 均只返回合法着法，真实对局基准与结果见
-> [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
+> Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
+> 存档/自动保存、继续上次对局、设置持久化、统计、规则帮助、程序化音效与
+> 运行时明暗主题均已接入。存档使用带版本号、校验和与原子写入的文本格式，
+> 损坏或不兼容文件会被安全拒绝。
+> Phase 4 的 AI 基准见 [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)；
+> Phase 5 的验证记录见 [docs/PHASE_5_REPORT.md](docs/PHASE_5_REPORT.md)。
 > 详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ## 技术栈
@@ -21,11 +23,12 @@
 
 - **规则层不依赖图形库**：`core/` 只使用 C 标准库，可在无窗口环境下测试。
 - **AI 不接触 UI**：AI 只读取对局快照并返回落子，最终仍由规则层校验。
-- **依赖单向**：`main -> app -> {ui, ai, core}`，`ui -> raylib`；
-  不存在反向依赖。
+- **依赖单向**：`main -> app -> {ui, ai, storage, settings, audio, core}`；
+  `settings -> storage -> core`，`audio/ui -> raylib`；不存在反向依赖。
 - **对局状态只有一条写路径**：棋盘只能经 `match_apply_move()` 改动，
   它内部调用规则层并记录历史；UI 不接触 `Board` 的可写接口。
-- **无隐式工作目录**：构建后资源复制到可执行文件旁，运行时不依赖源码目录。
+- **无隐式工作目录**：构建后字体资源复制到可执行文件旁；用户设置、统计与存档
+  写入操作系统规定的用户数据目录，而不是程序安装目录。
 - **严格警告**：第一方代码启用 `-Wall -Wextra -Wpedantic -Wshadow` 等检查。
 
 ## 目录结构
@@ -47,19 +50,28 @@
 │   │   ├── ai_search.[ch] Negamax、Alpha-Beta、迭代加深、置换表
 │   │   └── ai_worker.[ch] 后台搜索线程、快照、取消与结果回收
 │   ├── ui/
-│   │   ├── theme.h       颜色、字号、间距、圆角与时长令牌
+│   │   ├── theme.[ch]    运行时明暗主题、字号、间距、圆角与时长令牌
 │   │   ├── draw.[ch]     圆角面板、文字、按钮状态、程序化棋子
 │   │   ├── fonts.[ch]    Inter 字体加载、HiDPI 缩放与回退
 │   │   ├── animation.[ch] 落子/翻转动画（仅影响渲染）
 │   │   ├── board_view.[ch] 棋盘、坐标、合法提示、最后一步
-│   │   ├── menu_view.[ch] 主菜单
+│   │   ├── menu_view.[ch] 主菜单（继续/新游戏/读档/帮助/统计/设置）
 │   │   ├── setup_view.[ch] 新游戏页（模式与颜色选择）
 │   │   ├── game_view.[ch] 对局页、操作按钮与响应式布局
-│   │   ├── pause_view.[ch] 暂停浮层
+│   │   ├── pause_view.[ch] 暂停浮层（含保存）
 │   │   ├── history_view.[ch] 着法历史列表
-│   │   ├── settings_view.[ch] 设置页
-│   │   ├── result_view.[ch] 结算页
-│   │   └── modal.[ch]    退出/重开/返回确认
+│   │   ├── settings_view.[ch] 设置页（持久化）
+│   │   ├── result_view.[ch] 结算页（含保存）
+│   │   ├── help_view.[ch] 规则与操作说明
+│   │   ├── stats_view.[ch] 对局统计
+│   │   ├── saves_view.[ch] 存档槽位管理
+│   │   └── modal.[ch]    退出/重开/返回/删除确认
+│   ├── storage/
+│   │   ├── storage.[ch]  用户数据目录、原子读写
+│   │   ├── save.[ch]     版本化存档、校验和、严格回放校验
+│   │   └── stats.[ch]    统计记录与持久化
+│   ├── settings/settings.[ch] 用户设置与持久化
+│   ├── audio/audio.[ch]  程序化落子/翻转/按钮/胜负音效
 │   └── app/app.[ch]      页面路由、转场与主循环
 ├── tests/
 │   ├── test_harness.h    极简测试断言
@@ -75,7 +87,12 @@
 │   ├── test_ai_worker.c  ai.worker 测试（快照、取消、生命周期）
 │   ├── bench_ai.c        AI 基准（对局、节点/剪枝/耗时、局面探针）
 │   ├── test_ui_button.c  按钮悬停/按下/释放/禁用测试
-│   └── test_ui_helpers.c 缓动/颜色、命中、各视图输入、动画插值测试
+│   ├── test_ui_helpers.c 缓动/颜色、命中、各视图输入、动画插值测试
+│   ├── test_ui_views.c   主题、菜单、设置、存档、帮助、统计视图动作测试
+│   ├── test_save.c       存档往返、损坏/版本/状态校验、原子覆盖
+│   ├── test_settings.c   设置往返与损坏文件回退
+│   ├── test_stats.c      统计记录、往返与非法数据拒绝
+│   └── test_audio.c      无音频设备时的安全降级
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── ROADMAP.md        分阶段交付计划
@@ -83,14 +100,15 @@
 │   ├── PHASE_1_REPORT.md Phase 1 完成报告
 │   ├── PHASE_2_REPORT.md Phase 2 完成报告
 │   ├── PHASE_3_REPORT.md Phase 3 完成报告
-│   └── PHASE_4_REPORT.md Phase 4 完成报告（含 AI 基准结果）
+│   ├── PHASE_4_REPORT.md Phase 4 完成报告（含 AI 基准结果）
+│   └── PHASE_5_REPORT.md Phase 5 完成报告（存档、设置、音效与 UI 审查）
 ├── assets/
 │   └── fonts/            Inter 4.1（SIL OFL 1.1）
 └── LICENSE              GPL-3.0
 ```
 
-`storage/`、`settings/` 等目录会在对应阶段拥有真实实现后再创建，
-避免出现无意义的空目录。理由见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+`storage/settings` 均不依赖 UI；存档与统计只通过 `storage` 提供的路径与
+原子写入访问文件系统，规则层仍然只使用 C 标准库。
 
 ## 规则引擎与对局流程
 
@@ -132,8 +150,9 @@
 
 ```text
 AppScreen:  MainMenu → GameSetup → Game → History ─┐
-                                     ↑              │
-                                  Settings / Result ┘
+                 │       ↑              │              │
+                 ├→ Help / Stats / Saves / Settings   │
+                 └────────────── Result ←─────────────┘
 
 MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬─> PLAYER_TURN
                  │      ↑                              ├─> PASSING_TURN ──> PLAYER_TURN
@@ -152,8 +171,8 @@ MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬�
 
 ## 图形界面与交互
 
-- **页面**：主菜单、新游戏、对局、历史、设置、结算；退出、重开与返回菜单
-  使用模态确认。
+- **页面**：主菜单、新游戏、对局、历史、设置、结算、帮助、统计、存档管理；
+  退出、重开、返回菜单与删除存档使用模态确认。
 - **新游戏页**：模式（Local / Computer）、先手颜色与 AI 难度（Easy / Medium /
   Hard）；难度只在 Computer 模式可选。AI 控制器不可用时 Computer、颜色与
   难度按钮禁用，并显示原因。
@@ -166,21 +185,32 @@ MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬�
   Main menu），窄窗口使用上下信息栏与底部五按钮操作栏。
 - **自动跳过**：对手无子可下时显示 “X has no legal moves / Turn passed to Y”
   浮层，约 0.9 秒后自动继续；期间棋盘输入被禁用，Esc/P 立即跳过提示并暂停。
-- **暂停**：Esc 或 P 打开浮层，提供 Resume / History / Restart / Main menu；
-  继续后回到暂停前的阶段。
+- **暂停**：Esc 或 P 打开浮层，提供 Resume / Save game / History / Restart /
+  Main menu；继续后回到暂停前的阶段。
 - **历史**：显示每一步的序号、落子方、记谱、翻转数与跳过标记；当前局面
   高亮为 CURRENT，撤销后可重做的行标记为 REDO 并置灰；支持滚轮与上下键滚动。
 - **撤销/重做**：本地双人撤销一步；人机模式撤销到玩家上一个决策点（搜索中
   撤销会先取消 AI 搜索）。新落子会丢弃重做分支。
 - **操作**：鼠标悬停/点击；方向键移动棋盘光标、Enter/Space 落子；
-  `R` 重开、`M` 返回菜单、`P`/`Esc` 暂停、`H` 查看历史；
-  `Ctrl/Cmd+Z` 撤销、`Ctrl/Cmd+Shift+Z` 或 `Ctrl/Cmd+Y` 重做；
-  各页面按钮支持方向键 + Enter，模态支持 Enter/Esc；所有按钮均支持鼠标操作。
+  `U`/`Ctrl/Cmd+Z` 撤销，`Y`/`Ctrl/Cmd+Shift+Z`/`Ctrl/Cmd+Y` 重做；
+  `R` 重开、`M` 返回菜单、`P`/`Esc` 暂停、`H` 查看历史、
+  `Ctrl/Cmd+S` 保存当前对局；各页面按钮支持方向键 + Enter，模态支持
+  Enter/Esc；所有按钮均支持鼠标操作。
 - **反馈**：非法落点红色闪框；落子缩放、翻转与最后一步动画只影响渲染，
   不修改 `Match`；落子动画期间棋盘与操作按钮均被禁用。动画中按 Esc/P 会
   立即结束动画并暂停；按 M/R 则立即结束动画并打开对应的返回/重开确认框。
-- **设置（内存内，尚未持久化）**：动画、合法着法提示、最后一步高亮开关。
-  Animations 同时控制落子/翻转、页面转场、模态/结算淡入与按钮缓动。
+- **设置（持久化）**：动画、动画速度、合法着法提示、最后一步高亮、音效开关、
+  音量、默认 AI 难度与明暗主题。设置修改后原子写入用户数据目录，重启后恢复。
+  Animations 关闭同时作为“减少动效”选项；动画速度影响落子/翻转、结算出现与
+  页面转场。
+- **存档**：每次稳定落子后自动保存；暂停菜单/结算页可保存到 3 个手动槽位；
+  主菜单“继续”读取自动存档，“读取游戏”可加载或删除任意槽位。读档通过回放
+  着法重建历史，严格校验版本、校验和、棋盘/回合/结果与每步合法性。
+- **帮助与统计**：三页规则/操作说明；统计页显示总对局、人机 W/D/L、
+  本地双人局数与平局数，以及 Easy/Medium/Hard 分难度战绩。只有真正完成的对局
+  才计数，同一局不会重复计数。
+- **音效**：落子、翻转、按钮、胜利/失败/平局提示均由运行时代码合成，不依赖
+  外部音频文件；没有可用音频设备时静默降级。
 - **布局**：最小窗口 760×600，支持任意缩放；宽/窄两套布局；HiDPI 按显示器
   缩放加载字体；超长状态文本使用裁剪区域。
 - **字体**：内置 Inter 4.1 Regular/SemiBold（SIL OFL 1.1）。资源缺失时自动
@@ -195,6 +225,10 @@ REVERSI_AUTOPLAY=7 ./build/bin/reversi
 
 # 启用 F12 窗口截图，写入指定目录
 REVERSI_SHOT_DIR=/tmp/reversi-shots ./build/bin/reversi
+
+# 直接打开某个页面做视觉核对（仅 Debug）
+REVERSI_START_SCREEN=settings ./build/bin/reversi
+# 可选：menu / setup / game（读取自动存档）/ settings / help / stats / saves
 ```
 
 ## 构建
@@ -306,27 +340,34 @@ ctest --test-dir build --output-on-failure
   校验每步，并检查棋子占用数、总数与终局不变量
 - `core.history`：124 项断言；快照初始化、撤销/重做完整恢复、新落子截断重做
   分支、跳过事件与终局恢复、容量与空指针
-- `core.match`：701 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
-  从暂停/终局重开、撤销/重做恢复一致性、模式切换、AI_THINKING 与人机撤销
+- `core.match`：974 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
+  从暂停/终局重开、撤销/重做恢复一致性、模式切换、AI_THINKING、人机撤销、
+  从着法序列恢复（含终局恢复、非法序列与越界计数拒绝）
 - `ai.core`：约 2,970 项断言；配置/名称、评估分量与难度化评估、大量局面的
   合法性、TT 与无 TT 搜索一致性、单步与 pass 局面、取消与确定性，以及
   6 局固定深度人机对局 + 1 局使用实际 Hard 参数（深度 10 / 500 ms）的完整对局
 - `ai.worker`：22 项断言；后台搜索、状态快照隔离、取消、空指针与生命周期
+- `storage.save`：75 项断言；往返、覆盖写入、缺失/截断/错误版本/错误校验和/
+  非法着法/棋盘或回合不匹配/越界坐标拒绝、残留临时文件不影响读取
+- `storage.settings`：39 项断言；默认值、往返、损坏头/越界值/非法布尔拒绝、
+  未知键向前兼容
+- `storage.stats`：32 项断言；PVE/PVP 记录、人机视角胜负、往返、非法汇总拒绝
+- `audio.noop`：2 项断言；未初始化设备时所有音效调用为安全空操作
+- `ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
+  悬停、按下、释放、移出取消、禁用、输入阻断与 reduced-motion 语义。
+- `ui.helpers`（182 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、显示名称/
+  终局标题（含 PvE “You win/Computer wins”）、焦点跳转、对局输入门控、
+  AI_THINKING 门控、新游戏难度选择、各视图的键盘与鼠标动作，以及动画插值。
+- `ui.views`（32 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
+  存档槽位保存/加载/删除、帮助翻页与统计页返回。
 
-`ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
-悬停、按下、释放、移出取消、禁用、输入阻断与 reduced-motion 语义。
-`ui.helpers`（175 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、显示名称/
-终局标题、焦点跳转、对局输入门控、AI_THINKING 门控、新游戏难度选择、
-各视图（新游戏/暂停/历史/结算）的键盘与鼠标动作，以及落子/翻转/跳过动画
-插值，并确认动画不修改棋盘快照。
-
-实际结果（2026-10-21，macOS arm64，Phase 4 审查修复后）：
+实际结果（2026-10-21，macOS arm64，Phase 5）：
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug | 11/11，含 `app.smoke` |
-| Release | 10/10 无 GUI 测试通过 |
-| ASan+UBSan | 10/10 无 GUI 测试通过，无 Sanitizer 报告 |
+| Debug | 15/15 无 GUI 测试通过；`app.smoke` 在本阶段显示可用时曾通过 |
+| Release | 15/15 无 GUI 测试通过 |
+| ASan+UBSan | 15/15 无 GUI 测试通过，无 Sanitizer 报告 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
@@ -362,7 +403,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 11/11（含 GUI 冒烟）、Release 10/10、ASan+UBSan 10/10 已实际验证（2026-10-21）；Phase 3/4 界面在 1100×800/1100×832（HiDPI 2×）下完成截图与真实鼠标验证 |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 15/15、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；Phase 5 主要页面完成截图核对；输入注入受当前图形会话限制，详见 Phase 5 报告 |
 | Windows | 未验证 |
 | Linux | 未验证 |
 
@@ -375,8 +416,17 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
   `-Wtautological-compare` 警告。它不属于第一方代码，也不影响构建结果。
 - 在 macOS 上配置阶段，raylib 自身会打印一条关于 OpenGL 已废弃的
   developer warning；这是 raylib 6.2 的既有提示。
-- 设置项当前只保存在内存中，重启后恢复默认；持久化计划在 Phase 5 实现。
-- 存档/读档计划在 Phase 5 落地。
+- 用户数据目录：macOS `~/Library/Application Support/Reversi`，
+  Linux `$XDG_DATA_HOME/reversi`（或 `~/.local/share/reversi`），
+  Windows `%APPDATA%\Reversi`。设置、统计与存档均写入该目录。
+- 存档只保存当前撤销分支；撤销后尚未重做的“未来”分支不会写入文件。
+- 当前会话的图形输入注入受限（鼠标移动可见，但按键/点击未送达应用），
+  因此 Phase 5 的读档/设置恢复通过应用启动路径与截图核对，未完成逐按钮
+  人工点击；相关动作由 `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
+- 音效设备初始化成功且音效加载无警告，但**未进行人工听感验证**；
+  无音频设备路径由 `audio.noop` 与代码降级分支覆盖。
+- 760×600 最小窗口的 Phase 5 新页面按布局常量核对，未逐页截图；
+  Windows/Linux 仍未实机验证。
 - Phase 4 界面已实际验证：难度与颜色选择、人机执黑/执白、思考提示、
   AI 自动落子、思考中撤销、重做后重新搜索、重开与确认框取消。
   完整人机对局到结算页、人机自动跳过提示、思考中关闭窗口这三项**未人工验证**；
@@ -398,6 +448,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 - [Phase 2 报告](docs/PHASE_2_REPORT.md)
 - [Phase 3 报告](docs/PHASE_3_REPORT.md)
 - [Phase 4 报告](docs/PHASE_4_REPORT.md)
+- [Phase 5 报告](docs/PHASE_5_REPORT.md)
 
 ## 许可证
 

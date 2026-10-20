@@ -3,24 +3,28 @@
 
 #include "ui/draw.h"
 
+#define REVERSI_MENU_BUTTON_COUNT 7
+
 typedef enum MenuAction {
     MENU_ACTION_NONE = 0,
+    MENU_ACTION_CONTINUE,
     MENU_ACTION_PLAY,
+    MENU_ACTION_LOAD,
+    MENU_ACTION_HELP,
+    MENU_ACTION_STATS,
     MENU_ACTION_SETTINGS,
     MENU_ACTION_QUIT
 } MenuAction;
 
 typedef struct MenuView {
-    UiButton play;
-    UiButton settings;
-    UiButton quit;
+    UiButton buttons[REVERSI_MENU_BUTTON_COUNT];
     int focus;
     bool focus_visible;
 } MenuView;
 
 void menu_view_init(MenuView *view);
 MenuAction menu_view_update(MenuView *view, const UiInput *input,
-                            bool accept_input, float dt);
+                            bool accept_input, float dt, bool has_continue);
 void menu_view_draw(const MenuView *view, const UiFonts *fonts);
 
 #endif

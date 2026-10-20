@@ -352,7 +352,7 @@ static void draw_turn_card(const UiFonts *fonts, Rectangle card,
     const Vector2 center = {
         card.x + 30.0f, card.y + card.height * 0.5f
     };
-    const char *title = ui_result_title(match->state.result);
+    const char *title = ui_match_result_title(match);
     char text[48];
     if (title != NULL) {
         draw_result_discs(center, match->state.result);
@@ -474,7 +474,7 @@ static void draw_compact_bar(const UiFonts *fonts, const GameLayout *layout,
     const Vector2 center = {
         top.x + 32.0f, top.y + top.height * 0.5f
     };
-    const char *title = ui_result_title(match->state.result);
+    const char *title = ui_match_result_title(match);
     char turn[48];
     if (title != NULL) {
         draw_result_discs(center, match->state.result);

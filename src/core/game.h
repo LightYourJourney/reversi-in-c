@@ -56,4 +56,7 @@ bool game_must_pass(const GameState *state);
  */
 bool game_is_consistent(const GameState *state);
 
+/* Board, current player and result equality. NULL only equals NULL. */
+bool game_state_equal(const GameState *a, const GameState *b);
+
 #endif

@@ -134,8 +134,8 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Project targets. Dependencies point downwards only:
-#   main -> app -> ui -> raylib
-#                 -> core
+#   main -> app -> {ui, ai, persistence, audio}
+#   ui -> raylib; audio -> raylib; persistence -> core
 # ---------------------------------------------------------------------------
 add_library(reversi_core STATIC
     src/core/board.c
@@ -156,19 +156,45 @@ target_link_libraries(reversi_ai
     PUBLIC reversi_core
     PRIVATE reversi_warnings Threads::Threads)
 
+add_library(reversi_persistence STATIC
+    src/storage/storage.c
+    src/storage/save.c
+    src/storage/stats.c
+    src/settings/settings.c)
+target_include_directories(reversi_persistence PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(reversi_persistence
+    PUBLIC reversi_core
+    PRIVATE reversi_warnings)
+
+add_library(reversi_audio STATIC
+    src/audio/audio.c)
+target_include_directories(reversi_audio PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(reversi_audio
+    PUBLIC ${REVERSI_RAYLIB_TARGET}
+    PRIVATE reversi_warnings)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(reversi_audio PUBLIC m)
+endif()
+
 add_library(reversi_ui STATIC
     src/ui/animation.c
     src/ui/board_view.c
     src/ui/draw.c
     src/ui/fonts.c
     src/ui/game_view.c
+    src/ui/help_view.c
     src/ui/history_view.c
     src/ui/menu_view.c
     src/ui/modal.c
     src/ui/pause_view.c
     src/ui/result_view.c
+    src/ui/saves_view.c
     src/ui/settings_view.c
-    src/ui/setup_view.c)
+    src/ui/setup_view.c
+    src/ui/stats_view.c
+    src/ui/theme.c)
 target_include_directories(reversi_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_ui
     PUBLIC ${REVERSI_RAYLIB_TARGET}
@@ -181,7 +207,8 @@ add_library(reversi_app STATIC
     src/app/app.c)
 target_include_directories(reversi_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_app
-    PUBLIC reversi_core reversi_ui reversi_ai
+    PUBLIC reversi_core reversi_ui reversi_ai reversi_persistence
+           reversi_audio
     PRIVATE reversi_warnings)
 
 add_executable(reversi src/main.c)
@@ -226,6 +253,32 @@ function(reversi_add_ui_test target source test_name)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endfunction()
 
+function(reversi_add_persistence_test target source test_name)
+    add_executable(${target} ${source})
+    target_include_directories(${target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(${target} PRIVATE
+        reversi_persistence reversi_warnings)
+
+    add_test(NAME ${test_name} COMMAND ${target})
+    set_tests_properties(${test_name} PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+endfunction()
+
+function(reversi_add_audio_test target source test_name)
+    add_executable(${target} ${source})
+    target_include_directories(${target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(${target} PRIVATE
+        reversi_audio reversi_warnings)
+
+    add_test(NAME ${test_name} COMMAND ${target})
+    set_tests_properties(${test_name} PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+endfunction()
+
 function(reversi_add_ai_test target source test_name)
     add_executable(${target} ${source})
     target_include_directories(${target} PRIVATE
@@ -254,12 +307,22 @@ if(REVERSI_BUILD_TESTS)
     reversi_add_ai_test(reversi_ai_tests tests/test_ai.c ai.core)
     reversi_add_ai_test(reversi_ai_worker_tests tests/test_ai_worker.c
         ai.worker)
+    reversi_add_persistence_test(reversi_save_tests tests/test_save.c
+        storage.save)
+    reversi_add_persistence_test(reversi_settings_tests tests/test_settings.c
+        storage.settings)
+    reversi_add_persistence_test(reversi_stats_tests tests/test_stats.c
+        storage.stats)
+    reversi_add_audio_test(reversi_audio_tests tests/test_audio.c
+        audio.noop)
 
     # UI logic tests use synthetic input and create no window.
     reversi_add_ui_test(reversi_ui_button_tests
         tests/test_ui_button.c ui.button)
     reversi_add_ui_test(reversi_ui_helper_tests
         tests/test_ui_helpers.c ui.helpers)
+    reversi_add_ui_test(reversi_ui_views_tests
+        tests/test_ui_views.c ui.views)
 
     # Benchmark tool: not registered with CTest (it runs many full games).
     add_executable(reversi_ai_bench tests/bench_ai.c)
@@ -275,6 +338,8 @@ if(REVERSI_BUILD_TESTS)
         add_test(NAME app.smoke COMMAND reversi --frames 2)
         set_tests_properties(app.smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            ENVIRONMENT
+                "HOME=${CMAKE_BINARY_DIR}/test-home;XDG_DATA_HOME=${CMAKE_BINARY_DIR}/test-home;APPDATA=${CMAKE_BINARY_DIR}/test-home"
             LABELS "gui"
             TIMEOUT 30)
     endif()

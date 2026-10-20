@@ -140,3 +140,21 @@ bool game_is_consistent(const GameState *state)
 
     return state->result == result_from_counts(&state->board);
 }
+
+bool game_state_equal(const GameState *a, const GameState *b)
+{
+    if (a == NULL || b == NULL) {
+        return a == b;
+    }
+    if (a->current_player != b->current_player || a->result != b->result) {
+        return false;
+    }
+    for (int row = 0; row < REVERSI_BOARD_SIZE; ++row) {
+        for (int col = 0; col < REVERSI_BOARD_SIZE; ++col) {
+            if (a->board.cells[row][col] != b->board.cells[row][col]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}

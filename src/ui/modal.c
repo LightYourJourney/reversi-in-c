@@ -50,13 +50,16 @@ static ModalText modal_texts(ModalPurpose purpose)
     switch (purpose) {
     case MODAL_PURPOSE_QUIT:
         return (ModalText){"Quit Reversi?",
-                           "Your current game will close.", "Quit"};
+                           "Saved games and settings stay on this device.", "Quit"};
     case MODAL_PURPOSE_RESTART:
         return (ModalText){"Restart this game?",
                            "The current board will be reset.", "Restart"};
     case MODAL_PURPOSE_RETURN_MENU:
         return (ModalText){"Return to main menu?",
-                           "The current game will be lost.", "Leave"};
+                           "Your game is saved; continue from the menu.", "Leave"};
+    case MODAL_PURPOSE_DELETE_SAVE:
+        return (ModalText){"Delete this save?",
+                           "This cannot be undone.", "Delete"};
     default:
         return (ModalText){"", "", "Confirm"};
     }

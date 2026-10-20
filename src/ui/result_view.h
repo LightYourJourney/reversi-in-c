@@ -8,12 +8,14 @@ typedef enum ResultAction {
     RESULT_ACTION_NONE = 0,
     RESULT_ACTION_PLAY_AGAIN,
     RESULT_ACTION_UNDO,
+    RESULT_ACTION_SAVE,
     RESULT_ACTION_MENU
 } ResultAction;
 
 typedef struct ResultView {
     UiButton again;
     UiButton undo;
+    UiButton save;
     UiButton menu;
     int focus;
     bool focus_visible;

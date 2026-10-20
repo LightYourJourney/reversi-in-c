@@ -96,6 +96,21 @@ const char *ui_result_title(GameResult result)
     }
 }
 
+const char *ui_match_result_title(const Match *match)
+{
+    if (match == NULL || match->state.result == GAME_RESULT_ONGOING) {
+        return NULL;
+    }
+    if (match->config.mode == GAME_MODE_PVE
+        && match->state.result != GAME_RESULT_DRAW) {
+        const Stone winner = match->state.result == GAME_RESULT_BLACK_WIN
+            ? STONE_BLACK : STONE_WHITE;
+        return winner == match->config.human_color
+            ? "You win" : "Computer wins";
+    }
+    return ui_result_title(match->state.result);
+}
+
 int ui_focus_step(int focus, int direction, int count,
                   unsigned disabled_mask)
 {

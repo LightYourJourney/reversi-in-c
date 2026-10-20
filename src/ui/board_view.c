@@ -139,7 +139,7 @@ void board_view_draw(const GameState *game, Rectangle board, float cell,
         highlight.width -= 4.0f;
         highlight.height -= 4.0f;
         ui_draw_rounded_rect(highlight, 8.0f,
-                             ui_color_alpha(REVERSI_UI_COLOR_ACCENT,
+                             ui_color_alpha(REVERSI_UI_COLOR_HINT,
                                             REVERSI_UI_ALPHA_LAST_MOVE));
     }
 
@@ -150,7 +150,7 @@ void board_view_draw(const GameState *game, Rectangle board, float cell,
                 if (board_view_cell_is_legal(game, row, col)) {
                     const Vector2 center = cell_center(board, cell, row, col);
                     DrawCircleV(center, dot_radius,
-                                ui_color_alpha(REVERSI_UI_COLOR_ACCENT,
+                                ui_color_alpha(REVERSI_UI_COLOR_HINT,
                                                REVERSI_UI_ALPHA_HINT));
                 }
             }
@@ -185,7 +185,7 @@ void board_view_draw(const GameState *game, Rectangle board, float cell,
         const float pulse = animations
             ? 0.58f + 0.20f * sinf(last_move_age * 5.0f) : 0.58f;
         ui_draw_ring(center, cell * 0.44f, fmaxf(2.0f, cell * 0.035f),
-                     ui_color_alpha(REVERSI_UI_COLOR_ACCENT,
+                     ui_color_alpha(REVERSI_UI_COLOR_HINT,
                                     ui_clamp01(pulse)));
     }
 
@@ -209,7 +209,7 @@ void board_view_draw(const GameState *game, Rectangle board, float cell,
         outline.height -= 6.0f;
         ui_draw_rounded_outline(
             outline, 7.0f, 2.0f,
-            ui_color_alpha(legal ? REVERSI_UI_COLOR_ACCENT
+            ui_color_alpha(legal ? REVERSI_UI_COLOR_HINT
                                  : REVERSI_UI_COLOR_TEXT,
                            legal ? REVERSI_UI_ALPHA_CURSOR_LEGAL
                                  : REVERSI_UI_ALPHA_CURSOR_IDLE));
