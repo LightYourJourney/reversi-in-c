@@ -70,20 +70,6 @@ const char *ai_difficulty_name(AiDifficulty difficulty)
     }
 }
 
-const char *ai_phase_name(AiPhase phase)
-{
-    switch (phase) {
-    case AI_PHASE_OPENING:
-        return "Opening";
-    case AI_PHASE_MIDGAME:
-        return "Midgame";
-    case AI_PHASE_ENDGAME:
-        return "Endgame";
-    default:
-        return "Unknown";
-    }
-}
-
 bool ai_choose_move(const GameState *state, const AiConfig *config,
                     Move *out_move, AiStats *out_stats)
 {
@@ -138,6 +124,10 @@ static bool hard_select(void *context, const GameState *state,
     return ai_choose_move(state, &config, out_move, NULL);
 }
 
+/*
+ * Synchronous controllers are the Match boundary (MatchConfig.ai). The app's
+ * PvE path uses AiWorker + ai_choose_move() with its own config and seed.
+ */
 static const AiController AI_CONTROLLERS[3] = {
     { "Easy", easy_select, NULL },
     { "Medium", medium_select, NULL },

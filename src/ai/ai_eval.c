@@ -1,14 +1,15 @@
 #include "ai/ai.h"
 
+#include "ai/ai_internal.h"
 #include "core/rules.h"
 
 #include <stddef.h>
 
 /*
  * Positional table for non-corner squares. Corners are scored separately so
- * they are not counted twice. X-squares (-25) and C-squares (-50) are
- * deliberately expensive while the adjacent corner is still empty; the table
- * is static and symmetric.
+ * they are not counted twice. Edge squares encode immediate shape (X/C risks
+ * and edge control); stability is a separate, durable-ownership measure, so
+ * an edge disc may contribute to both for different reasons.
  */
 static const int AI_POSITIONAL[REVERSI_BOARD_SIZE][REVERSI_BOARD_SIZE] = {
     {  0, -25,  10,   5,   5,  10, -25,   0 },
@@ -42,8 +43,6 @@ static const AiWeights AI_WEIGHTS[3] = {
     { 120, 25, 12, 10, 14, 10,  2, 2 }, /* midgame */
     { 140,  8,  5,  8, 18,  6, 12, 0 }  /* endgame */
 };
-
-static const int AI_TERMINAL_WIN = 100000;
 
 static bool is_corner(int row, int col)
 {
@@ -176,7 +175,10 @@ static int potential_mobility_count(const Board *board, Stone player)
                     if (dr == 0 && dc == 0) {
                         continue;
                     }
-                    if (board_get(board, row + dr, col + dc) == opponent) {
+                    const int nr = row + dr;
+                    const int nc = col + dc;
+                    if (board_in_bounds(nr, nc)
+                        && board_get(board, nr, nc) == opponent) {
                         adjacent = true;
                         break;
                     }
@@ -244,10 +246,12 @@ int ai_terminal_score(const GameState *state)
     const bool current_is_black = state->current_player == STONE_BLACK;
     const bool current_wins = current_is_black ? black > white : white > black;
     const int difference = current_is_black ? black - white : white - black;
-    return (current_wins ? AI_TERMINAL_WIN : -AI_TERMINAL_WIN) + difference;
+    return (current_wins ? REVERSI_AI_TERMINAL_WIN
+                         : -REVERSI_AI_TERMINAL_WIN) + difference;
 }
 
-void ai_evaluate(const GameState *state, AiEvaluation *out)
+static void evaluate_impl(const GameState *state, bool full,
+                          AiEvaluation *out)
 {
     if (out == NULL) {
         return;
@@ -281,12 +285,26 @@ void ai_evaluate(const GameState *state, AiEvaluation *out)
     out->discs = (own == STONE_BLACK ? black - white : white - black);
     out->parity = (empty % 2 == 1) ? 1 : -1;
 
-    out->total = weights->corners * out->corners
+    int total = weights->corners * out->corners
         + weights->mobility * out->mobility
         + weights->potential * out->potential_mobility
         + weights->positional * out->positional
-        + weights->stability * out->stability
-        + weights->frontier * out->frontier
-        + weights->discs * out->discs
-        + weights->parity * out->parity;
+        + weights->discs * out->discs;
+    if (full) {
+        total += weights->stability * out->stability
+            + weights->frontier * out->frontier
+            + weights->parity * out->parity;
+    }
+    out->total = total;
+}
+
+void ai_evaluate(const GameState *state, AiEvaluation *out)
+{
+    evaluate_impl(state, true, out);
+}
+
+void ai_evaluate_for_difficulty(const GameState *state,
+                                AiDifficulty difficulty, AiEvaluation *out)
+{
+    evaluate_impl(state, difficulty == AI_DIFFICULTY_HARD, out);
 }

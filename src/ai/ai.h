@@ -72,8 +72,20 @@ bool ai_config_is_valid(const AiConfig *config);
 /*
  * Evaluates the position for the side to move. ai_is_terminal() reports
  * whether neither side has a legal move; terminal scores are exact.
+ * ai_evaluate() uses the full component set; ai_evaluate_for_difficulty()
+ * applies the difficulty's component set (below).
  */
 void ai_evaluate(const GameState *state, AiEvaluation *out);
+
+/*
+ * Difficulty-specific evaluation. Easy and Medium use the basic components
+ * (corners, mobility, potential mobility, positional, discs); Hard adds
+ * stability, frontier and parity. The component fields are always populated;
+ * only the total excludes the advanced components at lower difficulties.
+ */
+void ai_evaluate_for_difficulty(const GameState *state,
+                                AiDifficulty difficulty, AiEvaluation *out);
+
 bool ai_is_terminal(const GameState *state);
 int ai_terminal_score(const GameState *state);
 
@@ -81,7 +93,6 @@ int ai_terminal_score(const GameState *state);
 int ai_positional_value(int row, int col);
 
 const char *ai_difficulty_name(AiDifficulty difficulty);
-const char *ai_phase_name(AiPhase phase);
 
 /*
  * Chooses a move for the side to move. Never returns an illegal move: the

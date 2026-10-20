@@ -21,7 +21,8 @@
 
 - **规则层不依赖图形库**：`core/` 只使用 C 标准库，可在无窗口环境下测试。
 - **AI 不接触 UI**：AI 只读取对局快照并返回落子，最终仍由规则层校验。
-- **依赖单向**：`main -> app -> ui -> raylib`，`app -> core`；不存在反向依赖。
+- **依赖单向**：`main -> app -> {ui, ai, core}`，`ui -> raylib`；
+  不存在反向依赖。
 - **对局状态只有一条写路径**：棋盘只能经 `match_apply_move()` 改动，
   它内部调用规则层并记录历史；UI 不接触 `Board` 的可写接口。
 - **无隐式工作目录**：构建后资源复制到可执行文件旁，运行时不依赖源码目录。
@@ -70,7 +71,7 @@
 │   ├── test_random_games.c 随机合法对局测试
 │   ├── test_history.c    core.history 测试
 │   ├── test_match.c      core.match 测试
-│   ├── test_ai.c         core.ai 测试（评估、搜索、PvE 完整对局）
+│   ├── test_ai.c         ai.core 测试（评估、搜索、PvE 完整对局）
 │   ├── test_ai_worker.c  ai.worker 测试（快照、取消、生命周期）
 │   ├── bench_ai.c        AI 基准（对局、节点/剪枝/耗时、局面探针）
 │   ├── test_ui_button.c  按钮悬停/按下/释放/禁用测试
@@ -109,15 +110,20 @@
 - **搜索**：Negamax + Alpha-Beta，显式 pass 节点，双方无着法时返回精确终局分；
   迭代加深、时间预算、取消回调、置换表（Hard）与着法排序。
 - **评估**：角点、机动性、潜在机动性、位置权重、边稳定子、前沿子、棋子数与
-  奇偶，按开局/中局/残局切换权重；分量值单独保存在 `AiEvaluation` 中可检查。
-- **难度**：Easy 为单层静态评估加随机扰动；Medium 为固定深度 Alpha-Beta；
-  Hard 为迭代加深 + 置换表 + 残局扩展。三档均只返回合法着法。
+  奇偶，按开局/中局/残局切换权重；Easy/Medium 只把基础分量计入总分，
+  Hard 额外计入稳定子、前沿子与奇偶；所有分量值单独保存在 `AiEvaluation`
+  中可检查。
+- **难度**：Easy 为单层静态评估加随机扰动；Medium 为固定深度 Alpha-Beta +
+  基础评估；Hard 为迭代加深 + 置换表 + 完整评估 + 残局扩展。三档均只返回
+  合法着法。
 - **线程边界**：`AiWorker` 复制状态快照在后台搜索；取消/完成用 C11 原子变量
   同步。后台线程不接触 `Match`、UI 或全局状态，结果仍由 `match_apply_move()`
   校验后应用。线程创建失败时退回同步搜索，再退化为第一个合法着法。
 - **基准**：`reversi_ai_bench --games N` 用固定种子跑 Random/Greedy 与不同难度
-  对局，输出 W/D/L、非法着法、失败、未完成局数、节点数、剪枝率、置换表命中、
-  平均耗时与最大深度，并对开局/中局/残局做局面探针。实际结果见
+  对局；对局使用固定深度（Easy 1、Medium 4、Hard 6）与 10 秒上限，使固定
+  种子结果可复现；局面探针使用各难度实际参数。输出 W/D/L、非法着法、失败、
+  未完成局数、节点数、剪枝率、置换表命中、平均耗时与最大深度；任何非法/
+  失败/未完成都会使进程返回非零。实际结果见
   [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
 
 ### 状态机
@@ -302,8 +308,9 @@ ctest --test-dir build --output-on-failure
   分支、跳过事件与终局恢复、容量与空指针
 - `core.match`：701 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
   从暂停/终局重开、撤销/重做恢复一致性、模式切换、AI_THINKING 与人机撤销
-- `core.ai`：2,618 项断言；配置/名称、评估分量、大量局面的合法性、单步与
-  pass 局面、取消与确定性，以及三档难度 × 黑白方的 6 局完整人机对局
+- `ai.core`：约 2,970 项断言；配置/名称、评估分量与难度化评估、大量局面的
+  合法性、TT 与无 TT 搜索一致性、单步与 pass 局面、取消与确定性，以及
+  6 局固定深度人机对局 + 1 局使用实际 Hard 参数（深度 10 / 500 ms）的完整对局
 - `ai.worker`：22 项断言；后台搜索、状态快照隔离、取消、空指针与生命周期
 
 `ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
@@ -313,17 +320,18 @@ ctest --test-dir build --output-on-failure
 各视图（新游戏/暂停/历史/结算）的键盘与鼠标动作，以及落子/翻转/跳过动画
 插值，并确认动画不修改棋盘快照。
 
-实际结果（2026-10-20，macOS arm64，Phase 4 完成后）：
+实际结果（2026-10-21，macOS arm64，Phase 4 审查修复后）：
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug | 11/11，含 `app.smoke`（1.21 s） |
+| Debug | 11/11，含 `app.smoke` |
 | Release | 10/10 无 GUI 测试通过 |
 | ASan+UBSan | 10/10 无 GUI 测试通过，无 Sanitizer 报告 |
 
-AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 4 局）中所有对局
-`illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 全胜，Medium 对
-Hard 全负，Easy 对 Medium 1:3。完整数据见
+AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
+所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
+对 Medium 20:0、对 Easy 17:3；Medium 对 Easy 20:0 且对 Random 17:2:1；
+Easy 对 Random 13:1:6、对 Greedy 11:9。完整数据见
 [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
@@ -354,7 +362,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 11/11（含 GUI 冒烟）、Release 10/10、ASan+UBSan 10/10 已实际验证（2026-10-20）；Phase 3/4 界面在 1100×800/1100×832（HiDPI 2×）下完成截图与真实鼠标验证 |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 11/11（含 GUI 冒烟）、Release 10/10、ASan+UBSan 10/10 已实际验证（2026-10-21）；Phase 3/4 界面在 1100×800/1100×832（HiDPI 2×）下完成截图与真实鼠标验证 |
 | Windows | 未验证 |
 | Linux | 未验证 |
 
@@ -372,9 +380,10 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 - Phase 4 界面已实际验证：难度与颜色选择、人机执黑/执白、思考提示、
   AI 自动落子、思考中撤销、重做后重新搜索、重开与确认框取消。
   完整人机对局到结算页、人机自动跳过提示、思考中关闭窗口这三项**未人工验证**；
-  对应逻辑由 `core.ai` / `core.match` / `ai.worker` 测试覆盖。
-- AI 基准每组仅 4 局，样本量有限；结果用于验证强弱顺序与零非法着法，
-  不作为精确胜率估计。
+  对应逻辑由 `ai.core` / `core.match` / `ai.worker` 测试覆盖。
+- AI 基准每组 20 局（共 180 局），固定深度使结果可复现；仍不应把胜率当作
+  精确估计。Windows 的 `CreateThread` 后端尚未实机运行；AI 测试进程经
+  macOS `leaks` 检测为 0 leaks，raylib/UI 进程未做泄漏检测。
 - 在锁屏、显示器休眠或没有活动图形会话时，GLFW 无法获取主显示器，
   `app.smoke` 与手动运行都会以 “Failed to get primary monitor /
   Failed to initialize platform” 失败；解锁并保持显示唤醒后重跑即可。

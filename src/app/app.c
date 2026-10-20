@@ -240,6 +240,8 @@ static AiDifficulty app_ai_difficulty_from_setup(SetupDifficulty difficulty)
     }
 }
 
+/* Idempotent: actions cancel immediately when they leave the AI turn, and
+   the screen/run cleanup paths may cancel again. */
 static void app_cancel_ai(App *app)
 {
     if (app->ai_worker != NULL) {
@@ -263,6 +265,25 @@ static bool app_apply_first_legal(App *app)
     return app->match.phase != MATCH_PHASE_AI_THINKING;
 }
 
+static bool app_finish_ai_result(App *app, bool found, Move move)
+{
+    Match *match = &app->match;
+    if (found
+        && rules_is_legal_move(&match->state.board,
+                               match->state.current_player, move)) {
+        app_apply_move(app, move);
+        if (match->phase != MATCH_PHASE_AI_THINKING) {
+            return true;
+        }
+    }
+    if (app_apply_first_legal(app)) {
+        return true;
+    }
+
+    (void)match_cancel_ai_turn(match);
+    return false;
+}
+
 static bool app_start_ai(App *app)
 {
     Match *match = &app->match;
@@ -282,21 +303,8 @@ static bool app_start_ai(App *app)
     }
 
     Move move = {0, 0};
-    AiStats stats;
-    if (ai_choose_move(&match->state, &config, &move, &stats)
-        && rules_is_legal_move(&match->state.board,
-                               match->state.current_player, move)) {
-        app_apply_move(app, move);
-        if (match->phase != MATCH_PHASE_AI_THINKING) {
-            return true;
-        }
-    }
-    if (app_apply_first_legal(app)) {
-        return true;
-    }
-
-    (void)match_cancel_ai_turn(match);
-    return false;
+    const bool found = ai_choose_move(&match->state, &config, &move, NULL);
+    return app_finish_ai_result(app, found, move);
 }
 
 static bool app_poll_ai(App *app)
@@ -311,22 +319,9 @@ static bool app_poll_ai(App *app)
     }
 
     Move move = {0, 0};
-    AiStats stats;
-    bool found = app->ai_worker != NULL
-        && ai_worker_take(app->ai_worker, &move, &stats)
-        && rules_is_legal_move(&match->state.board,
-                               match->state.current_player, move);
-    if (found) {
-        app_apply_move(app, move);
-        if (match->phase != MATCH_PHASE_AI_THINKING) {
-            return true;
-        }
-    }
-
-    if (app_apply_first_legal(app)) {
-        return true;
-    }
-    (void)match_cancel_ai_turn(match);
+    const bool found = app->ai_worker != NULL
+        && ai_worker_take(app->ai_worker, &move, NULL);
+    (void)app_finish_ai_result(app, found, move);
     return true;
 }
 

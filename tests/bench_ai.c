@@ -187,10 +187,10 @@ static BenchOutcome play_game(BenchPlayer *black, BenchPlayer *white,
     return BENCH_LOSS;
 }
 
-static void run_matchup(const char *firstName, BenchKind first_kind,
-                        const AiConfig *first_config,
-                        const char *secondName, BenchKind second_kind,
-                        const AiConfig *second_config, int games)
+static BenchTotals run_matchup(const char *firstName, BenchKind first_kind,
+                               const AiConfig *first_config,
+                               const char *secondName, BenchKind second_kind,
+                               const AiConfig *second_config, int games)
 {
     int wins = 0;
     int draws = 0;
@@ -251,6 +251,7 @@ static void run_matchup(const char *firstName, BenchKind first_kind,
            "tt_hits=%" PRIu64 " ai_moves=%d avg_ms=%.1f max_depth=%d\n",
            totals.nodes, totals.cutoffs, cutoff_ratio * 100.0,
            totals.tt_hits, totals.ai_moves, average_ms, totals.max_depth);
+    return totals;
 }
 
 static void probe_position(const char *label, const GameState *state)
@@ -325,6 +326,21 @@ static void build_one_move_endgame(GameState *state)
     state->result = GAME_RESULT_ONGOING;
 }
 
+static void accumulate_totals(BenchTotals *all, const BenchTotals *part)
+{
+    all->nodes += part->nodes;
+    all->cutoffs += part->cutoffs;
+    all->tt_hits += part->tt_hits;
+    all->elapsed_ms += part->elapsed_ms;
+    all->ai_moves += part->ai_moves;
+    all->failures += part->failures;
+    all->illegal += part->illegal;
+    all->unfinished += part->unfinished;
+    if (part->max_depth > all->max_depth) {
+        all->max_depth = part->max_depth;
+    }
+}
+
 int main(int argc, char **argv)
 {
     int games = 4;
@@ -345,28 +361,48 @@ int main(int argc, char **argv)
 
     printf("Reversi AI benchmark\n");
     printf("compiler=%s\n", __VERSION__);
-    printf("seed=0x%" PRIX64 " games=%d\n\n", (uint64_t)BENCH_SEED, games);
+    printf("seed=0x%" PRIX64 " games=%d\n", (uint64_t)BENCH_SEED, games);
+    printf("matchup configs: Easy depth 1; Medium depth 4 (10 s cap); "
+           "Hard depth 6 (10 s cap)\n\n");
 
     AiConfig easy = ai_default_config(AI_DIFFICULTY_EASY, 1);
     AiConfig medium = ai_default_config(AI_DIFFICULTY_MEDIUM, 1);
+    medium.time_budget_ms = 10000;
+    medium.max_depth = 4;
     AiConfig hard = ai_default_config(AI_DIFFICULTY_HARD, 1);
+    hard.time_budget_ms = 10000;
+    hard.max_depth = 6;
 
-    run_matchup("Easy", BENCH_AI, &easy, "Random", BENCH_RANDOM, NULL, games);
-    run_matchup("Medium", BENCH_AI, &medium,
-                "Random", BENCH_RANDOM, NULL, games);
-    run_matchup("Hard", BENCH_AI, &hard,
-                "Random", BENCH_RANDOM, NULL, games);
-    run_matchup("Easy", BENCH_AI, &easy, "Greedy", BENCH_GREEDY, NULL, games);
-    run_matchup("Medium", BENCH_AI, &medium,
-                "Greedy", BENCH_GREEDY, NULL, games);
-    run_matchup("Hard", BENCH_AI, &hard,
-                "Greedy", BENCH_GREEDY, NULL, games);
-    run_matchup("Easy", BENCH_AI, &easy,
-                "Medium", BENCH_AI, &medium, games);
-    run_matchup("Medium", BENCH_AI, &medium,
-                "Hard", BENCH_AI, &hard, games);
-    run_matchup("Easy", BENCH_AI, &easy,
-                "Hard", BENCH_AI, &hard, games);
+    BenchTotals all = {0};
+    BenchTotals run;
+
+    run = run_matchup("Easy", BENCH_AI, &easy,
+                      "Random", BENCH_RANDOM, NULL, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Medium", BENCH_AI, &medium,
+                      "Random", BENCH_RANDOM, NULL, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Hard", BENCH_AI, &hard,
+                      "Random", BENCH_RANDOM, NULL, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Easy", BENCH_AI, &easy,
+                      "Greedy", BENCH_GREEDY, NULL, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Medium", BENCH_AI, &medium,
+                      "Greedy", BENCH_GREEDY, NULL, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Hard", BENCH_AI, &hard,
+                      "Greedy", BENCH_GREEDY, NULL, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Easy", BENCH_AI, &easy,
+                      "Medium", BENCH_AI, &medium, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Medium", BENCH_AI, &medium,
+                      "Hard", BENCH_AI, &hard, games);
+    accumulate_totals(&all, &run);
+    run = run_matchup("Easy", BENCH_AI, &easy,
+                      "Hard", BENCH_AI, &hard, games);
+    accumulate_totals(&all, &run);
 
     GameState opening;
     game_init(&opening);
@@ -377,5 +413,8 @@ int main(int argc, char **argv)
     build_one_move_endgame(&endgame);
     probe_position("endgame (one move)", &endgame);
 
-    return 0;
+    printf("\nTOTAL games=%d illegal=%d failures=%d unfinished=%d\n",
+           games * 9, all.illegal, all.failures, all.unfinished);
+    return (all.illegal > 0 || all.failures > 0 || all.unfinished > 0)
+        ? 1 : 0;
 }

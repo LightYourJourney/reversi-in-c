@@ -251,7 +251,7 @@ if(REVERSI_BUILD_TESTS)
         core.history)
     reversi_add_core_test(reversi_match_tests tests/test_match.c
         core.match)
-    reversi_add_ai_test(reversi_ai_tests tests/test_ai.c core.ai)
+    reversi_add_ai_test(reversi_ai_tests tests/test_ai.c ai.core)
     reversi_add_ai_test(reversi_ai_worker_tests tests/test_ai_worker.c
         ai.worker)
 

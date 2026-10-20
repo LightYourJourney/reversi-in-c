@@ -9,4 +9,12 @@ bool ai_easy_choose(const GameState *state, const AiConfig *config,
 bool ai_search_choose(const GameState *state, const AiConfig *config,
                       Move *out_move, AiStats *out_stats);
 
+/*
+ * Test variant that can disable the transposition table while keeping the
+ * same search and evaluation, so TT bounds can be compared with a plain
+ * alpha-beta search at a fixed depth.
+ */
+bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
+                         bool use_tt, Move *out_move, AiStats *out_stats);
+
 #endif

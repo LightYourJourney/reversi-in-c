@@ -1,5 +1,6 @@
 #include "ai/ai_search.h"
 
+#include "ai/ai_internal.h"
 #include "core/rules.h"
 
 #include <limits.h>
@@ -9,10 +10,8 @@
 #include <string.h>
 #include <time.h>
 
-#define AI_INF 1000000
-#define AI_WIN_THRESHOLD 90000
-#define AI_CANCEL_CHECK_MASK 1023u
-#define AI_TT_SIZE (1u << 16)
+#define REVERSI_AI_CANCEL_CHECK_MASK 1023u
+#define REVERSI_AI_TT_SIZE (1u << 16)
 
 typedef enum AiTtFlag {
     AI_TT_EXACT = 0,
@@ -45,6 +44,8 @@ static uint64_t ai_now_ms(void)
 {
     struct timespec ts;
     if (timespec_get(&ts, TIME_UTC) != TIME_UTC) {
+        /* Zero only disables the wall-clock budget; the depth limit still
+           bounds the search, so this degrades instead of breaking. */
         return 0;
     }
     return (uint64_t)ts.tv_sec * 1000u
@@ -101,7 +102,7 @@ static bool check_stop(AiSearch *search, bool force)
     if (search->stopped) {
         return true;
     }
-    if (!force && (search->stats.nodes & AI_CANCEL_CHECK_MASK) != 0) {
+    if (!force && (search->stats.nodes & REVERSI_AI_CANCEL_CHECK_MASK) != 0) {
         return false;
     }
     if (search->config->should_cancel != NULL
@@ -156,21 +157,6 @@ static void order_moves(Move *moves, int count, Move preferred,
         return;
     }
 
-    int first = -1;
-    if (has_preferred) {
-        for (int i = 0; i < count; ++i) {
-            if (same_move(moves[i], preferred)) {
-                first = i;
-                break;
-            }
-        }
-    }
-    if (first > 0) {
-        const Move tmp = moves[0];
-        moves[0] = moves[first];
-        moves[first] = tmp;
-    }
-
     /* Insertion sort by static square value; stable for equal scores. */
     for (int i = 1; i < count; ++i) {
         const Move key = moves[i];
@@ -181,6 +167,21 @@ static void order_moves(Move *moves, int count, Move preferred,
             --j;
         }
         moves[j + 1] = key;
+    }
+
+    /* Promote the TT/previous-iteration move after sorting so it is really
+       searched first; sorting beforehand would displace it again. */
+    if (has_preferred) {
+        for (int i = 0; i < count; ++i) {
+            if (same_move(moves[i], preferred)) {
+                if (i > 0) {
+                    const Move tmp = moves[0];
+                    moves[0] = moves[i];
+                    moves[i] = tmp;
+                }
+                break;
+            }
+        }
     }
 }
 
@@ -224,12 +225,11 @@ static int negamax(AiSearch *search, const GameState *state, int depth,
 
     if (depth <= 0) {
         AiEvaluation evaluation;
-        ai_evaluate(state, &evaluation);
+        ai_evaluate_for_difficulty(state, search->config->difficulty,
+                                   &evaluation);
         return evaluation.total;
     }
 
-    const int alpha_start = alpha;
-    const int beta_start = beta;
     uint64_t key = 0;
     Move tt_best = {0, 0};
     bool has_tt_best = false;
@@ -260,7 +260,12 @@ static int negamax(AiSearch *search, const GameState *state, int depth,
 
     order_moves(moves, count, tt_best, has_tt_best);
 
-    int best = -AI_INF;
+    /* The TT probe may have tightened alpha/beta. Bound flags must describe
+       the window actually searched; using the caller's original window would
+       store a fail-low against a raised alpha as EXACT. */
+    const int alpha_window = alpha;
+    const int beta_window = beta;
+    int best = -REVERSI_AI_INF;
     Move best_move = moves[0];
     for (int i = 0; i < count; ++i) {
         GameState child;
@@ -291,9 +296,9 @@ static int negamax(AiSearch *search, const GameState *state, int depth,
         entry->score = best;
         entry->depth = depth;
         entry->best = best_move;
-        if (best <= alpha_start) {
+        if (best <= alpha_window) {
             entry->flag = AI_TT_UPPER;
-        } else if (best >= beta_start) {
+        } else if (best >= beta_window) {
             entry->flag = AI_TT_LOWER;
         } else {
             entry->flag = AI_TT_EXACT;
@@ -316,8 +321,8 @@ static bool root_search(AiSearch *search, const GameState *state, int depth,
     }
 
     order_moves(moves, count, preferred, has_preferred);
-    int alpha = -AI_INF;
-    int best_score = -AI_INF;
+    int alpha = -REVERSI_AI_INF;
+    int best_score = -REVERSI_AI_INF;
     Move best = moves[0];
 
     for (int i = 0; i < count; ++i) {
@@ -330,7 +335,7 @@ static bool root_search(AiSearch *search, const GameState *state, int depth,
             continue;
         }
         const int score = -negamax(search, &child, depth - 1,
-                                   -AI_INF, -alpha);
+                                   -REVERSI_AI_INF, -alpha);
         if (search->stopped) {
             return false;
         }
@@ -362,8 +367,8 @@ static void finish_stats(AiSearch *search, int completed_depth, int score,
     out_stats->timed_out = search->timed_out;
 }
 
-bool ai_search_choose(const GameState *state, const AiConfig *config,
-                      Move *out_move, AiStats *out_stats)
+static bool search_choose(const GameState *state, const AiConfig *config,
+                          bool use_tt, Move *out_move, AiStats *out_stats)
 {
     if (state == NULL || config == NULL || out_move == NULL) {
         return false;
@@ -375,9 +380,9 @@ bool ai_search_choose(const GameState *state, const AiConfig *config,
     search.start_ms = ai_now_ms();
     init_zobrist(&search);
 
-    if (config->difficulty == AI_DIFFICULTY_HARD) {
-        search.tt = calloc(AI_TT_SIZE, sizeof(AiTtEntry));
-        search.tt_mask = AI_TT_SIZE - 1u;
+    if (config->difficulty == AI_DIFFICULTY_HARD && use_tt) {
+        search.tt = calloc(REVERSI_AI_TT_SIZE, sizeof(AiTtEntry));
+        search.tt_mask = REVERSI_AI_TT_SIZE - 1u;
     }
 
     Move moves[REVERSI_BOARD_CELL_COUNT];
@@ -399,7 +404,7 @@ bool ai_search_choose(const GameState *state, const AiConfig *config,
     }
 
     Move best = moves[0];
-    int best_score = -AI_INF;
+    int best_score = -REVERSI_AI_INF;
     int completed_depth = 0;
 
     for (int depth = 1; depth <= max_depth; ++depth) {
@@ -407,7 +412,7 @@ bool ai_search_choose(const GameState *state, const AiConfig *config,
             break;
         }
         Move iteration_move = best;
-        int iteration_score = -AI_INF;
+        int iteration_score = -REVERSI_AI_INF;
         if (!root_search(&search, state, depth, best, completed_depth > 0,
                          &iteration_move, &iteration_score)) {
             break;
@@ -416,8 +421,8 @@ bool ai_search_choose(const GameState *state, const AiConfig *config,
         best_score = iteration_score;
         completed_depth = depth;
 
-        if (best_score >= AI_WIN_THRESHOLD
-            || best_score <= -AI_WIN_THRESHOLD) {
+        if (best_score >= REVERSI_AI_WIN_THRESHOLD
+            || best_score <= -REVERSI_AI_WIN_THRESHOLD) {
             break;
         }
         if (empty <= 12 && depth >= empty) {
@@ -437,6 +442,18 @@ bool ai_search_choose(const GameState *state, const AiConfig *config,
 
     *out_move = best;
     return true;
+}
+
+bool ai_search_choose(const GameState *state, const AiConfig *config,
+                      Move *out_move, AiStats *out_stats)
+{
+    return search_choose(state, config, true, out_move, out_stats);
+}
+
+bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
+                         bool use_tt, Move *out_move, AiStats *out_stats)
+{
+    return search_choose(state, config, use_tt, out_move, out_stats);
 }
 
 bool ai_easy_choose(const GameState *state, const AiConfig *config,
@@ -466,7 +483,7 @@ bool ai_easy_choose(const GameState *state, const AiConfig *config,
             continue;
         }
         AiEvaluation evaluation;
-        ai_evaluate(&child, &evaluation);
+        ai_evaluate_for_difficulty(&child, config->difficulty, &evaluation);
         int score = -evaluation.total;
         if (config->randomness > 0) {
             const int span = config->randomness * 2 + 1;

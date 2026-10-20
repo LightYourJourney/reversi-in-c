@@ -1,4 +1,5 @@
 #include "ai/ai.h"
+#include "ai/ai_search.h"
 #include "core/rules.h"
 #include "test_harness.h"
 #include "test_helpers.h"
@@ -189,6 +190,50 @@ static void test_evaluation(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, ai_terminal_score(&state) == 0);
 }
 
+static void test_difficulty_evaluation(TestStats *stats)
+{
+    GameState state;
+    game_init(&state);
+    board_clear(&state.board);
+    for (int row = 0; row < REVERSI_BOARD_SIZE; ++row) {
+        for (int col = 0; col < REVERSI_BOARD_SIZE; ++col) {
+            (void)board_set(&state.board, row, col, STONE_WHITE);
+        }
+    }
+    for (int row = 0; row < REVERSI_BOARD_SIZE; row += REVERSI_BOARD_SIZE - 1) {
+        for (int col = 0; col < REVERSI_BOARD_SIZE;
+             col += REVERSI_BOARD_SIZE - 1) {
+            (void)board_set(&state.board, row, col, STONE_BLACK);
+        }
+    }
+    for (int col = 1; col <= 3; ++col) {
+        (void)board_set(&state.board, 0, col, STONE_BLACK);
+    }
+    state.current_player = STONE_BLACK;
+    state.result = GAME_RESULT_BLACK_WIN;
+
+    AiEvaluation full;
+    AiEvaluation hard;
+    AiEvaluation medium;
+    AiEvaluation easy;
+    ai_evaluate(&state, &full);
+    ai_evaluate_for_difficulty(&state, AI_DIFFICULTY_HARD, &hard);
+    ai_evaluate_for_difficulty(&state, AI_DIFFICULTY_MEDIUM, &medium);
+    ai_evaluate_for_difficulty(&state, AI_DIFFICULTY_EASY, &easy);
+
+    REVERSI_TEST_ASSERT(stats, full.stability > 0);
+    REVERSI_TEST_ASSERT(stats, hard.total == full.total);
+    REVERSI_TEST_ASSERT(stats, medium.total == easy.total);
+    REVERSI_TEST_ASSERT(stats, medium.stability == full.stability);
+    REVERSI_TEST_ASSERT(stats, medium.frontier == full.frontier);
+    REVERSI_TEST_ASSERT(stats, medium.parity == full.parity);
+    REVERSI_TEST_ASSERT(stats, medium.total != full.total);
+    REVERSI_TEST_ASSERT(stats, medium.phase == full.phase);
+
+    ai_evaluate_for_difficulty(NULL, AI_DIFFICULTY_HARD, NULL);
+    ai_evaluate_for_difficulty(&state, AI_DIFFICULTY_HARD, NULL);
+}
+
 static void test_search_returns_legal_moves(TestStats *stats)
 {
     GameState state;
@@ -255,6 +300,45 @@ static void test_search_many_positions(TestStats *stats)
             }
             REVERSI_TEST_ASSERT(stats, game_states_equal(&state, &before));
         }
+    }
+}
+
+static void test_tt_matches_plain_search(TestStats *stats)
+{
+    uint64_t rng = 0x0F1E2D3C4B5A6978ULL;
+    GameState state;
+    game_init(&state);
+
+    for (int ply = 0; ply < 20; ++ply) {
+        play_random(&state, &rng, 1);
+        if (state.result != GAME_RESULT_ONGOING
+            || game_must_pass(&state)) {
+            continue;
+        }
+
+        AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, 0);
+        config.time_budget_ms = 10000;
+        config.max_depth = 4;
+
+        Move with_tt = {0, 0};
+        Move plain = {0, 0};
+        AiStats tt_stats;
+        AiStats plain_stats;
+        const bool found_tt = ai_search_choose_ex(
+            &state, &config, true, &with_tt, &tt_stats);
+        const bool found_plain = ai_search_choose_ex(
+            &state, &config, false, &plain, &plain_stats);
+
+        REVERSI_TEST_ASSERT(stats, found_tt == found_plain);
+        if (!found_tt || !found_plain) {
+            continue;
+        }
+        REVERSI_TEST_ASSERT(stats, tt_stats.score == plain_stats.score);
+        REVERSI_TEST_ASSERT(stats, tt_stats.depth == plain_stats.depth);
+        REVERSI_TEST_ASSERT(stats, rules_is_legal_move(
+            &state.board, state.current_player, with_tt));
+        REVERSI_TEST_ASSERT(stats, rules_is_legal_move(
+            &state.board, state.current_player, plain));
     }
 }
 
@@ -346,7 +430,7 @@ static void test_cancel_and_determinism(TestStats *stats)
 }
 
 static void run_pve_game(TestStats *stats, Stone human,
-                         AiDifficulty difficulty)
+                         AiDifficulty difficulty, bool use_defaults)
 {
     const MatchConfig config = {
         .mode = GAME_MODE_PVE,
@@ -357,13 +441,15 @@ static void run_pve_game(TestStats *stats, Stone human,
     REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
 
     AiConfig ai = ai_default_config(difficulty, 0xC0FFEEu);
-    if (difficulty == AI_DIFFICULTY_HARD) {
-        /* Keep the full-game test deterministic and fast; the benchmark
-           exercises Hard's real depth and time budget. */
-        ai.max_depth = 4;
-        ai.time_budget_ms = 10000;
-    } else if (difficulty == AI_DIFFICULTY_MEDIUM) {
-        ai.time_budget_ms = 10000;
+    if (!use_defaults) {
+        /* The matrix games stay deterministic and fast; the benchmark and
+           the dedicated default-Hard game exercise the shipping budgets. */
+        if (difficulty == AI_DIFFICULTY_HARD) {
+            ai.max_depth = 4;
+            ai.time_budget_ms = 10000;
+        } else if (difficulty == AI_DIFFICULTY_MEDIUM) {
+            ai.time_budget_ms = 10000;
+        }
     }
 
     int human_moves = 0;
@@ -414,12 +500,14 @@ static void run_pve_game(TestStats *stats, Stone human,
 
 static void test_pve_full_games(TestStats *stats)
 {
-    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_EASY);
-    run_pve_game(stats, STONE_WHITE, AI_DIFFICULTY_EASY);
-    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_MEDIUM);
-    run_pve_game(stats, STONE_WHITE, AI_DIFFICULTY_MEDIUM);
-    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_HARD);
-    run_pve_game(stats, STONE_WHITE, AI_DIFFICULTY_HARD);
+    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_EASY, false);
+    run_pve_game(stats, STONE_WHITE, AI_DIFFICULTY_EASY, false);
+    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_MEDIUM, false);
+    run_pve_game(stats, STONE_WHITE, AI_DIFFICULTY_MEDIUM, false);
+    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_HARD, false);
+    run_pve_game(stats, STONE_WHITE, AI_DIFFICULTY_HARD, false);
+    /* One full game with the shipping Hard depth and 500 ms budget. */
+    run_pve_game(stats, STONE_BLACK, AI_DIFFICULTY_HARD, true);
 }
 
 static void test_pve_undo_during_thinking(TestStats *stats)
@@ -463,12 +551,14 @@ int main(void)
 
     REVERSI_RUN_TEST(&stats, test_config_and_names);
     REVERSI_RUN_TEST(&stats, test_evaluation);
+    REVERSI_RUN_TEST(&stats, test_difficulty_evaluation);
     REVERSI_RUN_TEST(&stats, test_search_returns_legal_moves);
     REVERSI_RUN_TEST(&stats, test_search_many_positions);
+    REVERSI_RUN_TEST(&stats, test_tt_matches_plain_search);
     REVERSI_RUN_TEST(&stats, test_single_and_pass_positions);
     REVERSI_RUN_TEST(&stats, test_cancel_and_determinism);
     REVERSI_RUN_TEST(&stats, test_pve_full_games);
     REVERSI_RUN_TEST(&stats, test_pve_undo_during_thinking);
 
-    return reversi_test_summary(&stats, "core.ai");
+    return reversi_test_summary(&stats, "ai.core");
 }

@@ -104,15 +104,17 @@
 已知限制：AI 尚未实现，人机模式不可选；人机撤销语义有测试覆盖但没有真实
 AI 对局的人工验证；设置与对局仍不持久化。
 
-## Phase 4 — AI 与难度（已完成，2026-10-20）
+## Phase 4 — AI 与难度（已完成，2026-10-21）
 
 交付内容：
 
 - `ai/ai`：三档难度配置、评估入口、合法性兜底、同步控制器
 - `ai/ai_eval`：角点、机动性、潜在机动性、位置权重、边稳定子、前沿子、
-  棋子数与奇偶，按阶段切换权重；分量值单独暴露
+  棋子数与奇偶，按阶段切换权重；Easy/Medium 使用基础分量，Hard 使用全部分量；
+  分量值单独暴露
 - `ai/ai_search`：Negamax + Alpha-Beta、显式 pass 节点、精确终局分、迭代加深、
-  时间预算、取消回调、置换表（Hard）、着法排序、残局深度扩展
+  时间预算、取消回调、置换表（Hard，边界标签以收紧后的窗口为准）、着法排序、
+  残局深度扩展
 - `ai/ai_worker`：POSIX/Windows 后台线程、状态快照、原子取消/完成标志、
   结果回收；线程失败时同步搜索兜底
 - `core/match`：`AI_THINKING` 阶段、开始/取消 AI 回合、AI 阶段撤销与重开
@@ -120,23 +122,26 @@ AI 对局的人工验证；设置与对局仍不持久化。
 - `ui/game_view`：思考状态提示、AI 阶段操作门控（暂停/棋盘禁用，撤销/重开/
   菜单可用）
 - `app`：AI 回合生命周期、后台轮询、旧搜索取消、撤销到玩家决策点
-- 测试与基准：`core.ai` 2,618 项、`ai.worker` 22 项、`ui.helpers` 175 项
-  （其中含 6 局完整人机对局）；`bench_ai` 固定种子对局与局面探针
+- 测试与基准：`ai.core` 约 2,970 项、`ai.worker` 22 项、`ui.helpers` 175 项
+  （含 6 局固定深度对局 + 1 局实际 Hard 参数完整对局、TT 一致性测试）；
+  `bench_ai` 固定种子、固定深度对局与局面探针，异常时返回非零
 
 验收结果：
 
-- Debug / Release / ASan+UBSan 三套构建通过；无 GUI 测试 10/10 通过。
-- 6 局完整人机对局（三档难度 × 黑白方）全部终局，AI 零非法着法。
-- Release 基准 32 局（8 组 × 4 局）：全部 `illegal=0 failures=0 unfinished=0`；
-  Hard 对 Random/Greedy 4:0、对 Medium 4:0、对 Easy 3:1；Medium 对 Easy 3:1；
-  Easy 对 Random 3W1D、对 Greedy 3W1L。详见
-  [PHASE_4_REPORT.md](PHASE_4_REPORT.md)。
-- Hard 平均约 397–408 ms/步（500 ms 预算），Medium 约 5.8 ms（深度 4 提前完成），
-  Easy 约 0.1 ms；后台线程使主线程不阻塞。
+- Debug 11/11（含 GUI 冒烟）、Release 10/10、ASan+UBSan 10/10 通过。
+- 7 局完整人机对局（含实际 Hard 深度 10 / 500 ms）全部终局，AI 零非法着法。
+- Release 基准 180 局（9 组 × 20 局）：全部 `illegal=0 failures=0
+  unfinished=0`；Hard 对 Random/Greedy 20:0、对 Medium 20:0、对 Easy 17:3；
+  Medium 对 Easy 20:0、对 Random 17W2D1L；Easy 对 Random 13W1D6L、
+  对 Greedy 11W9L。详见 [PHASE_4_REPORT.md](PHASE_4_REPORT.md)。
+- 固定深度对局中 Hard 平均约 14–35 ms/步、Medium 约 3–6 ms、Easy 约 0.1 ms；
+  实际参数探针 Hard 约 347–505 ms；后台线程使主线程不阻塞。
 - 搜索取消、状态快照隔离、非法着法兜底、人机撤销均有自动化测试覆盖。
 
 已知限制：完整人机对局到结算页、人机自动跳过提示、思考中关闭窗口三项未人工
-验证（逻辑由自动化测试覆盖）；基准每组 4 局，样本量有限；设置与对局仍不持久化。
+验证（逻辑由自动化测试覆盖）；基准对局使用固定深度而非实际时间预算，样本
+每组 20 局；Windows 线程后端未实机运行；AI 测试进程 leaks 为 0，但 raylib/UI
+进程未做泄漏检测；设置与对局仍不持久化。
 
 ## Phase 5 — 设置持久化与存档
 
