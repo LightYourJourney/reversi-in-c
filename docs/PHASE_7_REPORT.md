@@ -195,7 +195,8 @@ Windows/Linux 物理桌面仍未验证。
 ## 10. 发布后审查修正
 
 v1.0.0 发布后进行的代码审查发现以下问题，已在主分支修正；这些修正需要
-新的版本标签才能进入再次发布的发行包。
+新的版本标签才能进入再次发布的发行包。修正后的 CI 运行 `39612913902`
+全部 9 个作业 success（含 Linux 包验收与 Windows 版本断言）。
 
 | 问题 | 修正 | 验证 |
 |---|---|---|
@@ -203,7 +204,7 @@ v1.0.0 发布后进行的代码审查发现以下问题，已在主分支修正�
 | 验收脚本未校验 `.sha256`、未验证重启/资源/许可证/动态库 | 校验归档校验和；连续启动两次；检查 `settings.dat`/`stats.dat`；Linux 执行 `ldd` 缺失检查；检查 `LICENSE`/`THIRD_PARTY_NOTICES.md` | 本地发行包 PASS |
 | macOS 应用包未包含 GPL 与第三方声明 | 复制到 `Contents/Resources/` 后重新 ad-hoc 签名 | `codesign --verify` 与包验收 PASS |
 | 发布构建可能使用系统 raylib | 发布脚本与 CI 打包强制 `REVERSI_FORCE_FETCH_RAYLIB=ON` | CMake 配置输出使用 fetched 6.2 |
-| Windows 包 `--version` 冒烟不检查退出码/文本 | 断言退出码为 0 且输出匹配 `Reversi <VERSION>` | 下次 CI 验证 |
+| Windows 包 `--version` 冒烟不检查退出码/文本 | 断言退出码为 0 且输出匹配 `Reversi <VERSION>` | CI 运行 `39612913902` PASS |
 | 字体加载重复卸载判断 | 提取 `unload_if_not_default()` | Debug 17/17、Release 15/15、ASan+UBSan 15/15 |
 
 仍保留的判断项：CI 中三平台打包步骤与 `release.yml` 有重复，Linux 依赖
