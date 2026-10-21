@@ -1,14 +1,23 @@
 #include "app/app.h"
+#include "reversi/version.h"
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+static void print_version(void)
+{
+    printf("Reversi %s (commit %s, %s build)\n",
+           REVERSI_VERSION_STRING, REVERSI_VERSION_COMMIT,
+           REVERSI_BUILD_TYPE);
+}
+
 static void print_usage(const char *program)
 {
     printf("Usage: %s [--frames N]\n", program);
     printf("  --frames N  render N frames and exit (smoke testing)\n");
+    printf("  --version   show version information\n");
     printf("  --help      show this help\n");
 }
 
@@ -39,6 +48,9 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Reversi: invalid frame count: %s\n", argv[i]);
                 return 2;
             }
+        } else if (strcmp(argv[i], "--version") == 0) {
+            print_version();
+            return 0;
         } else if (strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;

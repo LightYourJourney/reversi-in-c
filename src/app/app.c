@@ -6,6 +6,7 @@
 #include "core/game.h"
 #include "core/match.h"
 #include "core/rules.h"
+#include "reversi/version.h"
 #include "settings/settings.h"
 #include "storage/save.h"
 #include "storage/stats.h"
@@ -1492,7 +1493,8 @@ int app_run(int max_frames)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT
                    | FLAG_WINDOW_HIGHDPI);
-    InitWindow(REVERSI_WINDOW_WIDTH, REVERSI_WINDOW_HEIGHT, "Reversi");
+    InitWindow(REVERSI_WINDOW_WIDTH, REVERSI_WINDOW_HEIGHT,
+               "Reversi " REVERSI_VERSION_STRING);
 
     if (!IsWindowReady()) {
         fprintf(stderr, "Reversi: failed to initialize the game window\n");

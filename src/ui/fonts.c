@@ -17,6 +17,48 @@ static void build_asset_path(char *out, size_t capacity, const char *relative)
              relative);
 }
 
+static bool font_is_custom(Font font)
+{
+    return IsFontValid(font) && font.texture.id > 0
+        && font.texture.id != GetFontDefault().texture.id;
+}
+
+static Font load_ui_font(const char *relative, int size)
+{
+    char path[1024];
+
+#if defined(__APPLE__)
+    /* A macOS .app keeps data files in Contents/Resources. */
+    char bundle_relative[1024];
+    const int written = snprintf(bundle_relative, sizeof(bundle_relative),
+                                 "../Resources/%s", relative);
+    if (written > 0 && (size_t)written < sizeof(bundle_relative)) {
+        build_asset_path(path, sizeof(path), bundle_relative);
+        if (FileExists(path)) {
+            Font bundled = LoadFontEx(path, size, NULL, 0);
+            if (font_is_custom(bundled)) {
+                return bundled;
+            }
+            if (bundled.texture.id > 0
+                && bundled.texture.id != GetFontDefault().texture.id) {
+                UnloadFont(bundled);
+            }
+        }
+    }
+#endif
+
+    build_asset_path(path, sizeof(path), relative);
+    Font font = LoadFontEx(path, size, NULL, 0);
+    if (font_is_custom(font)) {
+        return font;
+    }
+    if (font.texture.id > 0
+        && font.texture.id != GetFontDefault().texture.id) {
+        UnloadFont(font);
+    }
+    return GetFontDefault();
+}
+
 bool ui_fonts_load(UiFonts *fonts)
 {
     if (fonts == NULL) {
@@ -30,15 +72,13 @@ bool ui_fonts_load(UiFonts *fonts)
     const Vector2 dpi = GetWindowScaleDPI();
     const float scale = dpi.x > 1.0f ? dpi.x : 1.0f;
 
-    char path[1024];
-    build_asset_path(path, sizeof(path), "assets/fonts/Inter-Regular.ttf");
-    Font regular = LoadFontEx(path, (int)(32.0f * scale), NULL, 0);
+    Font regular = load_ui_font("assets/fonts/Inter-Regular.ttf",
+                                (int)(32.0f * scale));
+    Font semibold = load_ui_font("assets/fonts/Inter-SemiBold.ttf",
+                                 (int)(64.0f * scale));
 
-    build_asset_path(path, sizeof(path), "assets/fonts/Inter-SemiBold.ttf");
-    Font semibold = LoadFontEx(path, (int)(64.0f * scale), NULL, 0);
-
-    const bool regular_ok = IsFontValid(regular) && regular.texture.id > 0;
-    const bool semibold_ok = IsFontValid(semibold) && semibold.texture.id > 0;
+    const bool regular_ok = font_is_custom(regular);
+    const bool semibold_ok = font_is_custom(semibold);
 
     if (regular_ok && semibold_ok) {
         SetTextureFilter(regular.texture, TEXTURE_FILTER_BILINEAR);

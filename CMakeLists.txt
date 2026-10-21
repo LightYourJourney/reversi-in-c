@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.24)
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" REVERSI_VERSION
+    LIMIT_COUNT 1)
+if(NOT REVERSI_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR
+        "VERSION must contain one semantic version such as 1.0.0")
+endif()
+
 project(Reversi
-    VERSION 0.1.0
+    VERSION ${REVERSI_VERSION}
     DESCRIPTION "A polished Reversi (Othello) desktop game written in ISO C11."
     LANGUAGES C)
 
@@ -9,6 +16,32 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(REVERSI_GIT_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE REVERSI_GIT_COMMIT
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE REVERSI_GIT_RESULT)
+    if(NOT REVERSI_GIT_RESULT EQUAL 0)
+        set(REVERSI_GIT_COMMIT "unknown")
+    endif()
+endif()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
+    "${CMAKE_BINARY_DIR}/generated/reversi/version.h"
+    @ONLY)
+
+if(MSVC)
+    # Static CRT keeps the Windows package self-contained.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY
+        "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING
@@ -210,7 +243,9 @@ endif()
 
 add_library(reversi_app STATIC
     src/app/app.c)
-target_include_directories(reversi_app PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_include_directories(reversi_app PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(reversi_app
     PUBLIC reversi_core reversi_ui reversi_ai reversi_persistence
            reversi_audio
@@ -218,21 +253,57 @@ target_link_libraries(reversi_app
 
 add_executable(reversi src/main.c)
 target_link_libraries(reversi PRIVATE reversi_app reversi_warnings)
+target_include_directories(reversi PRIVATE
+    "${CMAKE_BINARY_DIR}/generated")
+target_compile_definitions(reversi PRIVATE
+    REVERSI_BUILD_TYPE="$<CONFIG>")
 set_target_properties(reversi PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-# Assets are copied next to the executable so the game never depends on the
-# source directory or the caller's working directory at runtime.
+if(APPLE)
+    set_target_properties(reversi PROPERTIES
+        OUTPUT_NAME "Reversi"
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Reversi"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.lightyourjourney.reversi"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_COPYRIGHT
+            "Copyright (C) 2026 Yanjin Li. GPL-3.0."
+        MACOSX_BUNDLE_INFO_PLIST
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in")
+    set(REVERSI_ASSET_DESTINATION
+        "$<TARGET_BUNDLE_CONTENT_DIR:reversi>/Resources/assets")
+else()
+    set(REVERSI_ASSET_DESTINATION "$<TARGET_FILE_DIR:reversi>/assets")
+endif()
+
+if(WIN32)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
+        "${CMAKE_BINARY_DIR}/generated/version.rc"
+        @ONLY)
+    target_sources(reversi PRIVATE "${CMAKE_BINARY_DIR}/generated/version.rc")
+endif()
+
+# Assets are copied into the application directory (or the macOS bundle's
+# Resources directory) so the game never depends on the source tree or the
+# caller's working directory at runtime.
 add_custom_command(TARGET reversi POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "$<TARGET_FILE_DIR:reversi>/assets"
-    COMMENT "Copying assets next to the executable")
+        "${REVERSI_ASSET_DESTINATION}"
+    COMMENT "Copying assets into the application directory")
 
-# A runnable distribution tree: executable + assets + licenses.
-install(TARGETS reversi RUNTIME DESTINATION . COMPONENT Reversi)
-install(DIRECTORY assets docs DESTINATION . COMPONENT Reversi)
-install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md CHANGELOG.md
+# A runnable distribution tree: application + assets + licenses + docs.
+install(TARGETS reversi
+    BUNDLE DESTINATION . COMPONENT Reversi
+    RUNTIME DESTINATION . COMPONENT Reversi)
+if(NOT APPLE)
+    install(DIRECTORY assets DESTINATION . COMPONENT Reversi)
+endif()
+install(DIRECTORY docs DESTINATION . COMPONENT Reversi)
+install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md CHANGELOG.md VERSION
         DESTINATION . COMPONENT Reversi)
 
 # ---------------------------------------------------------------------------
@@ -369,3 +440,35 @@ if(REVERSI_BUILD_TESTS)
         endif()
     endif()
 endif()
+
+# ---------------------------------------------------------------------------
+# Release packaging. ZIP is available on every supported platform; Linux also
+# produces a tar.gz. CPack writes a .sha256 file next to each archive.
+# ---------------------------------------------------------------------------
+set(CPACK_PACKAGE_NAME "Reversi")
+set(CPACK_PACKAGE_VENDOR "Yanjin Li")
+set(CPACK_PACKAGE_CONTACT "Yanjin Li")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Reversi")
+set(CPACK_PACKAGE_FILE_NAME
+    "Reversi-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_PACKAGE_CHECKSUM "SHA256")
+set(CPACK_INSTALL_CMAKE_PROJECTS
+    "${CMAKE_BINARY_DIR};Reversi;Reversi;/")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+if(NOT MSVC)
+    set(CPACK_STRIP_FILES TRUE)
+endif()
+
+if(WIN32 OR APPLE)
+    set(CPACK_GENERATOR "ZIP")
+else()
+    set(CPACK_GENERATOR "ZIP;TGZ")
+endif()
+
+include(CPack)

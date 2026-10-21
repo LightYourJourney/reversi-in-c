@@ -36,18 +36,30 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release -j
 ```
 
-macOS 下产物为 `build-release/bin/reversi`。
+macOS 下产物为 `build-release/bin/Reversi.app`；Windows/Linux 为
+`build/bin/<Config>/reversi[.exe]` 或 `build/bin/reversi`。
 
 ## 4. 运行
 
+macOS：
+
+```bash
+open build/bin/Reversi.app
+./build/bin/Reversi.app/Contents/MacOS/Reversi
+```
+
+Linux / Windows：
+
 ```bash
 ./build/bin/reversi
+.\build\bin\Release\reversi.exe
 ```
 
 仅渲染指定帧数后退出，用于窗口初始化/关闭冒烟：
 
 ```bash
-./build/bin/reversi --frames 10
+./build/bin/Reversi.app/Contents/MacOS/Reversi --frames 10
+./build/bin/reversi --version
 ```
 
 退出码 `0` 表示窗口、字体、音频与清理路径完成。没有活动图形会话时，
@@ -64,7 +76,7 @@ GLFW 会报 `Failed to get primary monitor` / `Failed to initialize platform`，
 
 ```bash
 HOME=/tmp/reversi-home XDG_DATA_HOME=/tmp/reversi-home \
-APPDATA=/tmp/reversi-home ./build/bin/reversi
+APPDATA=/tmp/reversi-home ./build/bin/Reversi.app/Contents/MacOS/Reversi
 ```
 
 ## 5. 测试
@@ -93,7 +105,7 @@ cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug \
   -DREVERSI_ENABLE_ASAN=ON -DREVERSI_ENABLE_UBSAN=ON
 cmake --build build-sanitize -j
 ctest --test-dir build-sanitize --output-on-failure
-./build-sanitize/bin/reversi --frames 5
+./build-sanitize/bin/Reversi.app/Contents/MacOS/Reversi --frames 5
 ```
 
 Sanitizer 只作用于第一方目标，不重新编译 raylib。macOS 的 ASan 不支持
@@ -139,16 +151,28 @@ Linux 另有 Xvfb GUI 冒烟。物理机与桌面 GUI 仍未验证。
 
 ## 9. 打包与许可证
 
-可执行文件需要与其同级的 `assets/` 目录一起分发。字体许可证为
-`assets/fonts/OFL.txt`；项目自身为 GPL-3.0；raylib 为 zlib 许可证。
-详见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
-
-推荐使用安装规则（只安装本项目的 `Reversi` 组件，不携带 raylib/GLFW
-的开发头文件与静态库）：
+CPack 生成发行归档（版本号来自根目录 `VERSION`）：
 
 ```bash
-cmake --install build-release --prefix dist/reversi --component Reversi
+cd build-release
+cpack -C Release -B package
 ```
 
-安装树包含 `reversi`、`assets/`、`docs/`、`LICENSE`、
-`THIRD_PARTY_NOTICES.md`、`README.md` 与 `CHANGELOG.md`。
+- macOS：`Reversi-1.0.0-Darwin-arm64.zip`，内含 `Reversi.app`；
+- Windows：`Reversi-1.0.0-Windows-AMD64.zip`，内含 `reversi.exe`；
+- Linux：`Reversi-1.0.0-Linux-x86_64.zip` 与 `.tar.gz`。
+
+每个归档同时生成 `.sha256`。CPack 只安装本项目的 `Reversi` 组件，
+不会带入 raylib/GLFW 的开发头文件与静态库。一次性完成构建、测试、
+打包与校验：
+
+```bash
+./scripts/package.sh
+./scripts/verify-package.sh build-release/package/Reversi-*.zip
+```
+
+安装或用 `cmake --install` 时，macOS 安装 `Reversi.app`，其
+`Contents/Resources/assets/` 含字体；Windows/Linux 安装可执行文件与
+同级 `assets/`。字体许可证为 `assets/fonts/OFL.txt`；项目自身为
+GPL-3.0；raylib、GLFW、miniaudio 的声明见
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

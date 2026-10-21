@@ -2,6 +2,35 @@
 
 本项目遵循 Keep a Changelog 的章节结构，版本号使用语义化版本。
 
+## [1.0.0] - 2026-10-21
+
+首个正式发行版本。发布工程、跨平台打包与安装验收完成；游戏玩法与
+Phase 6 一致。
+
+### Added
+
+- `VERSION` 单一版本源与生成式版本头；`--version` 输出版本、提交与构建类型。
+- macOS `Reversi.app` 应用包、自定义 `Info.plist` 与 Resources 资源布局。
+- CMake/CPack 发行包：macOS ZIP、Windows ZIP、Linux ZIP/TGZ，附 SHA-256。
+- Windows 静态 MSVC 运行库与版本资源。
+- `scripts/package.sh` 与 `scripts/verify-package.sh`。
+- GitHub Actions Debug/Release 矩阵、ASan+UBSan、Linux Xvfb GUI 与产物上传。
+- 标签触发的 GitHub Release 工作流与 `SHA256SUMS`。
+- `docs/RELEASE.md`、`docs/PHASE_7_REPORT.md` 与 README 实际截图。
+
+### Changed
+
+- 构建产物在 macOS 上改为应用包；字体从 `Contents/Resources/assets` 加载。
+- 版本号从 0.1.0 提升到 1.0.0。
+- README 重写发行状态、平台支持、安装与发布说明。
+
+### Verified
+
+- macOS 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15。
+- macOS 发行包从任意工作目录、隔离用户目录启动，资源完整。
+- 独立 Debug 包自动完成一局并持久化统计；重启后读取并递增。
+- 具体运行号、各平台产物与 SHA-256 见 `docs/PHASE_7_REPORT.md`。
+
 ## [0.1.0] - 2026-10-21
 
 首个可交付版本。ISO C11 + raylib 6.2，包含完整规则引擎、三档 AI、

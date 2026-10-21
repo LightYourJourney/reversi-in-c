@@ -2,15 +2,55 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前状态：Phase 5（产品化功能）已完成。**
+> **当前版本：1.0.0（正式发布工程）。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
 > 存档/自动保存、继续上次对局、设置持久化、统计、规则帮助、程序化音效与
 > 运行时明暗主题均已接入。存档使用带版本号、校验和与原子写入的文本格式，
 > 损坏或不兼容文件会被安全拒绝。
-> Phase 4 的 AI 基准见 [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)；
-> Phase 5 的验证记录见 [docs/PHASE_5_REPORT.md](docs/PHASE_5_REPORT.md)。
-> 详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+>
+> 发行包、安装/卸载、校验与签名限制见 [docs/RELEASE.md](docs/RELEASE.md)；
+> 发布就绪性报告见 [docs/PHASE_7_REPORT.md](docs/PHASE_7_REPORT.md)。
+
+![主菜单](docs/images/main-menu.png)
+
+| 对局 | 结算 |
+|---|---|
+| ![对局](docs/images/gameplay.png) | ![结算](docs/images/result.png) |
+
+## 功能
+
+- 完整 Reversi 规则：八方向翻转、自动 Pass、终局与胜负/平局。
+- 本地双人；人机执黑/执白；Easy / Medium / Hard 三档 AI。
+- 后台 AI 搜索、取消与快照隔离，思考期间界面保持响应。
+- 撤销/重做、暂停、重开、历史、帮助、统计与结算页。
+- 自动存档、3 个手动存档槽、严格校验与原子写入。
+- 设置持久化、明暗主题、动画速度、合法提示与最后一步高亮。
+- 程序化音效；无音频设备时静默降级。
+- Inter 字体内置，缺失时回退 raylib 默认字体。
+- 最小窗口 760×600，宽/窄两套布局，支持 HiDPI。
+
+## 平台支持
+
+| 平台 | 构建/测试 | GUI |
+|---|---|---|
+| macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15 | 实际窗口与鼠标点击流程已验证 |
+| Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包已生成 | 未验证 |
+| Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 冒烟 | Xvfb 软件渲染已验证；物理桌面未验证 |
+
+GitHub Actions 运行器是虚拟机，不等同物理机验证。具体命令、运行号与
+未验证项见 [docs/PHASE_7_REPORT.md](docs/PHASE_7_REPORT.md)。
+
+## 安装发行版
+
+从 GitHub Release 下载对应平台的归档，按
+[docs/RELEASE.md](docs/RELEASE.md) 解压运行：
+
+- macOS：解压后打开 `Reversi.app`（当前未签名/未公证）。
+- Windows：解压后运行 `reversi.exe`，保留同级 `assets\`。
+- Linux：解压后运行 `./reversi`，保留同级 `assets/`。
+
+用户设置、统计与存档写入系统用户数据目录，不写入安装目录。
 
 ## 技术栈
 
@@ -98,7 +138,9 @@
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── BUILD.md          构建、运行、测试、打包与平台说明
+│   ├── RELEASE.md        安装、卸载、校验与发布流程
 │   ├── TESTING.md        测试矩阵、性能数据与未验证项
+│   ├── images/           README 使用的实际窗口截图
 │   ├── ROADMAP.md        分阶段交付计划
 │   ├── PHASE_0_REPORT.md Phase 0 完成报告
 │   ├── PHASE_1_REPORT.md Phase 1 完成报告
@@ -109,6 +151,11 @@
 │   └── PHASE_6_REPORT.md Phase 6 审计、测试、性能与交付报告
 ├── assets/
 │   └── fonts/            Inter 4.1（SIL OFL 1.1）
+├── scripts/
+│   ├── package.sh        Release 构建、测试与 CPack 打包
+│   └── verify-package.sh 独立解压启动验收
+├── cmake/Info.plist.in   macOS 应用包元数据模板
+├── VERSION               语义化版本（1.0.0）
 ├── CHANGELOG.md          变更日志
 ├── THIRD_PARTY_NOTICES.md 第三方许可证
 └── LICENSE              GPL-3.0
@@ -260,14 +307,25 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
 ```
 
-### Release
+### Release 与发行包
+
+```bash
+./scripts/package.sh
+```
+
+该脚本执行 Release 配置、构建、CTest 与 CPack，产物位于
+`build-release/package/`：macOS 为 `Reversi.app` 的 zip，Linux 为 zip 和
+tar.gz，Windows 为 zip；每个归档附带 `.sha256`。也可以手动执行：
 
 ```bash
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release -j
+ctest --test-dir build-release --output-on-failure
+cd build-release && cpack -C Release -B package
 ```
 
-若未指定 `CMAKE_BUILD_TYPE`，工程默认使用 `Debug`。
+若未指定 `CMAKE_BUILD_TYPE`，工程默认使用 `Debug`。版本号来自
+[`VERSION`](VERSION)；`--version` 与应用窗口标题使用同一版本。
 
 ### 跨平台构建
 
@@ -318,17 +376,26 @@ cmake --build build -j
 
 ## 运行
 
+macOS 构建产物是应用包：
+
 ```bash
-./build/bin/reversi
+open build/bin/Reversi.app
+# 或直接运行包内可执行文件
+./build/bin/Reversi.app/Contents/MacOS/Reversi
 ```
 
-使用多配置生成器（如 Visual Studio）时，可执行文件位于
-`build/bin/<Config>/reversi`（Windows 下为 `reversi.exe`）。
+Linux 运行 `./build/bin/reversi`；使用多配置生成器（如 Visual Studio）时，
+Windows 可执行文件位于 `build/bin/<Config>/reversi.exe`。发行包中的程序
+可从任意工作目录启动，运行时资源位于应用包 `Contents/Resources/assets`
+或可执行文件同级 `assets/`。
 
 开发/CI 可让程序只渲染若干帧后自动退出，用于验证窗口能正常启动与关闭：
 
 ```bash
-./build/bin/reversi --frames 10
+# macOS
+./build/bin/Reversi.app/Contents/MacOS/Reversi --frames 10
+# Linux（Windows 对应 build\bin\<Config>\reversi.exe）
+./build/bin/reversi --version
 ```
 
 退出码 `0` 表示正常初始化、渲染并关闭窗口。
@@ -458,6 +525,7 @@ GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
 ## 文档
 
 - [构建与运行](docs/BUILD.md)
+- [安装、卸载与发布](docs/RELEASE.md)
 - [测试与验证](docs/TESTING.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [路线图](docs/ROADMAP.md)
@@ -470,6 +538,7 @@ GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
 - [Phase 4 报告](docs/PHASE_4_REPORT.md)
 - [Phase 5 报告](docs/PHASE_5_REPORT.md)
 - [Phase 6 审计报告](docs/PHASE_6_REPORT.md)
+- [Phase 7 发布就绪性报告](docs/PHASE_7_REPORT.md)
 
 ## 许可证
 

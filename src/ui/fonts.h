@@ -12,9 +12,10 @@ typedef struct UiFonts {
 } UiFonts;
 
 /*
- * Loads the bundled Inter fonts relative to the executable directory.
- * Returns true when both custom fonts loaded; otherwise the default raylib
- * font is used and a warning is logged.
+ * Loads the bundled Inter fonts from the executable directory, or from the
+ * macOS application bundle's Resources directory. Returns true when both
+ * custom fonts loaded; otherwise the default raylib font is used and a
+ * warning is logged.
  */
 bool ui_fonts_load(UiFonts *fonts);
 void ui_fonts_unload(UiFonts *fonts);

@@ -14,9 +14,11 @@ Inter 由 Rasmus Andersson 开发，以 **SIL Open Font License 1.1** 发布，
 
 ## 运行时位置
 
-CMake 构建会把本目录复制到 `reversi` 可执行文件旁。运行时代码以
-**可执行文件目录**为基准（raylib 的 `GetApplicationDirectory()`）解析
-`assets/fonts/...`，不依赖源码目录或调用者的当前工作目录。
+CMake 构建会把本目录复制到可执行文件旁；macOS 应用包复制到
+`Reversi.app/Contents/Resources/assets`。运行时代码以可执行文件目录为
+基准（raylib 的 `GetApplicationDirectory()`）解析 `assets/fonts/...`，
+并在 macOS 上优先检查应用包的 Resources 目录，不依赖源码目录或调用者的
+当前工作目录。
 
 若字体文件缺失或无法加载，`ui_fonts_load()` 会记录警告并回退到 raylib
 默认字体；界面保持可操作，只是字形与排版不同。该路径已通过无资源目录

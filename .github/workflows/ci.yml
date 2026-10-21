@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: ${{ matrix.name }} build + tests
+  build-test:
+    name: ${{ matrix.name }} ${{ matrix.build_type }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,10 +16,22 @@ jobs:
         include:
           - os: ubuntu-latest
             name: Linux
+            build_type: Debug
+          - os: ubuntu-latest
+            name: Linux
+            build_type: Release
           - os: windows-latest
             name: Windows
+            build_type: Debug
+          - os: windows-latest
+            name: Windows
+            build_type: Release
           - os: macos-latest
             name: macOS
+            build_type: Debug
+          - os: macos-latest
+            name: macOS
+            build_type: Release
     steps:
       - uses: actions/checkout@v4
 
@@ -36,24 +48,41 @@ jobs:
       - name: Configure
         run: >
           cmake -S . -B build
-          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DREVERSI_ENABLE_GUI_TESTS=OFF
 
       - name: Build
-        run: cmake --build build --config Debug --parallel 4
+        run: >
+          cmake --build build
+          --config ${{ matrix.build_type }}
+          --parallel 4
 
       - name: Test (no window)
-        run: ctest --test-dir build -C Debug --output-on-failure
+        env:
+          UBSAN_OPTIONS: halt_on_error=1
+        run: >
+          ctest --test-dir build
+          -C ${{ matrix.build_type }}
+          --output-on-failure
 
-      - name: Upload Debug binaries
+      - name: Package
+        if: matrix.build_type == 'Release'
+        working-directory: build
+        run: cpack -C Release -B package
+
+      - name: Upload package and checksum
+        if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v4
         with:
-          name: reversi-${{ runner.os }}-Debug
-          path: build/bin
+          name: Reversi-${{ runner.os }}-${{ matrix.build_type }}
+          path: |
+            build/package/*.zip
+            build/package/*.tar.gz
+            build/package/*.sha256
           if-no-files-found: error
 
   linux-gui:
-    name: Linux Xvfb GUI smoke
+    name: Linux Xvfb GUI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,4 +111,48 @@ jobs:
         run: >
           xvfb-run -a -s "-screen 0 1100x800x24"
           ctest --test-dir build -C Debug --output-on-failure
+          -R "app.smoke|app.autoplay"
+
+  sanitizers:
+    name: Linux ASan+UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake xvfb libgl1-mesa-dri \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev \
+            libxinerama-dev libwayland-dev libxkbcommon-dev
+
+      - name: Configure with sanitizers
+        run: >
+          cmake -S . -B build-sanitize
+          -DCMAKE_BUILD_TYPE=Debug
+          -DREVERSI_ENABLE_GUI_TESTS=ON
+          -DREVERSI_ENABLE_ASAN=ON
+          -DREVERSI_ENABLE_UBSAN=ON
+
+      - name: Build
+        run: cmake --build build-sanitize --parallel 4
+
+      - name: Headless tests
+        env:
+          ASAN_OPTIONS: halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: >
+          ctest --test-dir build-sanitize -C Debug --output-on-failure
+          -E "app.smoke|app.autoplay"
+
+      - name: GUI smoke under Xvfb
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: >
+          xvfb-run -a -s "-screen 0 1100x800x24"
+          ctest --test-dir build-sanitize -C Debug --output-on-failure
           -R "app.smoke|app.autoplay"
