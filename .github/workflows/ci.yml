@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.name }} build + tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev \
+            libxinerama-dev libwayland-dev libxkbcommon-dev
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DREVERSI_ENABLE_GUI_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel 4
+
+      - name: Test (no window)
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+      - name: Upload Debug binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: reversi-${{ runner.os }}-Debug
+          path: build/bin
+          if-no-files-found: error
+
+  linux-gui:
+    name: Linux Xvfb GUI smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake xvfb libgl1-mesa-dri \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev \
+            libxinerama-dev libwayland-dev libxkbcommon-dev
+
+      - name: Configure with GUI tests
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DREVERSI_ENABLE_GUI_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel 4
+
+      - name: Smoke and autoplay under Xvfb
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: >
+          xvfb-run -a -s "-screen 0 1100x800x24"
+          ctest --test-dir build -C Debug --output-on-failure
+          -R "app.smoke|app.autoplay"
