@@ -24,6 +24,8 @@ Developer ID、未公证**；Windows 构建**未做 Authenticode 签名**。
 2. 把 `Reversi.app` 拖入 `/Applications`（或任意用户目录）。
 3. 首次启动可右键选择“打开”。构建只有 ad-hoc 签名，可能被 Gatekeeper
    拦截；这是当前分发限制，不是程序损坏。
+4. `Reversi.app/Contents/Resources/` 内含 `LICENSE`、
+   `THIRD_PARTY_NOTICES.md` 与字体许可证，单独拖动应用也不会丢失声明。
 
 卸载：
 
@@ -35,8 +37,24 @@ rm -rf "$HOME/Library/Application Support/Reversi"
 第二条命令会同时删除设置、统计和存档；只卸载程序时不要执行它。
 
 Developer ID 签名与公证是可选流程，需要发布者自己的证书，仓库不包含
-任何私钥。签名后的包应在发布前用 `codesign --verify --deep --strict` 和
-`spctl --assess` 复核。
+任何私钥。可在配置时传入签名身份：
+
+```bash
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DREVERSI_MACOS_CODESIGN_IDENTITY="Developer ID Application: ..."
+```
+
+签名并打包后，可用发布者自己的 notarytool 凭据提交公证：
+
+```bash
+xcrun notarytool submit Reversi-1.0.0-Darwin-arm64.zip \
+  --keychain-profile <profile> --wait
+xcrun stapler staple Reversi.app
+```
+
+签名后的包应在发布前用 `codesign --verify --deep --strict` 和
+`spctl --assess` 复核。未提供 Developer ID 时保留 ad-hoc 签名构建，
+并如实标注分发限制。
 
 ## 3. Windows 安装与卸载
 
@@ -116,9 +134,11 @@ macOS / Linux：
 ./scripts/verify-package.sh build-release/package/Reversi-*.zip
 ```
 
-`scripts/package.sh` 执行 Release 配置、构建、CTest、CPack，并生成
-`SHA256SUMS`。`scripts/verify-package.sh` 在临时目录解压，从 `/` 启动，
-检查运行时资源与字体加载，不依赖源码目录。
+`scripts/package.sh` 强制使用固定 raylib 6.2，执行 Release 配置、构建、
+CTest、CPack，并生成 `SHA256SUMS`。`scripts/verify-package.sh` 先校验
+归档 `.sha256`，在临时目录解压，从 `/` 连续启动两次，检查运行时资源、
+字体加载、用户数据持久化、许可证文件，并在 Linux 上执行 `ldd` 缺失
+依赖检查，不依赖源码目录。
 
 Windows 使用同一套 CMake/CPack 规则：
 

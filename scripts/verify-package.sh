@@ -25,12 +25,25 @@ if command -v caffeinate >/dev/null 2>&1; then
     sleep 1
 fi
 
-unzip -q "${archive}" -d "${tmp}/package"
-root="$(find "${tmp}/package" -maxdepth 1 -mindepth 1 -type d | head -n 1)"
-if [ -z "${root}" ]; then
-    echo "Package root not found" >&2
+checksum="${archive}.sha256"
+if [ ! -f "${checksum}" ]; then
+    echo "Checksum file not found: ${checksum}" >&2
     exit 1
 fi
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$(dirname "${checksum}")" && sha256sum -c "$(basename "${checksum}")")
+else
+    (cd "$(dirname "${checksum}")" && shasum -a 256 -c "$(basename "${checksum}")")
+fi
+
+unzip -q "${archive}" -d "${tmp}/package"
+shopt -s nullglob
+roots=("${tmp}/package"/*/)
+if [ "${#roots[@]}" -ne 1 ]; then
+    echo "Expected exactly one package root, found ${#roots[@]}" >&2
+    exit 1
+fi
+root="${roots[0]%/}"
 
 if [ -x "${root}/Reversi.app/Contents/MacOS/Reversi" ]; then
     exe="${root}/Reversi.app/Contents/MacOS/Reversi"
@@ -59,21 +72,56 @@ for asset in \
     fi
 done
 
+if [ -d "${root}/Reversi.app" ]; then
+    for document in LICENSE THIRD_PARTY_NOTICES.md; do
+        if [ ! -f "${root}/Reversi.app/Contents/Resources/${document}" ]; then
+            echo "Missing license in app bundle: ${document}" >&2
+            exit 1
+        fi
+    done
+else
+    for document in LICENSE THIRD_PARTY_NOTICES.md; do
+        if [ ! -f "${root}/${document}" ]; then
+            echo "Missing license in package: ${document}" >&2
+            exit 1
+        fi
+    done
+fi
+
+if [ "$(uname -s)" = "Linux" ]; then
+    missing="$(ldd "${exe}" | grep "not found" || true)"
+    if [ -n "${missing}" ]; then
+        echo "Missing shared libraries:" >&2
+        echo "${missing}" >&2
+        exit 1
+    fi
+fi
+
 export HOME="${tmp}/home"
 export XDG_DATA_HOME="${tmp}/home"
 export APPDATA="${tmp}/home"
 mkdir -p "${HOME}"
 
 "${exe}" --version
-if ! (cd / && "${exe}" --frames 2 > "${tmp}/run.log" 2>&1); then
-    echo "Packaged application failed to launch" >&2
-    cat "${tmp}/run.log" >&2
-    exit 1
-fi
-grep -q "loaded UI fonts" "${tmp}/run.log" || {
+for run in 1 2; do
+    if ! (cd / && "${exe}" --frames 2 > "${tmp}/run-${run}.log" 2>&1); then
+        echo "Packaged application failed on launch ${run}" >&2
+        cat "${tmp}/run-${run}.log" >&2
+        exit 1
+    fi
+done
+
+grep -q "loaded UI fonts" "${tmp}/run-2.log" || {
     echo "Bundled fonts were not loaded" >&2
-    cat "${tmp}/run.log" >&2
+    cat "${tmp}/run-2.log" >&2
     exit 1
 }
+
+for name in settings.dat stats.dat; do
+    if [ "$(find "${HOME}" -type f -name "${name}" | wc -l)" -eq 0 ]; then
+        echo "Application did not persist ${name}" >&2
+        exit 1
+    fi
+done
 
 echo "PASS: ${archive}"

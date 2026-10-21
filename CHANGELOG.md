@@ -2,6 +2,21 @@
 
 本项目遵循 Keep a Changelog 的章节结构，版本号使用语义化版本。
 
+## [Unreleased]
+
+### Fixed
+
+- 打包验收脚本在 `pipefail` 下使用 `find | head` 可能因 SIGPIPE 退出；
+  改为精确匹配唯一包根目录。
+- 打包验收脚本现在校验归档 `.sha256`、连续启动两次、检查用户数据
+  持久化与许可证文件，并在 Linux 上检查 `ldd` 缺失依赖。
+- macOS 应用包未携带 `LICENSE` 与 `THIRD_PARTY_NOTICES.md`；现已复制到
+  `Contents/Resources/`。
+- Windows 包 `--version` 冒烟未检查退出码与版本文本；现已断言两者。
+- 发布脚本与 CI 打包改为强制获取固定 raylib 6.2，避免使用未审计的
+  系统版本。
+- 字体加载的重复卸载判断集中到 `unload_if_not_default()`。
+
 ## [1.0.0] - 2026-10-21
 
 首个正式发行版本。发布工程、跨平台打包与安装验收完成；游戏玩法与

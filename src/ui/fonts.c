@@ -23,6 +23,14 @@ static bool font_is_custom(Font font)
         && font.texture.id != GetFontDefault().texture.id;
 }
 
+static void unload_if_not_default(Font font)
+{
+    if (font.texture.id > 0
+        && font.texture.id != GetFontDefault().texture.id) {
+        UnloadFont(font);
+    }
+}
+
 static Font load_ui_font(const char *relative, int size)
 {
     char path[1024];
@@ -39,10 +47,7 @@ static Font load_ui_font(const char *relative, int size)
             if (font_is_custom(bundled)) {
                 return bundled;
             }
-            if (bundled.texture.id > 0
-                && bundled.texture.id != GetFontDefault().texture.id) {
-                UnloadFont(bundled);
-            }
+            unload_if_not_default(bundled);
         }
     }
 #endif
@@ -52,10 +57,7 @@ static Font load_ui_font(const char *relative, int size)
     if (font_is_custom(font)) {
         return font;
     }
-    if (font.texture.id > 0
-        && font.texture.id != GetFontDefault().texture.id) {
-        UnloadFont(font);
-    }
+    unload_if_not_default(font);
     return GetFontDefault();
 }
 

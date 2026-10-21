@@ -82,8 +82,8 @@ macOS 的 ASan 不支持 LeakSanitizer，因此 LeakSanitizer 仍为
 | 运行时资源完整 | `Contents/Resources/assets/fonts` 两个 TTF 与 OFL 存在，日志 `loaded UI fonts` | PASS |
 | 首次启动 | 窗口、字体、音频初始化，`--frames 2` 退出 0 | PASS |
 | 用户数据目录 | 生成 `~/Library/Application Support/Reversi/settings.dat`、`stats.dat` | PASS |
-| 关闭和重新启动 | 连续两次启动均退出 0，第二次读取已有用户数据 | PASS |
-| 保存与读取 | 打包 Debug 版自动对局完成一局，`pvp_games 0→1`，重启后再跑一局变为 2；`storage.save` 往返/损坏拒绝测试 15/15 通过 | PASS（逻辑）；打包 GUI 手动存/读档 **NOT TESTED** |
+| 关闭和重新启动 | `verify-package.sh` 连续两次启动均退出 0，并检查第二次加载 | PASS |
+| 保存与读取 | 打包 Debug 版自动对局完成一局，`pvp_games 0→1`，重启后再跑一局变为 2；`verify-package.sh` 检查 `settings.dat`/`stats.dat` 持久化；`storage.save` 往返/损坏拒绝测试通过 | PASS（逻辑与用户数据）；打包 GUI 手动存/读档 **NOT TESTED** |
 | 无缺失动态库 | `otool -L` 仅显示系统 Framework 与 `libSystem` | PASS |
 | 包结构签名 | ad-hoc 签名；`codesign --verify --deep --strict` 通过 | PASS |
 | 运行目录改变 | 从 `/` 启动成功 | PASS |
@@ -128,6 +128,10 @@ Reversi 1.0.0 (commit ..., Release build)
 PASS: .../Reversi-1.0.0-Linux-x86_64.zip
 ```
 
+v1.0.0 已由标签触发的发布工作流（运行 `39609234964`）正式发布：
+<https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.0>。
+发布附件与 SHA-256 记录在 [RELEASES.md](RELEASES.md)。
+
 GitHub 托管运行器是虚拟机，不是物理机；Windows/macOS GUI 与
 Windows/Linux 物理桌面仍未验证。
 
@@ -143,8 +147,10 @@ Windows/Linux 物理桌面仍未验证。
 | dr_flac / dr_mp3 / dr_wav | Public Domain / MIT-0 | 静态链接 |
 | Inter 4.1 | SIL OFL 1.1 | 随包字体 |
 
-声明集中在 `THIRD_PARTY_NOTICES.md` 与 `assets/fonts/OFL.txt`。游戏音效、
-棋盘、棋子与提示均由代码生成，没有第三方音频、贴图或图标文件。
+声明集中在 `THIRD_PARTY_NOTICES.md` 与 `assets/fonts/OFL.txt`。macOS
+应用包还会把 `LICENSE` 与 `THIRD_PARTY_NOTICES.md` 复制到
+`Contents/Resources/`，避免用户单独拖动应用后丢失声明。游戏音效、棋盘、
+棋子与提示均由代码生成，没有第三方音频、贴图或图标文件。
 
 ## 8. 尚未解决的发布阻碍
 
@@ -157,8 +163,9 @@ Windows/Linux 物理桌面仍未验证。
    **NOT TESTED**。
 4. **Linux 仅在 Xvfb 软件渲染下验证 GUI**：物理桌面、不同发行版与
    Wayland 原生会话未验证。
-5. **GitHub Release 尚未发布**：工作流已就绪，但未推送 `v1.0.0` 标签。
-   发布是对外操作，需要明确确认后执行。
+5. **后续修复尚未进入已发布包**：v1.0.0 已于 2026-10-21 发布；本次审查
+   之后的修复需要新标签（如 `v1.0.1`）才能进入发行附件。v1.0.0 的校验值
+   见 [RELEASES.md](RELEASES.md)。
 6. **打包 GUI 手动存/读档未走查**：存档格式、往返与拒绝路径有自动化
    测试，打包进程的统计/设置持久化已验证；通过 GUI 点击“保存/读取游戏”
    仍需人工复核。
@@ -171,16 +178,34 @@ Windows/Linux 物理桌面仍未验证。
 |---|---|
 | `VERSION`、生成式版本头、`--version` | PASS |
 | CMake install/CPack 与组件隔离 | PASS |
-| macOS `Reversi.app` ZIP | PASS（未签名） |
+| macOS `Reversi.app` ZIP | PASS（ad-hoc 签名；无 Developer ID/公证） |
 | Windows 便携 ZIP（静态 CRT、版本资源） | PASS（未签名，GUI NOT TESTED） |
 | Linux ZIP/TGZ | PASS（Xvfb 包启动 PASS） |
-| 各归档 `.sha256` 与 `SHA256SUMS` | PASS（以最终构建目录/Release 附件为准） |
+| 各归档 `.sha256` 与 `SHA256SUMS` | PASS（v1.0.0 记录见 `docs/RELEASES.md`） |
 | `scripts/package.sh`、`scripts/verify-package.sh` | PASS |
 | `docs/RELEASE.md` 安装/卸载/签名限制 | PASS |
-| CI 与 Release 工作流 | PASS（Release 发布动作未执行） |
+| CI 与 Release 工作流 | PASS（v1.0.0 已发布） |
 | README 截图、功能、平台、安装、构建、测试、架构、许可证 | PASS |
 | 第三方许可证声明 | PASS |
 
-最终发行归档的 SHA-256 由 CPack 写入同目录 `.sha256`，发布工作流另生成
-汇总 `SHA256SUMS`。由于报告本身也打包进归档，报告内不嵌入自身归档哈希；
-以最终构建产物旁的校验文件为准。
+发行归档的 SHA-256 由 CPack 写入同目录 `.sha256`，发布工作流另生成汇总
+`SHA256SUMS`。已发布的 v1.0.0 校验值记录在 [RELEASES.md](RELEASES.md)；
+后续构建因提交号与归档时间不同，哈希会变化，以对应运行的校验文件为准。
+
+## 10. 发布后审查修正
+
+v1.0.0 发布后进行的代码审查发现以下问题，已在主分支修正；这些修正需要
+新的版本标签才能进入再次发布的发行包。
+
+| 问题 | 修正 | 验证 |
+|---|---|---|
+| `verify-package.sh` 在 `pipefail` 下组合 `find` 与 `head` 可能因 SIGPIPE 退出 | 改为精确匹配唯一包根目录 | 脚本连续运行通过 |
+| 验收脚本未校验 `.sha256`、未验证重启/资源/许可证/动态库 | 校验归档校验和；连续启动两次；检查 `settings.dat`/`stats.dat`；Linux 执行 `ldd` 缺失检查；检查 `LICENSE`/`THIRD_PARTY_NOTICES.md` | 本地发行包 PASS |
+| macOS 应用包未包含 GPL 与第三方声明 | 复制到 `Contents/Resources/` 后重新 ad-hoc 签名 | `codesign --verify` 与包验收 PASS |
+| 发布构建可能使用系统 raylib | 发布脚本与 CI 打包强制 `REVERSI_FORCE_FETCH_RAYLIB=ON` | CMake 配置输出使用 fetched 6.2 |
+| Windows 包 `--version` 冒烟不检查退出码/文本 | 断言退出码为 0 且输出匹配 `Reversi <VERSION>` | 下次 CI 验证 |
+| 字体加载重复卸载判断 | 提取 `unload_if_not_default()` | Debug 17/17、Release 15/15、ASan+UBSan 15/15 |
+
+仍保留的判断项：CI 中三平台打包步骤与 `release.yml` 有重复，Linux 依赖
+安装列表重复；提取 reusable workflow 会扩大改动面，本次未做。
+

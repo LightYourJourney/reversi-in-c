@@ -546,6 +546,7 @@ GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
 
 - [构建与运行](docs/BUILD.md)
 - [安装、卸载与发布](docs/RELEASE.md)
+- [发行记录与 SHA-256](docs/RELEASES.md)
 - [测试与验证](docs/TESTING.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [路线图](docs/ROADMAP.md)

@@ -19,9 +19,10 @@ ctest --test-dir build --output-on-failure
 可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
-与 CPack，`scripts/verify-package.sh` 从任意工作目录启动解压后的包并检查
-字体资源。CI 在 Linux Xvfb 下对 Linux 发行包执行同一验收；Windows 发行包
-执行 `reversi.exe --version`。完整结果与剩余限制见
+与 CPack；`scripts/verify-package.sh` 校验归档 `.sha256`，从任意工作目录
+连续启动两次，检查字体资源、许可证、用户数据持久化，并在 Linux 上检查
+`ldd` 缺失依赖。CI 在 Linux Xvfb 下对 Linux 发行包执行同一验收；Windows
+发行包执行并断言 `reversi.exe --version`。完整结果与剩余限制见
 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
 
 ## 2. 无窗口测试清单

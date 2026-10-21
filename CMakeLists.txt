@@ -296,6 +296,13 @@ add_custom_command(TARGET reversi POST_BUILD
     COMMENT "Copying assets into the application directory")
 
 if(APPLE)
+    add_custom_command(TARGET reversi POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy
+            "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+            "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+            "$<TARGET_BUNDLE_CONTENT_DIR:reversi>/Resources"
+        COMMENT "Copying licenses into Reversi.app")
+
     # Re-seal the bundle after adding Resources. The default ad-hoc signature
     # keeps local builds runnable; a Developer ID can be supplied for release.
     set(REVERSI_MACOS_CODESIGN_IDENTITY "-" CACHE STRING

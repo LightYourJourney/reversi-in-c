@@ -40,6 +40,7 @@ jobs:
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DREVERSI_ENABLE_GUI_TESTS=OFF
+          -DREVERSI_FORCE_FETCH_RAYLIB=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel 4
@@ -68,7 +69,14 @@ jobs:
           Expand-Archive $zip.FullName -DestinationPath build/package/smoke -Force
           $exe = Get-ChildItem build/package/smoke -Recurse -Filter reversi.exe |
             Select-Object -First 1
-          & $exe.FullName --version
+          $output = (& $exe.FullName --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "reversi.exe --version exited with $LASTEXITCODE"
+          }
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($output -notmatch "^Reversi $([regex]::Escape($version)) ") {
+            throw "Unexpected version output: $output"
+          }
 
       - name: Upload package
         uses: actions/upload-artifact@v4

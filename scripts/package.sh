@@ -10,7 +10,8 @@ echo "Packaging Reversi ${version}"
 
 cmake -S "${root}" -B "${build_dir}" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DREVERSI_ENABLE_GUI_TESTS=OFF
+    -DREVERSI_ENABLE_GUI_TESTS=OFF \
+    -DREVERSI_FORCE_FETCH_RAYLIB=ON
 cmake --build "${build_dir}" --config Release --parallel
 ctest --test-dir "${build_dir}" -C Release --output-on-failure
 
