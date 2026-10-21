@@ -202,3 +202,25 @@ Windows/Linux 未实机验证。详见 [PHASE_5_REPORT.md](PHASE_5_REPORT.md)。
 - 第三方 UI 框架或资源商店素材
 
 这些方向如需加入，应先更新架构文档并评估对模块边界的影响。
+
+## Phase 6 — 全面审计、测试、优化与发布准备（已完成，2026-10-21）
+
+交付内容：
+
+- 完整代码审计：分层、依赖、重复、全局状态、内存所有权、边界/UB、
+  错误处理、资源生命周期、持久化、AI 安全、状态机、死代码、平台与依赖。
+- 测试矩阵实际执行：Debug 16/16（含 GUI 冒烟）、Release 15/15、
+  ASan+UBSan 15/15、全新 Debug 构建树 15/15。
+- 性能测量：AI Hard 500 ms 预算、Medium 3 ms、Easy 0–1 ms；
+  存档读 0.086 ms/次、写 0.162 ms/次；菜单/自动对局约 54 FPS。
+- GUI 实机冒烟：真实窗口、Inter 字体、音频初始化/清理、主菜单截图、
+  600 帧自动对局两局、统计递增与终局自动存档删除。
+- 修复：终局统计漏记、AI 内部配置校验；此前 Phase 5 审查修正一并保留。
+- 文档：`docs/BUILD.md`、`docs/TESTING.md`、`docs/PHASE_6_REPORT.md`、
+  `CHANGELOG.md`、`THIRD_PARTY_NOTICES.md`，README/ARCHITECTURE 更新。
+- 交付：`build-release/package/reversi-0.1.0-macos-arm64/` 与 zip，
+  实际运行 `--frames 2` 退出码 0。
+
+未验证项：逐按钮 GUI 交互、窗口缩放、真实听感、Windows/Linux 实机、
+LeakSanitizer（macOS 不支持）、多分钟/多小时长跑。详见
+[PHASE_6_REPORT.md](PHASE_6_REPORT.md)。

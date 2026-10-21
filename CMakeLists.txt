@@ -70,6 +70,7 @@ if(NOT REVERSI_RAYLIB_TARGET)
     include(FetchContent)
 
     set(BUILD_EXAMPLES OFF CACHE BOOL "Build raylib examples" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "Do not install GLFW with the game" FORCE)
 
     FetchContent_Declare(raylib
         URL "${REVERSI_RAYLIB_URL}"
@@ -224,6 +225,12 @@ add_custom_command(TARGET reversi POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:reversi>/assets"
     COMMENT "Copying assets next to the executable")
+
+# A runnable distribution tree: executable + assets + licenses.
+install(TARGETS reversi RUNTIME DESTINATION . COMPONENT Reversi)
+install(DIRECTORY assets docs DESTINATION . COMPONENT Reversi)
+install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md CHANGELOG.md
+        DESTINATION . COMPONENT Reversi)
 
 # ---------------------------------------------------------------------------
 # Tests. Core tests are GUI-free and link only reversi_core; the optional

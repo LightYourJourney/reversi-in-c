@@ -370,7 +370,8 @@ static void finish_stats(AiSearch *search, int completed_depth, int score,
 static bool search_choose(const GameState *state, const AiConfig *config,
                           bool use_tt, Move *out_move, AiStats *out_stats)
 {
-    if (state == NULL || config == NULL || out_move == NULL) {
+    if (state == NULL || config == NULL || out_move == NULL
+        || !ai_config_is_valid(config)) {
         return false;
     }
 
@@ -459,7 +460,8 @@ bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
 bool ai_easy_choose(const GameState *state, const AiConfig *config,
                     Move *out_move, AiStats *out_stats)
 {
-    if (state == NULL || config == NULL || out_move == NULL) {
+    if (state == NULL || config == NULL || out_move == NULL
+        || !ai_config_is_valid(config)) {
         return false;
     }
 

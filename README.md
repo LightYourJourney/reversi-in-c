@@ -68,8 +68,9 @@
 │   │   └── modal.[ch]    退出/重开/返回/删除确认
 │   ├── storage/
 │   │   ├── storage.[ch]  用户数据目录、原子读写
+│   │   ├── text.[ch]     存档/设置/统计共享的行拆分与整数解析
 │   │   ├── save.[ch]     版本化存档、校验和、严格回放校验
-│   │   └── stats.[ch]    统计记录与持久化
+│   │   └── stats.[ch]    统计记录、撤回与持久化
 │   ├── settings/settings.[ch] 用户设置与持久化
 │   ├── audio/audio.[ch]  程序化落子/翻转/按钮/胜负音效
 │   └── app/app.[ch]      页面路由、转场与主循环
@@ -95,15 +96,20 @@
 │   └── test_audio.c      无音频设备时的安全降级
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
+│   ├── BUILD.md          构建、运行、测试、打包与平台说明
+│   ├── TESTING.md        测试矩阵、性能数据与未验证项
 │   ├── ROADMAP.md        分阶段交付计划
 │   ├── PHASE_0_REPORT.md Phase 0 完成报告
 │   ├── PHASE_1_REPORT.md Phase 1 完成报告
 │   ├── PHASE_2_REPORT.md Phase 2 完成报告
 │   ├── PHASE_3_REPORT.md Phase 3 完成报告
 │   ├── PHASE_4_REPORT.md Phase 4 完成报告（含 AI 基准结果）
-│   └── PHASE_5_REPORT.md Phase 5 完成报告（存档、设置、音效与 UI 审查）
+│   ├── PHASE_5_REPORT.md Phase 5 完成报告（存档、设置、音效与 UI 审查）
+│   └── PHASE_6_REPORT.md Phase 6 审计、测试、性能与交付报告
 ├── assets/
 │   └── fonts/            Inter 4.1（SIL OFL 1.1）
+├── CHANGELOG.md          变更日志
+├── THIRD_PARTY_NOTICES.md 第三方许可证
 └── LICENSE              GPL-3.0
 ```
 
@@ -230,6 +236,8 @@ REVERSI_SHOT_DIR=/tmp/reversi-shots ./build/bin/reversi
 
 ## 构建
 
+完整命令、依赖与离线构建说明见 [docs/BUILD.md](docs/BUILD.md)。
+
 ### 环境要求
 
 - CMake **3.24** 或更高
@@ -324,6 +332,8 @@ cmake --build build -j
 
 ## 测试
 
+完整测试矩阵、性能数据与未验证项见 [docs/TESTING.md](docs/TESTING.md)。
+
 ```bash
 ctest --test-dir build --output-on-failure
 ```
@@ -340,7 +350,7 @@ ctest --test-dir build --output-on-failure
 - `core.match`：980 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
   从暂停/终局重开、撤销/重做恢复一致性、模式切换、AI_THINKING、人机撤销、
   从着法序列恢复（含期望局面校验、终局恢复、非法序列与越界计数拒绝）
-- `ai.core`：约 2,970 项断言；配置/名称、评估分量与难度化评估、大量局面的
+- `ai.core`：2,977 项断言；配置/名称、评估分量与难度化评估、大量局面的
   合法性、TT 与无 TT 搜索一致性、单步与 pass 局面、取消与确定性，以及
   6 局固定深度人机对局 + 1 局使用实际 Hard 参数（深度 10 / 500 ms）的完整对局
 - `ai.worker`：22 项断言；后台搜索、状态快照隔离、取消、空指针与生命周期
@@ -358,13 +368,15 @@ ctest --test-dir build --output-on-failure
 - `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
   存档槽位保存/加载/删除、帮助翻页与统计页返回。
 
-实际结果（2026-10-21，macOS arm64，Phase 5）：
+实际结果（2026-10-21，macOS arm64，Phase 6）：
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug | 15/15 无 GUI 测试通过；`app.smoke` 在本阶段显示可用时曾通过 |
-| Release | 15/15 无 GUI 测试通过 |
-| ASan+UBSan | 15/15 无 GUI 测试通过，无 Sanitizer 报告 |
+| Debug + GUI | 16/16 通过；`app.smoke` 实际打开窗口并正常关闭 |
+| Debug | 15/15 无 GUI 测试通过 |
+| Release | 15/15 通过；`reversi --frames 2` 退出码 0 |
+| ASan+UBSan | 15/15 通过，无 Sanitizer 报告；GUI 冒烟退出码 0 |
+| 全新 Debug 构建树 | 15/15 通过 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
@@ -400,9 +412,9 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 15/15、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；Phase 5 主要页面完成截图核对；输入注入受当前图形会话限制，详见 Phase 5 报告 |
-| Windows | 未验证 |
-| Linux | 未验证 |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 16/16（含 GUI）、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；真实窗口/字体/音频、自动对局与无资源回退已验证；逐按钮人工点击、窗口缩放、真实听感未验证 |
+| Windows | NOT TESTED |
+| Linux | NOT TESTED |
 
 工程未使用平台相关路径或硬编码编译选项；跨平台构建需要对应的 raylib
 依赖与 OpenGL 环境。
@@ -417,9 +429,9 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
   Linux `$XDG_DATA_HOME/reversi`（或 `~/.local/share/reversi`），
   Windows `%APPDATA%\Reversi`。设置、统计与存档均写入该目录。
 - 存档只保存当前撤销分支；撤销后尚未重做的“未来”分支不会写入文件。
-- 当前会话的图形输入注入受限（鼠标移动可见，但按键/点击未送达应用），
-  因此 Phase 5 的读档/设置恢复通过应用启动路径与截图核对，未完成逐按钮
-  人工点击；相关动作由 `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
+- Phase 6 的窗口实际创建、字体/音频加载、主菜单截图与 600 帧自动对局已
+  验证；当前会话窗口不在可交互 Space，逐按钮点击/键盘流程仍未完成，
+  相关动作由 `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
 - 音效设备初始化成功且音效加载无警告，但**未进行人工听感验证**；
   无音频设备路径由 `audio.noop` 与代码降级分支覆盖。
 - 760×600 最小窗口的 Phase 5 新页面按布局常量核对，未逐页截图；
@@ -438,15 +450,23 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 ## 文档
 
+- [构建与运行](docs/BUILD.md)
+- [测试与验证](docs/TESTING.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [路线图](docs/ROADMAP.md)
+- [变更日志](CHANGELOG.md)
+- [第三方声明](THIRD_PARTY_NOTICES.md)
 - [Phase 0 报告](docs/PHASE_0_REPORT.md)
 - [Phase 1 报告](docs/PHASE_1_REPORT.md)
 - [Phase 2 报告](docs/PHASE_2_REPORT.md)
 - [Phase 3 报告](docs/PHASE_3_REPORT.md)
 - [Phase 4 报告](docs/PHASE_4_REPORT.md)
 - [Phase 5 报告](docs/PHASE_5_REPORT.md)
+- [Phase 6 审计报告](docs/PHASE_6_REPORT.md)
 
 ## 许可证
 
 本项目使用 **GNU General Public License v3.0**，详见 [LICENSE](LICENSE)。
+raylib（zlib）与 Inter（SIL OFL 1.1）的声明见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与
+[assets/fonts/OFL.txt](assets/fonts/OFL.txt)。

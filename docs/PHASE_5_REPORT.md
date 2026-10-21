@@ -156,7 +156,7 @@ result 0
 | core.random | 557,924 | 通过 |
 | core.history | 124 | 通过 |
 | core.match | 980 | 通过 |
-| ai.core | 约 2,970 | 通过 |
+| ai.core | 2,977 | 通过 |
 | ai.worker | 22 | 通过 |
 | storage.save | 91 | 通过 |
 | storage.settings | 58 | 通过 |

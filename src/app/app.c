@@ -568,7 +568,8 @@ static void app_unrecord_result(App *app, GameResult previous)
 
 static void app_maybe_record_result(App *app)
 {
-    if (app->match.phase != MATCH_PHASE_GAME_OVER || app->stats_recorded) {
+    if (app->match.state.result == GAME_RESULT_ONGOING
+        || app->stats_recorded) {
         return;
     }
     app->stats_recorded = true;
@@ -843,6 +844,7 @@ static void app_apply_move(App *app, Move move)
     if (app->match.last_flips > 0) {
         audio_play(AUDIO_CUE_FLIP);
     }
+    app_maybe_record_result(app);
     app_autosave(app);
     ui_animation_start(&app->animation, &before, &app->match.state.board,
                        move, mover, app->settings.animations);

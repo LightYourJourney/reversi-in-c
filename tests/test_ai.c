@@ -387,6 +387,15 @@ static void test_single_and_pass_positions(TestStats *stats)
     Move move = {0, 0};
     REVERSI_TEST_ASSERT(stats,
         !ai_choose_move(&state, &config, &move, NULL));
+
+    GameState opening;
+    game_init(&opening);
+    AiConfig invalid = ai_default_config(AI_DIFFICULTY_MEDIUM, 0);
+    invalid.max_depth = 0;
+    REVERSI_TEST_ASSERT(stats,
+        !ai_search_choose_ex(&opening, &invalid, false, &move, NULL));
+    REVERSI_TEST_ASSERT(stats,
+        !ai_easy_choose(&opening, &invalid, &move, NULL));
 }
 
 static bool always_cancel(void *context)
