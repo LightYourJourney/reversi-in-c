@@ -34,6 +34,14 @@
   系统版本。
 - 字体加载的重复卸载判断集中到 `unload_if_not_default()`。
 
+### Verified
+
+- 本机 macOS arm64：Debug 17/17、Release 15/15、ASan+UBSan 无窗口 15/15。
+- GitHub Actions `39633821096` 9/9 通过，包含 Windows Debug 与三平台
+  Release 打包；发布工作流 `39634542587` 完成三平台打包并发布。
+- 发布后通过 API 重新下载 macOS 归档：SHA-256 与 `SHA256SUMS` 一致，
+  `scripts/verify-package.sh` PASS，包内图标与 ad-hoc 签名有效。
+
 ## [1.0.0] - 2026-10-21
 
 首个正式发行版本。发布工程、跨平台打包与安装验收完成；游戏玩法与

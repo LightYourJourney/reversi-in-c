@@ -263,6 +263,17 @@ Windows/macOS 物理桌面 GUI 与 Linux 物理桌面未验证、打包 GUI 手�
 Windows 图标的资源编译未在本机执行（无 MSVC），为 **NOT TESTED**。
 详见 [PHASE_8_REPORT.md](PHASE_8_REPORT.md)。
 
+## Phase 9 — v1.0.1 补丁发布（已完成，2026-10-22）
+
+- 版本号提升到 `1.0.1`；`CHANGELOG.md` 的 `[Unreleased]` 归入该版本。
+- 发布内容：Phase 7 后的审查修正、应用图标、CI 打包工作流收敛。
+- 首次推送（`ae50eab`）暴露 Windows 资源编译失败：`.rc` 把反斜杠路径
+  当作 C 转义；改用正斜杠后在 `323856f` 通过。
+- CI 运行 `39633821096` 9/9 通过；发布工作流 `39634542587` 成功发布
+  <https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.1>。
+- 发布后重新下载 macOS 归档：SHA-256 与 `SHA256SUMS` 一致，
+  `scripts/verify-package.sh` PASS。详见 [PHASE_9_REPORT.md](PHASE_9_REPORT.md)。
+
 ## 非目标（当前）
 
 - 在线对战、账号系统、网络协议
