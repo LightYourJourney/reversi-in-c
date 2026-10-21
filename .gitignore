@@ -3,6 +3,9 @@
 /build-*/
 /cmake-build-*/
 /out/
+/web/dist/
+/tests/web/node_modules/
+/tests/web/screenshots/
 
 # CMake generated files (in-source builds)
 CMakeCache.txt

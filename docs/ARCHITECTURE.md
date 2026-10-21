@@ -59,6 +59,7 @@
 | Storage | `src/storage/` | Phase 5 已实现 | 用户数据目录、原子文件读写、版本化存档、严格回放校验、统计持久化 | Game、History、Match、C 标准库、平台文件 API |
 | Settings | `src/settings/` | Phase 5 已实现 | 用户偏好默认值、严格解析、原子保存 | C 标准库 / Storage |
 | Audio | `src/audio/` | Phase 5 已实现 | 程序化音效合成、设备初始化、音量/开关、无设备降级 | raylib、C 标准库 |
+| Web platform | `src/platform/web/` | Phase 10 已实现 | 浏览器尺寸、`localStorage`、AI Worker 适配 | Emscripten、`storage.h`、`ai_worker.h` |
 | Utils | `src/utils/` | 按需 | 无业务含义的纯工具函数 | C 标准库 |
 
 ## 4. 数据流
@@ -500,3 +501,24 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 6. **发布与打包分离**：`ci.yml` 负责每次提交的矩阵验证与产物上传；
    `release.yml` 只在 `v*` 标签触发正式 GitHub Release，标签必须与
    `VERSION` 一致，避免误发布。
+
+## 19. Phase 10 关键决策：Web 平台适配
+
+1. **主循环分离**：`app_run` 拆成 `app_boot` / `app_frame` /
+   `app_release`；桌面保留 `while (!WindowShouldClose())`，Web 使用
+   `emscripten_set_main_loop_arg`。`AppRun` 在 Web 上是静态存储，桌面仍在
+   栈上。
+2. **存储适配层**：`storage.h` 的 7 个函数在 Web 由 `storage_web.c`
+   实现，键名取代路径，`localStorage` 同步读写；`save`/`settings`/`stats`
+   与严格校验完全复用，存档格式不变。
+3. **AI Worker 隔离**：Web 端不使用 pthread。`ai_worker_web.c` 保持
+   `ai_worker.h` 语义，通过 `postMessage` 驱动独立的 `ai_worker` 模块；
+   取消 = 终止 Worker，主线程从不 join，也不执行阻塞搜索。
+4. **资源与尺寸**：`--preload-file assets@/assets` 提供字体；Web 端关闭
+   `FLAG_WINDOW_HIGHDPI`，由 JS 按 CSS 尺寸调用 `reversi_web_resize`，
+   避免 raylib Web 把画布按 DPR 缩小后只绘制左上角。
+5. **诊断接口**：Web 构建导出 `reversi_web_*` 诊断函数（帧数、屏幕/鼠标、
+   游戏状态、取消、堆大小），供 Playwright 测试使用；桌面构建不编译这些
+   函数。
+6. **平台边界**：Web 专属代码只在 `src/platform/web/`、`web/` 与
+   `tests/web/`；`core/`、`ai/`、`storage/` 的序列化层未分叉。

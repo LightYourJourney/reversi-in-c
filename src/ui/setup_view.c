@@ -312,7 +312,7 @@ void setup_view_draw(const SetupView *view, const UiFonts *fonts)
                    view->focus_visible && view->focus == 4);
 
     const char *note = view->ai_available
-        ? "Local two-player or computer; choose your colour and strength."
+        ? "Choose mode, colour, and strength."
         : "Computer opponent is unavailable; local play is ready.";
     ui_draw_text_clipped(
         fonts, UI_TEXT_REGULAR, note,

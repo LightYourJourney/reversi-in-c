@@ -14,7 +14,13 @@ project(Reversi
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
+if(EMSCRIPTEN)
+    # raylib's bundled miniaudio uses EM_ASM, which Emscripten only allows in
+    # GNU C modes. First-party sources still target C11 semantics.
+    set(CMAKE_C_EXTENSIONS ON)
+else()
+    set(CMAKE_C_EXTENSIONS OFF)
+endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(REVERSI_GIT_COMMIT "unknown")
@@ -121,7 +127,9 @@ if(NOT REVERSI_RAYLIB_TARGET)
     message(STATUS "Reversi: using fetched raylib ${REVERSI_RAYLIB_VERSION}")
 endif()
 
-find_package(Threads REQUIRED)
+if(NOT EMSCRIPTEN)
+    find_package(Threads REQUIRED)
+endif()
 
 # ---------------------------------------------------------------------------
 # Optional sanitizers. Applied after raylib is configured so third-party
@@ -136,7 +144,7 @@ elseif(REVERSI_ENABLE_UBSAN)
     set(REVERSI_SANITIZER_FLAGS "undefined")
 endif()
 
-if(REVERSI_SANITIZER_FLAGS)
+if(REVERSI_SANITIZER_FLAGS AND NOT EMSCRIPTEN)
     if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
         add_compile_options(
             "-fsanitize=${REVERSI_SANITIZER_FLAGS}"
@@ -183,18 +191,31 @@ add_library(reversi_core STATIC
 target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
+set(REVERSI_AI_WORKER_SOURCE src/ai/ai_worker.c)
+if(EMSCRIPTEN)
+    set(REVERSI_AI_WORKER_SOURCE src/platform/web/ai_worker_web.c)
+endif()
+
 add_library(reversi_ai STATIC
     src/ai/ai.c
     src/ai/ai_eval.c
     src/ai/ai_search.c
-    src/ai/ai_worker.c)
+    ${REVERSI_AI_WORKER_SOURCE})
 target_include_directories(reversi_ai PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_ai
     PUBLIC reversi_core
-    PRIVATE reversi_warnings Threads::Threads)
+    PRIVATE reversi_warnings)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(reversi_ai PRIVATE Threads::Threads)
+endif()
+
+set(REVERSI_STORAGE_SOURCE src/storage/storage.c)
+if(EMSCRIPTEN)
+    set(REVERSI_STORAGE_SOURCE src/platform/web/storage_web.c)
+endif()
 
 add_library(reversi_persistence STATIC
-    src/storage/storage.c
+    ${REVERSI_STORAGE_SOURCE}
     src/storage/text.c
     src/storage/save.c
     src/storage/stats.c
@@ -212,7 +233,7 @@ target_include_directories(reversi_audio PUBLIC
 target_link_libraries(reversi_audio
     PUBLIC ${REVERSI_RAYLIB_TARGET}
     PRIVATE reversi_warnings)
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     target_link_libraries(reversi_audio PUBLIC m)
 endif()
 
@@ -237,7 +258,7 @@ target_include_directories(reversi_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_ui
     PUBLIC ${REVERSI_RAYLIB_TARGET}
     PRIVATE reversi_warnings)
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     target_link_libraries(reversi_ui PUBLIC m)
 endif()
 
@@ -257,8 +278,38 @@ target_include_directories(reversi PRIVATE
     "${CMAKE_BINARY_DIR}/generated")
 target_compile_definitions(reversi PRIVATE
     REVERSI_BUILD_TYPE="$<CONFIG>")
-set_target_properties(reversi PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(EMSCRIPTEN)
+    set_target_properties(reversi PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        SUFFIX ".html")
+    target_link_options(reversi PRIVATE
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sFORCE_FILESYSTEM=1"
+        "-sMODULARIZE=1"
+        "-sEXPORT_NAME=createReversi"
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+        "SHELL:--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
+        "SHELL:--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
+
+    add_executable(reversi_ai_worker web/ai_worker_main.c)
+    target_link_libraries(reversi_ai_worker PRIVATE
+        reversi_ai reversi_core reversi_warnings)
+    set_target_properties(reversi_ai_worker PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        OUTPUT_NAME "ai_worker"
+        SUFFIX ".js")
+    target_link_options(reversi_ai_worker PRIVATE
+        "-sMODULARIZE=1"
+        "-sEXPORT_NAME=createAiWorker"
+        "-sENVIRONMENT=worker"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXPORTED_FUNCTIONS=['_reversi_ai_worker_request','_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall']")
+else()
+    set_target_properties(reversi PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif()
 
 if(APPLE)
     set_target_properties(reversi PROPERTIES
@@ -298,11 +349,13 @@ endif()
 # Assets are copied into the application directory (or the macOS bundle's
 # Resources directory) so the game never depends on the source tree or the
 # caller's working directory at runtime.
-add_custom_command(TARGET reversi POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-        "${REVERSI_ASSET_DESTINATION}"
-    COMMENT "Copying assets into the application directory")
+if(NOT EMSCRIPTEN)
+    add_custom_command(TARGET reversi POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "${REVERSI_ASSET_DESTINATION}"
+        COMMENT "Copying assets into the application directory")
+endif()
 
 if(APPLE)
     add_custom_command(TARGET reversi POST_BUILD
@@ -407,7 +460,7 @@ function(reversi_add_ai_test target source test_name)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endfunction()
 
-if(REVERSI_BUILD_TESTS)
+if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     enable_testing()
 
     reversi_add_core_test(reversi_tests tests/test_board.c core.board)
@@ -494,11 +547,11 @@ set(CPACK_INSTALL_CMAKE_PROJECTS
     "${CMAKE_BINARY_DIR};Reversi;Reversi;/")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-if(NOT MSVC)
+if(NOT MSVC AND NOT EMSCRIPTEN)
     set(CPACK_STRIP_FILES TRUE)
 endif()
 
-if(WIN32 OR APPLE)
+if(WIN32 OR APPLE OR EMSCRIPTEN)
     set(CPACK_GENERATOR "ZIP")
 else()
     set(CPACK_GENERATOR "ZIP;TGZ")

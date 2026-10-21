@@ -2,7 +2,8 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前版本：1.0.1（已于 2026-10-22 发布）。**
+> **源码版本：1.1.0（WebAssembly 移植，尚未发布）。最新发行版为
+> [v1.0.1](https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.1)。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
 > 存档/自动保存、继续上次对局、设置持久化、统计、规则帮助、程序化音效与
@@ -37,6 +38,7 @@
 | macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15（无窗口） | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
 | Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
 | Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| Web（Chrome） | Emscripten 6.0.13；浏览器套件 6/6 | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
 SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
@@ -52,6 +54,26 @@ SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
 - Linux：解压后运行 `./reversi`，保留同级 `assets/`。
 
 用户设置、统计与存档写入系统用户数据目录，不写入安装目录。
+
+## 浏览器版本（WebAssembly）
+
+同一份 C11 规则、AI 与存档校验被编译为 WebAssembly。需要
+Emscripten 6.0.13（默认安装于 `~/emsdk`）：
+
+```bash
+scripts/build-web.sh          # 生成 web/dist/
+scripts/serve-web.sh 8080     # http://127.0.0.1:8080/
+```
+
+`web/dist/` 是可部署的静态目录，附带 `_headers`（MIME、缓存与安全头）。
+没有使用 SharedArrayBuffer 或 pthreads，因此不需要 COOP/COEP。
+AI 在独立 Web Worker 中运行，取消时终止 Worker，页面保持响应。
+存档写入浏览器 `localStorage`，可在页面上导出/导入，但浏览器、隐私模式
+或清理站点数据都可能删除它。
+
+已知限制：Web 端以 CSS 分辨率渲染（raylib Web 的 HiDPI 路径会把画布
+缩小 1/DPR）；Safari、Firefox 与真实移动设备未验证。构建、部署与测试
+细节见 [docs/WEB_BUILD.md](docs/WEB_BUILD.md)。
 
 ## 技术栈
 
@@ -114,6 +136,7 @@ SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
 │   │   └── stats.[ch]    统计记录、撤回与持久化
 │   ├── settings/settings.[ch] 用户设置与持久化
 │   ├── audio/audio.[ch]  程序化落子/翻转/按钮/胜负音效
+│   ├── platform/web/     浏览器适配（localStorage、AI Worker、尺寸）
 │   └── app/app.[ch]      页面路由、转场与主循环
 ├── tests/
 │   ├── test_harness.h    极简测试断言
@@ -135,7 +158,12 @@ SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
 │   ├── test_settings.c   设置往返与损坏文件回退
 │   ├── test_stats.c      统计记录、往返与非法数据拒绝
 │   ├── test_audio.c      无音频设备时的安全降级
-│   └── app_autoplay_test.cmake 自动完成一局的 GUI 集成检查
+│   ├── app_autoplay_test.cmake 自动完成一局的 GUI 集成检查
+│   └── web/              Playwright 浏览器回归测试（构建产物不入库）
+├── web/
+│   ├── shell.html        页面容器（Emscripten shell）
+│   ├── app.js / style.css / ai_worker_boot.js
+│   └── dist/             生成的可部署目录（.gitignore）
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── BUILD.md          构建、运行、测试、打包与平台说明
@@ -468,16 +496,16 @@ ctest --test-dir build --output-on-failure
 - `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
   存档槽位保存/加载/删除、帮助翻页与统计页返回。
 
-实际结果（2026-10-22，macOS arm64，v1.0.1）：
+实际结果（2026-10-22，macOS arm64，v1.1.0 源码）：
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug + GUI | 17/17 通过；`app.smoke` 与 `app.autoplay` 实际打开窗口并完成一局 |
-| Release | 15/15 通过；发行包 `--frames 2` 退出码 0 |
-| ASan+UBSan | 无 GUI 15/15 通过，无 Sanitizer 报告；GUI 冒烟通过 |
-| 全新 Release 构建树（联网获取 raylib 6.2） | 15/15 通过 |
-| GitHub Actions | Linux/Windows/macOS Debug、三平台 Release 打包、ASan、Xvfb、Linux 包验收全部通过（运行 `39633821096`） |
-| 发行包验收 | `.sha256`、双启动、字体、许可证、用户数据持久化、`ldd` 检查通过 |
+| Debug（无窗口） | 15/15 通过 |
+| Release（无窗口） | 15/15 通过 |
+| ASan+UBSan（无窗口） | 15/15 通过，无 Sanitizer 报告 |
+| Debug + GUI | 本轮图形会话不可用，`app.smoke` / `app.autoplay` **NOT TESTED** |
+| 浏览器（Chrome） | 套件 6/6：冒烟、PvE Hard、取消、存档恢复、五种视口、完整对局 |
+| GitHub Actions | v1.0.1 发布时运行 `39633821096` 9/9 通过；v1.1.0 尚未推送 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
@@ -495,6 +523,19 @@ ctest --test-dir build --output-on-failure
 
 `app.smoke` 运行 `reversi --frames 2`，验证窗口初始化与关闭；Debug 下还会注册
 `app.autoplay`，用自动对局完成一局并核对统计只增加一次、终局自动存档已删除。
+
+浏览器回归测试（需要 Node、系统 Chrome，以及已构建并启动的 Web 服务）：
+
+```bash
+cd tests/web && npm install
+REVERSI_WEB_URL=http://127.0.0.1:8080 \
+REVERSI_WEB_DEBUG_URL=http://127.0.0.1:8081 \
+node tests/web/run-tests.js
+```
+
+完整对局用例需要 Debug Web 构建（自动对局钩子只在非 `NDEBUG` 下存在）；
+不提供 `REVERSI_WEB_DEBUG_URL` 时该用例标记 SKIP。详见
+[docs/WEB_BUILD.md](docs/WEB_BUILD.md)。
 
 ### Sanitizer（可选）
 

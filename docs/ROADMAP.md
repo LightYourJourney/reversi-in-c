@@ -274,6 +274,33 @@ Windows 图标的资源编译未在本机执行（无 MSVC），为 **NOT TESTED
 - 发布后重新下载 macOS 归档：SHA-256 与 `SHA256SUMS` 一致，
   `scripts/verify-package.sh` PASS。详见 [PHASE_9_REPORT.md](PHASE_9_REPORT.md)。
 
+## Phase 10 — WebAssembly 跨平台移植（已完成，2026-10-22）
+
+目标：把同一份 ISO C11 规则、AI 与存档校验编译为 WebAssembly，在浏览器
+中完整运行；桌面构建与行为不变。版本标记 `1.1.0`（未发布）。
+
+交付内容：
+
+- `.github` 之外新增 `web/`：Emscripten shell、页面逻辑、样式、
+  AI Worker 启动器与部署响应头。
+- `scripts/build-web.sh`、`scripts/serve-web.sh`、`docs/WEB_BUILD.md`。
+- `src/platform/web/`：`localStorage` 存储适配、AI Worker 适配、尺寸接口。
+- `app.c` 生命周期拆分；Web 使用 `emscripten_set_main_loop_arg`。
+- AI 由独立 Web Worker 承载同一份 C 搜索；取消终止 Worker。
+- 页面加载/错误/全屏/导出导入；五种视口与触摸落子；窄屏对局按钮两行。
+- `tests/web/`：Playwright + 系统 Chrome 的六项回归测试。
+
+验证（本机 macOS arm64）：
+
+- 桌面 Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。
+- 浏览器套件 6/6 通过；完整对局 4.3 s；五种视口无页面滚动。
+- Release WASM 309 KB + Worker WASM 49 KB + 预加载资源 818 KB；
+  堆约 16.2 MiB；AI 搜索期间约 29 FPS（SwiftShader 软件渲染）。
+
+已知限制：Web 端以 CSS 分辨率渲染（raylib Web 的 HiDPI 路径限制）；
+Safari/Firefox 与真实移动设备未验证；`localStorage` 可能被清理；本阶段
+未推送、未发布、未公开部署。详见 [PHASE_10_REPORT.md](PHASE_10_REPORT.md)。
+
 ## 非目标（当前）
 
 - 在线对战、账号系统、网络协议

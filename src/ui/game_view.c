@@ -57,9 +57,9 @@ static GameLayout game_layout(void)
         return layout;
     }
 
-    const float margin = REVERSI_UI_SPACE_LG;
+    const float margin = width < 520.0f ? 12.0f : REVERSI_UI_SPACE_LG;
     const float top_height = 74.0f;
-    const float bottom_height = 84.0f;
+    const float bottom_height = width < 520.0f ? 108.0f : 84.0f;
     const float area_top = margin + top_height + 12.0f;
     const float area_bottom = height - margin - bottom_height - 12.0f;
     const float available_width = width - margin * 2.0f;
@@ -102,6 +102,32 @@ static void set_button_bounds(GameView *view, const GameLayout *layout)
         const float button_width = 88.0f;
         const float button_height = 42.0f;
         const Rectangle bar = layout->bottom_bar;
+
+        /* Narrow screens cannot fit five buttons in one row; use two rows
+           so every control stays reachable. */
+        if (bar.width < 5.0f * button_width + 4.0f * gap + pad * 2.0f) {
+            const float row_gap = 6.0f;
+            const float top = bar.y
+                + (bar.height - button_height * 2.0f - row_gap) * 0.5f;
+            const float three = (bar.width - pad * 2.0f - gap * 2.0f) / 3.0f;
+            const float two = (bar.width - pad * 2.0f - gap) / 2.0f;
+            const float x0 = bar.x + pad;
+            const float y1 = top + button_height + row_gap;
+
+            ui_button_set_bounds(&view->undo,
+                (Rectangle){x0, top, three, button_height});
+            ui_button_set_bounds(&view->redo,
+                (Rectangle){x0 + three + gap, top, three, button_height});
+            ui_button_set_bounds(&view->pause,
+                (Rectangle){x0 + (three + gap) * 2.0f, top, three,
+                            button_height});
+            ui_button_set_bounds(&view->restart,
+                (Rectangle){x0, y1, two, button_height});
+            ui_button_set_bounds(&view->menu,
+                (Rectangle){x0 + two + gap, y1, two, button_height});
+            return;
+        }
+
         const float y = bar.y + (bar.height - button_height) * 0.5f;
         float x = bar.x + bar.width - pad - button_width;
 

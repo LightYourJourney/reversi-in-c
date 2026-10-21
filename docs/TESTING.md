@@ -172,7 +172,30 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - ASan 的 LeakSanitizer 在 macOS 不受支持，LeakSanitizer 结果为
   NOT TESTED；不得用 `detect_leaks=1` 运行。
 
-## 7. 已知测试缺口
+## 7. Web / WebAssembly 测试（Phase 10）
+
+构建：`scripts/build-web.sh`（Emscripten 6.0.13，raylib 6.2 Web 后端）。
+浏览器：系统 Chrome，Playwright `channel: chrome`，headless +
+SwiftShader 软件渲染。
+
+| 用例 | 覆盖 | 结果 |
+|---|---|---|
+| `smoke` | 加载、画布与逻辑尺寸一致、无控制台错误 | PASS |
+| `gameplay` | 真实鼠标落子、Hard AI 在 Worker 中搜索并完成 | PASS |
+| `persistence` | 自动存档、刷新、继续游戏恢复 | PASS |
+| `responsive` | 1920×1080、1366×768、768×1024、390×844、360×640 | PASS（无页面滚动） |
+| `cancel` | 搜索中取消、Worker 终止、主循环不阻塞 | PASS |
+| `autoplay` | Debug 构建完整对局到终局（4.3 s） | PASS |
+
+运行方式见 [WEB_BUILD.md](WEB_BUILD.md) §4。桌面回归在最终树上是
+Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。GUI 测试
+在本轮 **NOT TESTED**：当前会话没有可用显示器，`InitWindow` 报
+`GLFW: Failed to get primary monitor`。
+
+未验证：Safari、Firefox、真实 iOS/Android 设备、真实 GPU 下的帧率、
+浏览器存储被禁用的实机路径（代码有错误横幅与只读降级）。
+
+## 8. 已知测试缺口
 
 - 键盘导航、窗口缩放、真实音频听感、Windows/Linux 物理机、Windows/macOS
   桌面 GUI、多显示器/锁屏路径未验证。

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Reversi</title>
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Reversi</h1>
+        <p class="tagline">Othello in the browser — the same C rules and AI
+          as the desktop build.</p>
+      </div>
+      <div class="meta">
+        <span id="version" class="version">v%REVERSI_VERSION%</span>
+        <a class="link" href="https://github.com/LightYourJourney/reversi-in-c"
+           target="_blank" rel="noopener">GitHub</a>
+        <button id="fullscreen" class="chip" type="button">Fullscreen</button>
+      </div>
+    </header>
+
+    <main id="stage">
+      <canvas id="canvas" tabindex="0"
+              aria-label="Reversi board. Use arrow keys and Enter, or tap a cell."></canvas>
+      <div id="status" class="status" role="status">Loading…</div>
+      <div id="error" class="error" role="alert" hidden></div>
+    </main>
+
+    <footer class="bottombar">
+      <div class="actions">
+        <button id="export" class="chip" type="button">Export saves</button>
+        <label class="chip file">Import saves
+          <input id="import" type="file" accept="application/json">
+        </label>
+        <button id="reload" class="chip" type="button">Reload</button>
+      </div>
+      <p class="note">Saves live in this browser's local storage. The browser,
+        private mode, or clearing site data can remove them. No account, no
+        network sync.</p>
+    </footer>
+  </div>
+
+  {{{ SCRIPT }}}
+  <script src="app.js"></script>
+</body>
+</html>

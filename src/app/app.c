@@ -29,6 +29,11 @@
 
 #include <raylib.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/heap.h>
+#endif
+
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -1489,72 +1494,245 @@ static void app_draw_transition(const App *app)
                   ui_color_alpha(REVERSI_UI_COLOR_SCRIM, alpha));
 }
 
-int app_run(int max_frames)
+typedef struct AppRun {
+    App app;
+    int rendered_frames;
+    int max_frames;
+    bool active;
+} AppRun;
+
+static bool app_boot(AppRun *run, int max_frames)
 {
+#ifdef __EMSCRIPTEN__
+    /* raylib's Web backend divides SetWindowSize() by GetWindowScaleDPI()
+       when FLAG_WINDOW_HIGHDPI is set, while the GL viewport keeps the
+       divided size. That leaves most of a HiDPI canvas undrawn, so the
+       browser build renders at CSS resolution instead. */
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
+#else
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT
                    | FLAG_WINDOW_HIGHDPI);
+#endif
     InitWindow(REVERSI_WINDOW_WIDTH, REVERSI_WINDOW_HEIGHT,
                "Reversi " REVERSI_VERSION_STRING);
 
     if (!IsWindowReady()) {
         fprintf(stderr, "Reversi: failed to initialize the game window\n");
-        return 1;
+        return false;
     }
 
     SetWindowMinSize(REVERSI_UI_MIN_WINDOW_WIDTH, REVERSI_UI_MIN_WINDOW_HEIGHT);
     SetExitKey(KEY_NULL);
     SetTargetFPS(REVERSI_TARGET_FPS);
 
-    App app;
-    app_init(&app);
+    memset(run, 0, sizeof(*run));
+    run->max_frames = max_frames;
+    app_init(&run->app);
+    run->active = true;
+    return true;
+}
 
-    int rendered_frames = 0;
-    while (!WindowShouldClose() && app.running) {
-        float dt = GetFrameTime();
-        if (dt > 0.1f) {
-            dt = 0.1f;
-        }
+static void app_frame(AppRun *run)
+{
+    App *app = &run->app;
+    float dt = GetFrameTime();
+    if (dt > 0.1f) {
+        dt = 0.1f;
+    }
 
-        UiInput input = read_input();
-        input.reduce_motion = !app.settings.animations;
-        app_update(&app, &input, dt);
+    UiInput input = read_input();
+    input.reduce_motion = !app->settings.animations;
+    app_update(app, &input, dt);
 
-        BeginDrawing();
-        ui_draw_background();
-        app_draw(&app);
-        app_draw_transition(&app);
-        EndDrawing();
+    BeginDrawing();
+    ui_draw_background();
+    app_draw(app);
+    app_draw_transition(app);
+    EndDrawing();
 
 #ifndef NDEBUG
-        const char *shot_dir = getenv("REVERSI_SHOT_DIR");
-        if (shot_dir != NULL && shot_dir[0] != '\0'
-            && IsKeyPressed(KEY_F12)) {
-            char path[1024];
-            snprintf(path, sizeof(path), "%s/shot-%03d.png",
-                     shot_dir, rendered_frames);
-            TakeScreenshot(path);
-            TraceLog(LOG_INFO, "Reversi: screenshot %s", path);
-        }
+    const char *shot_dir = getenv("REVERSI_SHOT_DIR");
+    if (shot_dir != NULL && shot_dir[0] != '\0' && IsKeyPressed(KEY_F12)) {
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/shot-%03d.png", shot_dir,
+                 run->rendered_frames);
+        TakeScreenshot(path);
+        TraceLog(LOG_INFO, "Reversi: screenshot %s", path);
+    }
 #endif
 
-        ++rendered_frames;
-        if (max_frames > 0 && rendered_frames >= max_frames) {
-            break;
-        }
-    }
+    ++run->rendered_frames;
+}
 
-    if (app.screen == APP_SCREEN_GAME) {
-        app_autosave(&app);
+static void app_release(AppRun *run)
+{
+    if (!run->active) {
+        return;
     }
-    app_cancel_ai(&app);
-    if (app.ai_worker != NULL) {
-        ai_worker_destroy(app.ai_worker);
-        app.ai_worker = NULL;
+    App *app = &run->app;
+    if (app->screen == APP_SCREEN_GAME) {
+        app_autosave(app);
     }
-    (void)settings_save(&app.settings);
-    (void)stats_save(&app.stats);
+    app_cancel_ai(app);
+    if (app->ai_worker != NULL) {
+        ai_worker_destroy(app->ai_worker);
+        app->ai_worker = NULL;
+    }
+    (void)settings_save(&app->settings);
+    (void)stats_save(&app->stats);
     audio_shutdown();
-    ui_fonts_unload(&app.fonts);
+    ui_fonts_unload(&app->fonts);
     CloseWindow();
+    run->active = false;
+}
+
+static bool app_should_stop(const AppRun *run)
+{
+    return !run->app.running
+        || (run->max_frames > 0
+            && run->rendered_frames >= run->max_frames);
+}
+
+#ifdef __EMSCRIPTEN__
+int reversi_web_frames(void);
+int reversi_web_mouse_x(void);
+int reversi_web_mouse_y(void);
+int reversi_web_screen_w(void);
+int reversi_web_screen_h(void);
+#ifndef NDEBUG
+void reversi_web_debug_autoplay(unsigned seed);
+#endif
+int reversi_web_game_over(void);
+int reversi_web_result(void);
+int reversi_web_screen_index(void);
+int reversi_web_ai_active(void);
+void reversi_web_cancel_ai_test(void);
+int reversi_web_heap_bytes(void);
+void reversi_web_resize(int width, int height);
+
+static AppRun g_web_run;
+
+static void app_web_main_loop(void *arg)
+{
+    AppRun *run = arg;
+    if (app_should_stop(run)) {
+        emscripten_cancel_main_loop();
+        app_release(run);
+        return;
+    }
+    app_frame(run);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_frames(void)
+{
+    return g_web_run.rendered_frames;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_mouse_x(void)
+{
+    return (int)GetMouseX();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_mouse_y(void)
+{
+    return (int)GetMouseY();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_screen_w(void)
+{
+    return GetScreenWidth();
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_screen_h(void)
+{
+    return GetScreenHeight();
+}
+
+#ifndef NDEBUG
+EMSCRIPTEN_KEEPALIVE
+void reversi_web_debug_autoplay(unsigned seed)
+{
+    App *app = &g_web_run.app;
+    app->autoplay = true;
+    app->settings.animations = false;
+    app->stats_recorded = false;
+    srand(seed != 0 ? seed : (unsigned)time(NULL));
+    app->screen = APP_SCREEN_GAME;
+}
+#endif
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_game_over(void)
+{
+    return g_web_run.app.match.phase == MATCH_PHASE_GAME_OVER ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_result(void)
+{
+    return (int)g_web_run.app.match.state.result;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_screen_index(void)
+{
+    return (int)g_web_run.app.screen;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_ai_active(void)
+{
+    return ai_worker_is_active(g_web_run.app.ai_worker) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void reversi_web_cancel_ai_test(void)
+{
+    app_cancel_ai(&g_web_run.app);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_heap_bytes(void)
+{
+    return (int)emscripten_get_heap_size();
+}
+
+EMSCRIPTEN_KEEPALIVE
+void reversi_web_resize(int width, int height)
+{
+    if (width < 320) {
+        width = 320;
+    }
+    if (height < 480) {
+        height = 480;
+    }
+    SetWindowSize(width, height);
+}
+
+int app_run(int max_frames)
+{
+    if (!app_boot(&g_web_run, max_frames)) {
+        return 1;
+    }
+    emscripten_set_main_loop_arg(app_web_main_loop, &g_web_run, 0, 1);
     return 0;
 }
+#else
+int app_run(int max_frames)
+{
+    AppRun run;
+    if (!app_boot(&run, max_frames)) {
+        return 1;
+    }
+    while (!WindowShouldClose() && !app_should_stop(&run)) {
+        app_frame(&run);
+    }
+    app_release(&run);
+    return 0;
+}
+#endif

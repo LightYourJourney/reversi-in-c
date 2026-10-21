@@ -4,6 +4,39 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-22
+
+### Added
+
+- WebAssembly 构建：`emcmake` + raylib 6.2 Web 后端，输出可直接部署的
+  `web/dist/`（`index.html`、JS、WASM、预加载资源）。
+- `scripts/build-web.sh`、`scripts/serve-web.sh`、`docs/WEB_BUILD.md`。
+- 浏览器主循环：`app_boot` / `app_frame` / `app_release` 拆分，
+  Web 端使用 `emscripten_set_main_loop_arg`。
+- `src/platform/web/storage_web.c`：以 `localStorage` 实现 `storage.h`
+  的 7 个接口，存档格式与严格校验不变；页面支持导出/导入存档。
+- `src/platform/web/ai_worker_web.c` 与独立 Web Worker：Easy/Medium/Hard
+  继续使用同一份 C 搜索代码，取消时终止 Worker，不阻塞页面。
+- 网页容器：加载/错误状态、全屏、GitHub 入口、版本号、响应式布局与
+  触摸落子；窄屏下对局操作按钮改为两行。
+- `tests/web/`：Playwright + 系统 Chrome 的浏览器回归测试（冒烟、对局、
+  AI、取消、持久化、五种视口、Debug 自动对局）。
+
+### Changed
+
+- Web 端关闭 `FLAG_WINDOW_HIGHDPI`：raylib Web 的 `SetWindowSize` 会按
+  DPR 再除一次尺寸，而 GL viewport 保持除法后的值，导致 HiDPI 画布只
+  绘制左上角。Web 以 CSS 分辨率渲染，浏览器负责放大。
+- `setup_view` 的说明文字缩短，避免窄屏裁切。
+
+### Verified
+
+- 桌面 Debug 无窗口 15/15、Release 15/15、ASan+UBSan 15/15。
+- 浏览器套件 6/6 通过；五种视口无页面滚动；完整对局（自动对局）4.3 s
+  完成；AI 搜索期间帧率约 29 FPS（SwiftShader 软件渲染）。
+- Release WASM 309 KB，AI Worker WASM 49 KB，预加载资源 818 KB；
+  堆内存约 16.2 MiB，搜索前后无增长。
+
 ## [1.0.1] - 2026-10-22
 
 ### Added
