@@ -178,31 +178,6 @@ AI 对局的人工验证；设置与对局仍不持久化。
 音效未做听感验证；760×600 新页面按布局常量核对但未逐页截图；
 Windows/Linux 未实机验证。详见 [PHASE_5_REPORT.md](PHASE_5_REPORT.md)。
 
-## Phase 6 — 打磨与发布（原计划）
-
-目标：达到可长期维护和分发的质量。
-
-- 可访问性复查（色盲对比、减少动效、纯键盘流程）
-- 性能与内存检查（ASan/UBSan、必要时 LeakSanitizer）
-- macOS 实机完整交互回归；Windows/Linux 构建与运行验证
-- CI：格式/警告/测试/构建矩阵
-- README 与文档最终校对
-
-验收标准：
-
-- 干净环境按 README 步骤可构建、运行、测试
-- 所有自动化测试通过
-- 无已知严重缺陷
-- 跨平台状态如实记录（未验证的平台明确标注）
-
-## 非目标（当前）
-
-- 在线对战、账号系统、网络协议
-- 移动端与 Web 构建
-- 第三方 UI 框架或资源商店素材
-
-这些方向如需加入，应先更新架构文档并评估对模块边界的影响。
-
 ## Phase 6 — 全面审计、测试、优化与发布准备（已完成，2026-10-21）
 
 交付内容：
@@ -255,3 +230,43 @@ GitHub Actions 为托管 VM，不等同物理机。详见
 剩余限制：macOS 无 Developer ID/公证、Windows 无 Authenticode 签名、
 Windows/macOS 物理桌面 GUI 与 Linux 物理桌面未验证、打包 GUI 手动
 存/读档未走查。详见 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
+
+## Phase 8 — 工程债与文档一致性（已完成，2026-10-21）
+
+目标：在不改变游戏行为的前提下，消除文档与工程结构中已知的不一致。
+
+交付内容：
+
+- 合并 `docs/ROADMAP.md` 中重复的两个 Phase 6 章节；「非目标」移到全文末尾。
+- 统一 ASan+UBSan 报告口径：README 明确标注为「无窗口 15/15」，
+  与 `TESTING.md` 及本轮实测一致；GUI 冒烟另计。
+- 提取 `.github/workflows/package.yml` 可复用工作流，`ci.yml` 与
+  `release.yml` 共用同一套 Release 构建、测试、校验和规范化、Windows
+  版本冒烟与产物上传；CI 的 Debug 矩阵与 Release 打包不再重复构建。
+- 新增应用图标：`cmake/icons/`（1024 PNG、macOS `.icns`、Windows `.ico`），
+  由 `scripts/make-icon.sh` 可重复生成；macOS 应用包声明并携带
+  `Reversi.icns`，Windows 版本资源嵌入图标。
+- 更新 `docs/ARCHITECTURE.md` 的资源说明、`docs/RELEASE.md` 的包内容、
+  `assets/README.md` 的图标指引，并新增 `cmake/icons/README.md`。
+
+验证（本机 macOS arm64）：
+
+- Debug 17/17、Release 15/15、ASan+UBSan 无窗口 15/15，均无报告。
+- `Reversi.app/Contents/Resources/Reversi.icns` 存在，`Info.plist`
+  `CFBundleIconFile` 正确，`codesign --verify --deep --strict` 通过。
+- CPack 归档内含图标，`scripts/verify-package.sh` PASS。
+- `actionlint` 对三个工作流返回 0。
+- 工作流改动无法在本机执行，GitHub Actions 实跑为 **NOT TESTED**，
+  需推送后确认。
+
+已知限制：Linux 便携包没有桌面集成，图标只在 macOS/Windows 生效；
+Windows 图标的资源编译未在本机执行（无 MSVC），为 **NOT TESTED**。
+详见 [PHASE_8_REPORT.md](PHASE_8_REPORT.md)。
+
+## 非目标（当前）
+
+- 在线对战、账号系统、网络协议
+- 移动端与 Web 构建
+- 第三方 UI 框架或资源商店素材
+
+这些方向如需加入，应先更新架构文档并评估对模块边界的影响。

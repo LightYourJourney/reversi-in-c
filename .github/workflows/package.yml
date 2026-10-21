@@ -1,0 +1,94 @@
+name: Package
+
+# Shared Release packaging used by both CI and the tag-driven Release workflow.
+# Callers choose only the artifact-name suffix; build, test, checksum
+# normalization, the Windows version smoke, and upload stay in one place.
+
+on:
+  workflow_call:
+    inputs:
+      artifact_suffix:
+        description: "Suffix appended to the uploaded artifact name"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: macOS
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev \
+            libxinerama-dev libwayland-dev libxkbcommon-dev
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DREVERSI_ENABLE_GUI_TESTS=OFF
+          -DREVERSI_FORCE_FETCH_RAYLIB=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        working-directory: build
+        run: cpack -C Release -B package
+
+      - name: Normalize checksum line endings
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem build/package/*.sha256 | ForEach-Object {
+            $text = [IO.File]::ReadAllText($_.FullName).Replace("`r`n", "`n")
+            [IO.File]::WriteAllText($_.FullName, $text)
+          }
+
+      - name: Windows package version smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem build/package/*.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath build/package/smoke -Force
+          $exe = Get-ChildItem build/package/smoke -Recurse -Filter reversi.exe |
+            Select-Object -First 1
+          $output = (& $exe.FullName --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "reversi.exe --version exited with $LASTEXITCODE"
+          }
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($output -notmatch "^Reversi $([regex]::Escape($version)) ") {
+            throw "Unexpected version output: $output"
+          }
+
+      - name: Upload package and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: Reversi-${{ matrix.name }}${{ inputs.artifact_suffix }}
+          path: |
+            build/package/*.zip
+            build/package/*.tar.gz
+            build/package/*.sha256
+          if-no-files-found: error

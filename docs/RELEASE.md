@@ -24,8 +24,9 @@ Developer ID、未公证**；Windows 构建**未做 Authenticode 签名**。
 2. 把 `Reversi.app` 拖入 `/Applications`（或任意用户目录）。
 3. 首次启动可右键选择“打开”。构建只有 ad-hoc 签名，可能被 Gatekeeper
    拦截；这是当前分发限制，不是程序损坏。
-4. `Reversi.app/Contents/Resources/` 内含 `LICENSE`、
-   `THIRD_PARTY_NOTICES.md` 与字体许可证，单独拖动应用也不会丢失声明。
+4. `Reversi.app/Contents/Resources/` 内含 `Reversi.icns` 应用图标、
+   `LICENSE`、`THIRD_PARTY_NOTICES.md` 与字体许可证，单独拖动应用也不会
+   丢失声明。
 
 卸载：
 

@@ -34,7 +34,7 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
+| macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15（无窗口） | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
 | Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
 | Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 

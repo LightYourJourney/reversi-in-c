@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-test:
-    name: ${{ matrix.name }} ${{ matrix.build_type }}
+    name: ${{ matrix.name }} Debug
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,22 +16,10 @@ jobs:
         include:
           - os: ubuntu-latest
             name: Linux
-            build_type: Debug
-          - os: ubuntu-latest
-            name: Linux
-            build_type: Release
           - os: windows-latest
             name: Windows
-            build_type: Debug
-          - os: windows-latest
-            name: Windows
-            build_type: Release
           - os: macos-latest
             name: macOS
-            build_type: Debug
-          - os: macos-latest
-            name: macOS
-            build_type: Release
     steps:
       - uses: actions/checkout@v4
 
@@ -48,65 +36,24 @@ jobs:
       - name: Configure
         run: >
           cmake -S . -B build
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_BUILD_TYPE=Debug
           -DREVERSI_ENABLE_GUI_TESTS=OFF
           -DREVERSI_FORCE_FETCH_RAYLIB=ON
 
       - name: Build
-        run: >
-          cmake --build build
-          --config ${{ matrix.build_type }}
-          --parallel 4
+        run: cmake --build build --config Debug --parallel 4
 
       - name: Test (no window)
         env:
           UBSAN_OPTIONS: halt_on_error=1
-        run: >
-          ctest --test-dir build
-          -C ${{ matrix.build_type }}
-          --output-on-failure
+        run: ctest --test-dir build -C Debug --output-on-failure
 
-      - name: Package
-        if: matrix.build_type == 'Release'
-        working-directory: build
-        run: cpack -C Release -B package
-
-      - name: Normalize checksum line endings
-        if: matrix.build_type == 'Release' && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-ChildItem build/package/*.sha256 | ForEach-Object {
-            $text = [IO.File]::ReadAllText($_.FullName).Replace("`r`n", "`n")
-            [IO.File]::WriteAllText($_.FullName, $text)
-          }
-
-      - name: Windows package version smoke
-        if: matrix.build_type == 'Release' && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $zip = Get-ChildItem build/package/*.zip | Select-Object -First 1
-          Expand-Archive $zip.FullName -DestinationPath build/package/smoke -Force
-          $exe = Get-ChildItem build/package/smoke -Recurse -Filter reversi.exe |
-            Select-Object -First 1
-          $output = (& $exe.FullName --version | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "reversi.exe --version exited with $LASTEXITCODE"
-          }
-          $version = (Get-Content VERSION -Raw).Trim()
-          if ($output -notmatch "^Reversi $([regex]::Escape($version)) ") {
-            throw "Unexpected version output: $output"
-          }
-
-      - name: Upload package and checksum
-        if: matrix.build_type == 'Release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Reversi-${{ runner.os }}-${{ matrix.build_type }}
-          path: |
-            build/package/*.zip
-            build/package/*.tar.gz
-            build/package/*.sha256
-          if-no-files-found: error
+  package:
+    name: Release package
+    needs: build-test
+    uses: ./.github/workflows/package.yml
+    with:
+      artifact_suffix: "-Release"
 
   linux-gui:
     name: Linux Xvfb GUI
@@ -143,7 +90,7 @@ jobs:
 
   linux-package:
     name: Linux packaged smoke
-    needs: build-test
+    needs: package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

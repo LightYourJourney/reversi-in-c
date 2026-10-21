@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- 应用图标：`cmake/icons/` 下的源 PNG、macOS `.icns` 与 Windows `.ico`，
+  由 `scripts/make-icon.sh` 可重复生成；macOS 应用包与 Windows 可执行
+  文件现在携带图标。
+- `.github/workflows/package.yml`：CI 与 Release 共用的 Release 打包
+  工作流。
+
+### Changed
+
+- CI 的 Debug 构建矩阵与 Release 打包解耦：Release 只构建、测试并打包
+  一次，由可复用工作流统一执行。
+- 合并 `docs/ROADMAP.md` 中重复的 Phase 6 章节；「非目标」移至文末。
+- ASan+UBSan 的通过数统一按实测口径标注（无窗口 15/15）。
+
 ### Fixed
 
 - 打包验收脚本在 `pipefail` 下使用 `find | head` 可能因 SIGPIPE 退出；

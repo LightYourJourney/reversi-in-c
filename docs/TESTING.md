@@ -25,6 +25,12 @@ Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、
 发行包执行并断言 `reversi.exe --version`。完整结果与剩余限制见
 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
 
+Phase 8 在文档与 CI 结构调整后重新执行了本机回归：Debug 17/17、
+Release 15/15、ASan+UBSan 无窗口 15/15（无报告），并验证 macOS 应用包
+图标、签名与 CPack 归档。CI 工作流提取为
+`.github/workflows/package.yml` 后只做了 `actionlint` 静态检查，尚未在
+GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
+
 ## 2. 无窗口测试清单
 
 | CTest 名称 | 可执行文件 | 断言数 | 覆盖重点 | 结果 |

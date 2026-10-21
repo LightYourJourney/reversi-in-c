@@ -270,8 +270,14 @@ if(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_COPYRIGHT
             "Copyright (C) 2026 Yanjin Li. GPL-3.0."
+        MACOSX_BUNDLE_ICON_FILE "Reversi.icns"
         MACOSX_BUNDLE_INFO_PLIST
             "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in")
+    target_sources(reversi PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/icons/Reversi.icns")
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/icons/Reversi.icns"
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     set(REVERSI_ASSET_DESTINATION
         "$<TARGET_BUNDLE_CONTENT_DIR:reversi>/Resources/assets")
 else()
@@ -279,6 +285,9 @@ else()
 endif()
 
 if(WIN32)
+    file(TO_NATIVE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/icons/reversi.ico"
+        REVERSI_ICON_ICO)
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
         "${CMAKE_BINARY_DIR}/generated/version.rc"
