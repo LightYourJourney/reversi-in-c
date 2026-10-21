@@ -285,9 +285,9 @@ else()
 endif()
 
 if(WIN32)
-    file(TO_NATIVE_PATH
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/icons/reversi.ico"
-        REVERSI_ICON_ICO)
+    # Forward slashes: backslashes in the .rc string would be read as C escapes.
+    set(REVERSI_ICON_ICO
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/icons/reversi.ico")
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/src/version.rc.in"
         "${CMAKE_BINARY_DIR}/generated/version.rc"
