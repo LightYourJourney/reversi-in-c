@@ -18,6 +18,12 @@ ctest --test-dir build --output-on-failure
 无窗口测试、`app.smoke` 与 `app.autoplay`。不开启时注册 15 个。CTest 名称、
 可执行文件和源码一一对应。
 
+Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
+与 CPack，`scripts/verify-package.sh` 从任意工作目录启动解压后的包并检查
+字体资源。CI 在 Linux Xvfb 下对 Linux 发行包执行同一验收；Windows 发行包
+执行 `reversi.exe --version`。完整结果与剩余限制见
+[PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
+
 ## 2. 无窗口测试清单
 
 | CTest 名称 | 可执行文件 | 断言数 | 覆盖重点 | 结果 |

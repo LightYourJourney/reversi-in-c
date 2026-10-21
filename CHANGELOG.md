@@ -26,9 +26,13 @@ Phase 6 一致。
 
 ### Verified
 
-- macOS 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15。
+- macOS 本机 Debug 17/17、Release 15/15、ASan+UBSan 17/17。
+- 全新 Release 构建树联网获取 raylib 6.2，15/15，并通过独立包启动验收。
 - macOS 发行包从任意工作目录、隔离用户目录启动，资源完整。
 - 独立 Debug 包自动完成一局并持久化统计；重启后读取并递增。
+- GitHub Actions 运行 `39597445741`：Linux/Windows/macOS 的 Debug 与
+  Release、Linux ASan+UBSan、Linux Xvfb、Linux 发行包验收全部通过；
+  Windows 发行包 `--version` 实际执行成功。
 - 具体运行号、各平台产物与 SHA-256 见 `docs/PHASE_7_REPORT.md`。
 
 ## [0.1.0] - 2026-10-21
