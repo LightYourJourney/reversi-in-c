@@ -122,7 +122,10 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(reversi_warnings INTERFACE)
 if(MSVC)
-    target_compile_options(reversi_warnings INTERFACE /W4)
+    # MSVC still gates C11 <stdatomic.h> behind this switch.
+    target_compile_options(reversi_warnings INTERFACE
+        /W4
+        /experimental:c11atomics)
 else()
     target_compile_options(reversi_warnings INTERFACE
         -Wall
