@@ -21,17 +21,23 @@ void stats_reset(GameStats *stats)
     memset(stats, 0, sizeof(*stats));
 }
 
-void stats_record(GameStats *stats, GameMode mode, Stone human_color,
-                  int difficulty, GameResult result)
+static void adjust_record(GameStats *stats, GameMode mode, Stone human_color,
+                          int difficulty, GameResult result, int delta)
 {
-    if (stats == NULL || result == GAME_RESULT_ONGOING) {
+    if (stats == NULL || result == GAME_RESULT_ONGOING
+        || (delta != 1 && delta != -1)) {
         return;
     }
 
     if (mode == GAME_MODE_PVP) {
-        ++stats->pvp_games;
+        if (delta < 0
+            && (stats->pvp_games <= 0
+                || (result == GAME_RESULT_DRAW && stats->pvp_draws <= 0))) {
+            return;
+        }
+        stats->pvp_games += delta;
         if (result == GAME_RESULT_DRAW) {
-            ++stats->pvp_draws;
+            stats->pvp_draws += delta;
         }
         return;
     }
@@ -42,63 +48,37 @@ void stats_record(GameStats *stats, GameMode mode, Stone human_color,
     }
 
     DifficultyStats *record = &stats->pve[difficulty];
-    ++record->games;
-    if (result == GAME_RESULT_DRAW) {
-        ++record->draws;
+    const bool draw = result == GAME_RESULT_DRAW;
+    const bool win = result == (human_color == STONE_BLACK
+        ? GAME_RESULT_BLACK_WIN : GAME_RESULT_WHITE_WIN);
+    if (delta < 0
+        && (record->games <= 0
+            || (draw && record->draws <= 0)
+            || (!draw && win && record->wins <= 0)
+            || (!draw && !win && record->losses <= 0))) {
         return;
     }
-    const GameResult human_win = human_color == STONE_BLACK
-        ? GAME_RESULT_BLACK_WIN : GAME_RESULT_WHITE_WIN;
-    if (result == human_win) {
-        ++record->wins;
+
+    record->games += delta;
+    if (draw) {
+        record->draws += delta;
+    } else if (win) {
+        record->wins += delta;
     } else {
-        ++record->losses;
+        record->losses += delta;
     }
+}
+
+void stats_record(GameStats *stats, GameMode mode, Stone human_color,
+                  int difficulty, GameResult result)
+{
+    adjust_record(stats, mode, human_color, difficulty, result, 1);
 }
 
 void stats_unrecord(GameStats *stats, GameMode mode, Stone human_color,
                     int difficulty, GameResult result)
 {
-    if (stats == NULL || result == GAME_RESULT_ONGOING) {
-        return;
-    }
-
-    if (mode == GAME_MODE_PVP) {
-        if (stats->pvp_games <= 0
-            || (result == GAME_RESULT_DRAW && stats->pvp_draws <= 0)) {
-            return;
-        }
-        --stats->pvp_games;
-        if (result == GAME_RESULT_DRAW) {
-            --stats->pvp_draws;
-        }
-        return;
-    }
-    if (mode != GAME_MODE_PVE || difficulty < 0
-        || difficulty >= REVERSI_STATS_DIFFICULTY_COUNT
-        || (human_color != STONE_BLACK && human_color != STONE_WHITE)) {
-        return;
-    }
-
-    DifficultyStats *record = &stats->pve[difficulty];
-    const GameResult human_win = human_color == STONE_BLACK
-        ? GAME_RESULT_BLACK_WIN : GAME_RESULT_WHITE_WIN;
-    if (record->games <= 0
-        || (result == GAME_RESULT_DRAW && record->draws <= 0)
-        || (result != GAME_RESULT_DRAW && result == human_win
-            && record->wins <= 0)
-        || (result != GAME_RESULT_DRAW && result != human_win
-            && record->losses <= 0)) {
-        return;
-    }
-    --record->games;
-    if (result == GAME_RESULT_DRAW) {
-        --record->draws;
-    } else if (result == human_win) {
-        --record->wins;
-    } else {
-        --record->losses;
-    }
+    adjust_record(stats, mode, human_color, difficulty, result, -1);
 }
 
 static bool apply_field(GameStats *stats, const char *key, const char *value)

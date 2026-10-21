@@ -547,6 +547,13 @@ static void app_play_result_sound(const App *app)
     }
 }
 
+static void app_save_stats(App *app)
+{
+    if (!stats_save(&app->stats)) {
+        app_notice(app, "Statistics could not be saved.");
+    }
+}
+
 static void app_unrecord_result(App *app, GameResult previous)
 {
     if (!app->stats_recorded || previous == GAME_RESULT_ONGOING) {
@@ -556,9 +563,7 @@ static void app_unrecord_result(App *app, GameResult previous)
     stats_unrecord(&app->stats, app->match.config.mode,
                    app->match.config.human_color, (int)app->ai_difficulty,
                    previous);
-    if (!stats_save(&app->stats)) {
-        app_notice(app, "Statistics could not be saved.");
-    }
+    app_save_stats(app);
 }
 
 static void app_maybe_record_result(App *app)
@@ -570,10 +575,14 @@ static void app_maybe_record_result(App *app)
     stats_record(&app->stats, app->match.config.mode,
                  app->match.config.human_color, (int)app->ai_difficulty,
                  app->match.state.result);
-    if (!stats_save(&app->stats)) {
-        app_notice(app, "Statistics could not be saved.");
-    }
+    app_save_stats(app);
     app_play_result_sound(app);
+}
+
+static void app_complete_game_over(App *app)
+{
+    app_autosave(app);
+    app_maybe_record_result(app);
 }
 
 static bool app_restore_saved(App *app, const char *path)
@@ -811,8 +820,7 @@ static void app_finish_animation(App *app)
     case MATCH_PHASE_GAME_OVER:
         app->outcome_delay = app->settings.animations
             ? REVERSI_UI_DUR_GAME_OVER : REVERSI_UI_DUR_GAME_OVER_FAST;
-        app_maybe_record_result(app);
-        app_autosave(app);
+        app_complete_game_over(app);
         break;
     default:
         break;
@@ -854,8 +862,11 @@ static void app_after_history_change(App *app)
         ? (app->settings.animations
             ? REVERSI_UI_DUR_GAME_OVER : REVERSI_UI_DUR_GAME_OVER_FAST)
         : 0.0f;
-    app_autosave(app);
-    app_maybe_record_result(app);
+    if (app->match.phase == MATCH_PHASE_GAME_OVER) {
+        app_complete_game_over(app);
+    } else {
+        app_autosave(app);
+    }
 }
 
 static void app_undo(App *app)
@@ -1102,8 +1113,7 @@ static void app_update_game(App *app, const UiInput *input, float dt)
     }
 
     if (match->phase == MATCH_PHASE_GAME_OVER && !app->stats_recorded) {
-        app_autosave(app);
-        app_maybe_record_result(app);
+        app_complete_game_over(app);
     }
 
     if (match->phase == MATCH_PHASE_PAUSED) {
