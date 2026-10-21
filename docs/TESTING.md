@@ -43,7 +43,9 @@ ctest --test-dir build --output-on-failure
 - Release：15/15 通过；Release 二进制的 `--frames 2` 实际退出码 0。
 - ASan+UBSan：15/15 通过，无 Sanitizer 报告；Sanitizer 二进制的
   `--frames 2` 退出码 0。
-- 全新 Debug 构建树（`build-phase6-fresh`）15/15 通过，确认不是旧产物。
+- 全新 Debug 构建树（`build-phase6-fresh`）15/15 通过，确认不是旧产物；
+  raylib 使用固定 6.2 源码树的离线路径（本会话联网 FetchContent 超时，
+  联网下载路径 NOT TESTED）。
 
 ## 3. 需求到测试的映射
 
