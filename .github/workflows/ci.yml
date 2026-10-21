@@ -70,6 +70,25 @@ jobs:
         working-directory: build
         run: cpack -C Release -B package
 
+      - name: Normalize checksum line endings
+        if: matrix.build_type == 'Release' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem build/package/*.sha256 | ForEach-Object {
+            $text = [IO.File]::ReadAllText($_.FullName).Replace("`r`n", "`n")
+            [IO.File]::WriteAllText($_.FullName, $text)
+          }
+
+      - name: Windows package version smoke
+        if: matrix.build_type == 'Release' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem build/package/*.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath build/package/smoke -Force
+          $exe = Get-ChildItem build/package/smoke -Recurse -Filter reversi.exe |
+            Select-Object -First 1
+          & $exe.FullName --version
+
       - name: Upload package and checksum
         if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v4
@@ -112,6 +131,35 @@ jobs:
           xvfb-run -a -s "-screen 0 1100x800x24"
           ctest --test-dir build -C Debug --output-on-failure
           -R "app.smoke|app.autoplay"
+
+  linux-package:
+    name: Linux packaged smoke
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb libgl1-mesa-dri unzip libasound2-dev \
+            libx11-6 libxrandr2 libxi6 libgl1 \
+            libglu1-mesa libxcursor1 libxinerama1 libwayland-client0 \
+            libxkbcommon0
+
+      - name: Download Linux Release package
+        uses: actions/download-artifact@v4
+        with:
+          name: Reversi-Linux-Release
+          path: artifacts
+
+      - name: Verify package under Xvfb
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: >
+          xvfb-run -a -s "-screen 0 1100x800x24"
+          ./scripts/verify-package.sh artifacts/Reversi-*.zip
 
   sanitizers:
     name: Linux ASan+UBSan
