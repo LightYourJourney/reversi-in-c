@@ -2,7 +2,7 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前版本：1.0.0（已于 2026-10-21 发布）。**
+> **当前版本：1.0.1（已于 2026-10-22 发布）。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
 > 存档/自动保存、继续上次对局、设置持久化、统计、规则帮助、程序化音效与
@@ -38,7 +38,7 @@
 | Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
 | Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 
-GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.0 发行文件与
+GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
 SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
 未验证项见 [docs/PHASE_7_REPORT.md](docs/PHASE_7_REPORT.md)。
 
@@ -158,7 +158,7 @@ SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
 │   ├── package.sh        Release 构建、测试与 CPack 打包
 │   └── verify-package.sh 独立解压启动验收
 ├── cmake/Info.plist.in   macOS 应用包元数据模板
-├── VERSION               语义化版本（1.0.0）
+├── VERSION               语义化版本（1.0.1）
 ├── CHANGELOG.md          变更日志
 ├── THIRD_PARTY_NOTICES.md 第三方许可证
 └── LICENSE              GPL-3.0

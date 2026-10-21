@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-22
+
 ### Added
 
 - 应用图标：`cmake/icons/` 下的源 PNG、macOS `.icns` 与 Windows `.ico`，
