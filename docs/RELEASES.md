@@ -19,3 +19,7 @@
 
 发布后已重新下载全部附件，`sha256sum -c SHA256SUMS` 通过；macOS 应用包
 `codesign --verify --deep --strict` 通过（ad-hoc，无 Developer ID/公证）。
+
+发布后代码审查修正（归档校验、双启动验收、包内许可证、固定 raylib 6.2、
+Windows 版本断言等）已在 `main`，但**不包含在此版本附件中**。要让修正
+进入发行包，需要新的补丁版本标签。

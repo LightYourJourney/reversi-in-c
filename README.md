@@ -2,7 +2,7 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **当前版本：1.0.0（正式发布工程）。**
+> **当前版本：1.0.0（已于 2026-10-21 发布）。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
 > 存档/自动保存、继续上次对局、设置持久化、统计、规则帮助、程序化音效与
@@ -34,11 +34,12 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15 | 实际窗口与鼠标点击流程已验证 |
-| Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包已生成 | 未验证 |
-| Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 冒烟 | Xvfb 软件渲染已验证；物理桌面未验证 |
+| macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
+| Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 
-GitHub Actions 运行器是虚拟机，不等同物理机验证。具体命令、运行号与
+GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.0 发行文件与
+SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
 未验证项见 [docs/PHASE_7_REPORT.md](docs/PHASE_7_REPORT.md)。
 
 ## 安装发行版
@@ -46,7 +47,7 @@ GitHub Actions 运行器是虚拟机，不等同物理机验证。具体命令�
 从 GitHub Release 下载对应平台的归档，按
 [docs/RELEASE.md](docs/RELEASE.md) 解压运行：
 
-- macOS：解压后打开 `Reversi.app`（当前未签名/未公证）。
+- macOS：解压后打开 `Reversi.app`（仅 ad-hoc 签名，无 Developer ID/公证）。
 - Windows：解压后运行 `reversi.exe`，保留同级 `assets\`。
 - Linux：解压后运行 `./reversi`，保留同级 `assets/`。
 
@@ -139,6 +140,7 @@ GitHub Actions 运行器是虚拟机，不等同物理机验证。具体命令�
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── BUILD.md          构建、运行、测试、打包与平台说明
 │   ├── RELEASE.md        安装、卸载、校验与发布流程
+│   ├── RELEASES.md       已发布版本与 SHA-256 记录
 │   ├── TESTING.md        测试矩阵、性能数据与未验证项
 │   ├── images/           README 使用的实际窗口截图
 │   ├── ROADMAP.md        分阶段交付计划
@@ -148,7 +150,8 @@ GitHub Actions 运行器是虚拟机，不等同物理机验证。具体命令�
 │   ├── PHASE_3_REPORT.md Phase 3 完成报告
 │   ├── PHASE_4_REPORT.md Phase 4 完成报告（含 AI 基准结果）
 │   ├── PHASE_5_REPORT.md Phase 5 完成报告（存档、设置、音效与 UI 审查）
-│   └── PHASE_6_REPORT.md Phase 6 审计、测试、性能与交付报告
+│   ├── PHASE_6_REPORT.md Phase 6 审计、测试、性能与交付报告
+│   └── PHASE_7_REPORT.md Phase 7 发布工程与发布就绪性报告
 ├── assets/
 │   └── fonts/            Inter 4.1（SIL OFL 1.1）
 ├── scripts/
@@ -294,11 +297,14 @@ MatchPhase: PLAYER_TURN ──落子──> ANIMATING ──动画结束─┬�
 开发辅助（仅 Debug 构建；Release 不编译这些钩子）：
 
 ```bash
+# macOS 应用包内可执行文件；Linux 为 ./build/bin/reversi
+APP=./build/bin/Reversi.app/Contents/MacOS/Reversi
+
 # 自动落子，快速走完一局并检查结算页；数值为随机种子，便于复现具体对局
-REVERSI_AUTOPLAY=7 ./build/bin/reversi
+REVERSI_AUTOPLAY=7 "$APP"
 
 # 启用 F12 窗口截图，写入指定目录
-REVERSI_SHOT_DIR=/tmp/reversi-shots ./build/bin/reversi
+REVERSI_SHOT_DIR=/tmp/reversi-shots "$APP"
 
 ```
 
@@ -338,7 +344,8 @@ cmake --build build -j
 tar.gz，Windows 为 zip；每个归档附带 `.sha256`。也可以手动执行：
 
 ```bash
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DREVERSI_FORCE_FETCH_RAYLIB=ON
 cmake --build build-release -j
 ctest --test-dir build-release --output-on-failure
 cd build-release && cpack -C Release -B package
@@ -387,6 +394,8 @@ cmake --build build -j
    cmake -S . -B build -DREVERSI_FORCE_FETCH_RAYLIB=ON
    ```
 
+   发布脚本与发布 CI 始终启用该选项，保证发行包使用已审计的 6.2。
+
 4. 离线或离线镜像环境可复用本地源码树：
 
    ```bash
@@ -414,8 +423,9 @@ Windows 可执行文件位于 `build/bin/<Config>/reversi.exe`。发行包中的
 ```bash
 # macOS
 ./build/bin/Reversi.app/Contents/MacOS/Reversi --frames 10
+./build/bin/Reversi.app/Contents/MacOS/Reversi --version
 # Linux（Windows 对应 build\bin\<Config>\reversi.exe）
-./build/bin/reversi --version
+./build/bin/reversi --frames 10
 ```
 
 退出码 `0` 表示正常初始化、渲染并关闭窗口。
@@ -458,15 +468,16 @@ ctest --test-dir build --output-on-failure
 - `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
   存档槽位保存/加载/删除、帮助翻页与统计页返回。
 
-实际结果（2026-10-21，macOS arm64，Phase 6）：
+实际结果（2026-10-21，macOS arm64，v1.0.0 发布工程）：
 
 | 构建 | 测试结果 |
 |---|---|
 | Debug + GUI | 17/17 通过；`app.smoke` 与 `app.autoplay` 实际打开窗口并完成一局 |
-| Debug | 15/15 无 GUI 测试通过 |
-| Release | 15/15 通过；`reversi --frames 2` 退出码 0 |
-| ASan+UBSan | 15/15 通过，无 Sanitizer 报告；GUI 冒烟退出码 0 |
-| 全新 Debug 构建树 | 15/15 通过 |
+| Release | 15/15 通过；发行包 `--frames 2` 退出码 0 |
+| ASan+UBSan | 无 GUI 15/15 通过，无 Sanitizer 报告；GUI 冒烟通过 |
+| 全新 Release 构建树（联网获取 raylib 6.2） | 15/15 通过 |
+| GitHub Actions | Linux/Windows/macOS Debug+Release、ASan、Xvfb、Linux 包验收全部通过 |
+| 发行包验收 | `.sha256`、双启动、字体、许可证、用户数据持久化、`ldd` 检查通过 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
@@ -492,24 +503,12 @@ cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug \
   -DREVERSI_ENABLE_ASAN=ON -DREVERSI_ENABLE_UBSAN=ON
 cmake --build build-sanitize -j
 ctest --test-dir build-sanitize --output-on-failure
-./build-sanitize/bin/reversi --frames 5
+./build-sanitize/bin/Reversi.app/Contents/MacOS/Reversi --frames 5
 ```
 
 Sanitizer 标志只作用于第一方目标，不会重新编译 raylib。macOS 上的
 AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 `ASAN_OPTIONS=detect_leaks=0`。
-
-## 平台状态
-
-| 平台 | 状态 |
-|---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 17/17（含 GUI）、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；真实窗口/字体/音频、自动对局、无资源回退与鼠标点击流程已验证；键盘导航、窗口缩放、真实听感未验证 |
-| Windows x64（GitHub Actions 托管 VM） | MSVC Debug 构建与 15/15 无窗口测试 PASS；GUI 与物理机 NOT TESTED |
-| Linux x86_64（GitHub Actions 托管 VM） | Debug 构建与 15/15 无窗口测试 PASS；Xvfb + Mesa 软件渲染下 `app.smoke`/`app.autoplay` PASS；物理机桌面 GUI NOT TESTED |
-
-GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
-托管运行器是虚拟机，不是物理机。工程未使用平台相关路径或硬编码编译
-选项；跨平台构建需要对应的 raylib 依赖与 OpenGL 环境。
 
 ## 已知问题
 
@@ -521,9 +520,11 @@ GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
   Linux `$XDG_DATA_HOME/reversi`（或 `~/.local/share/reversi`），
   Windows `%APPDATA%\Reversi`。设置、统计与存档均写入该目录。
 - 存档只保存当前撤销分支；撤销后尚未重做的“未来”分支不会写入文件。
-- Phase 6 的窗口实际创建、字体/音频加载、主菜单截图、600 帧自动对局与
-  鼠标点击流程已验证；键盘导航未单独走查，也没有自动化 GUI 点击回归测试。
-  相关动作由 `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
+- v1.0.0 的窗口、字体、音频、自动对局、发行包启动与鼠标点击流程已验证；
+  键盘导航未单独走查，也没有自动化 GUI 点击/键盘回归测试。相关动作由
+  `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
+- v1.0.0 已于 2026-10-21 发布；发布后审查修正已在 `main`，但不在
+  v1.0.0 附件中。若要让修正进入发行包，需要新的补丁版本标签。
 - 音效设备初始化成功且音效加载无警告，但**未进行人工听感验证**；
   无音频设备路径由 `audio.noop` 与代码降级分支覆盖。
 - 760×600 最小窗口的 Phase 5 新页面按布局常量核对，未逐页截图；
@@ -539,8 +540,9 @@ GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
 - 在锁屏、显示器休眠或没有活动图形会话时，GLFW 无法获取主显示器，
   `app.smoke` 与手动运行都会以 “Failed to get primary monitor /
   Failed to initialize platform” 失败；解锁并保持显示唤醒后重跑即可。
-- Windows 与 Linux 构建/测试已在 GitHub Actions 托管 VM 上验证；
-  物理机与桌面 GUI 仍未验证。
+- Windows 与 Linux 构建、测试、打包与 Linux Xvfb 包验收已在 GitHub
+  Actions 托管 VM 上验证；物理机、Windows/macOS 桌面 GUI 与 Linux 原生
+  Wayland 会话仍未验证。
 
 ## 文档
 
@@ -552,6 +554,11 @@ GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
 - [路线图](docs/ROADMAP.md)
 - [变更日志](CHANGELOG.md)
 - [第三方声明](THIRD_PARTY_NOTICES.md)
+
+Phase 0–6 报告记录各阶段当时的状态，保留原文；最新状态以 README、
+[RELEASE.md](docs/RELEASE.md) 与 [PHASE_7_REPORT.md](docs/PHASE_7_REPORT.md)
+为准。
+
 - [Phase 0 报告](docs/PHASE_0_REPORT.md)
 - [Phase 1 报告](docs/PHASE_1_REPORT.md)
 - [Phase 2 报告](docs/PHASE_2_REPORT.md)

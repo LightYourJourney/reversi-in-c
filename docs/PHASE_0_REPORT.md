@@ -1,5 +1,7 @@
 # Phase 0 完成报告
 
+> 历史阶段报告：记录该阶段完成时的状态；最新发布状态见 README 与 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
+
 - 日期：2026-10-19
 - 阶段：项目初始化与技术架构建设
 - 结论：**完成**。Debug、Release、ASan+UBSan 三套构建通过，CTest 通过，

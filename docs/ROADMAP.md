@@ -178,7 +178,7 @@ AI 对局的人工验证；设置与对局仍不持久化。
 音效未做听感验证；760×600 新页面按布局常量核对但未逐页截图；
 Windows/Linux 未实机验证。详见 [PHASE_5_REPORT.md](PHASE_5_REPORT.md)。
 
-## Phase 6 — 打磨与发布
+## Phase 6 — 打磨与发布（原计划）
 
 目标：达到可长期维护和分发的质量。
 
@@ -221,9 +221,37 @@ Windows/Linux 未实机验证。详见 [PHASE_5_REPORT.md](PHASE_5_REPORT.md)。
 - 文档：`docs/BUILD.md`、`docs/TESTING.md`、`docs/PHASE_6_REPORT.md`、
   `CHANGELOG.md`、`THIRD_PARTY_NOTICES.md`，README/ARCHITECTURE 更新。
 - 交付：`build-release/package/reversi-0.1.0-macos-arm64/` 与 zip，
-  实际运行 `--frames 2` 退出码 0。
+  实际运行 `--frames 2` 退出码 0（该 0.1.0 交付物已被 Phase 7 的
+  1.0.0 发行包取代）。
 
 未验证项：键盘导航、窗口缩放、真实听感、Windows/Linux 物理机、
 Windows/macOS 桌面 GUI、LeakSanitizer（macOS 不支持）、多分钟/多小时长跑。
 GitHub Actions 为托管 VM，不等同物理机。详见
 [PHASE_6_REPORT.md](PHASE_6_REPORT.md)。
+
+## Phase 7 — 正式发布工程（已完成，2026-10-21）
+
+交付内容：
+
+- 语义化版本 `1.0.0`、生成式版本头、`--version` 与窗口标题。
+- CMake install/CPack：macOS `Reversi.app`、Windows/Linux 便携 ZIP，
+  Linux 另有 TGZ；每个归档附 `.sha256`。
+- macOS 应用包 Resources 布局、许可证复制、ad-hoc 重签名；可选
+  Developer ID 入口。
+- Windows 静态 MSVC 运行库、版本资源与包内 `--version` 冒烟。
+- `scripts/package.sh`、`scripts/verify-package.sh`、`docs/RELEASE.md`、
+  `docs/RELEASES.md`、`docs/PHASE_7_REPORT.md`。
+- CI：三平台 Debug/Release、ASan+UBSan、Linux Xvfb、Linux 发行包验收、
+  产物上传；标签触发 GitHub Release。
+- README 实际截图、安装、平台、构建、测试、架构与许可证说明。
+
+验证与发布：
+
+- 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15。
+- CI 运行 `39613503376` 9/9 通过。
+- `v1.0.0` 已发布：<https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.0>。
+- 发布后审查修正已在 `main`，需要新的补丁版本标签才能进入发行附件。
+
+剩余限制：macOS 无 Developer ID/公证、Windows 无 Authenticode 签名、
+Windows/macOS 物理桌面 GUI 与 Linux 物理桌面未验证、打包 GUI 手动
+存/读档未走查。详见 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。

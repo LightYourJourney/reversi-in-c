@@ -49,7 +49,9 @@ Phase 6 一致。
 - GitHub Actions 运行 `39597445741`：Linux/Windows/macOS 的 Debug 与
   Release、Linux ASan+UBSan、Linux Xvfb、Linux 发行包验收全部通过；
   Windows 发行包 `--version` 实际执行成功。
-- 具体运行号、各平台产物与 SHA-256 见 `docs/PHASE_7_REPORT.md`。
+- 标签发布运行 `39609234964` 完成三平台打包并发布 GitHub Release；
+  发行文件与 SHA-256 见 `docs/RELEASES.md`。
+- 具体运行号与平台限制见 `docs/PHASE_7_REPORT.md`。
 
 ## [0.1.0] - 2026-10-21
 

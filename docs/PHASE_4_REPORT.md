@@ -1,5 +1,7 @@
 # Phase 4 完成报告 — AI 与难度
 
+> 历史阶段报告：记录该阶段完成时的状态；最新发布状态见 README 与 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
+
 日期：2026-10-21
 平台：macOS 26.6.2（Darwin 25.6.0），Apple M3 / arm64，16 GiB
 工具链：Apple LLVM 21.0.0（`/usr/bin/clang`），CMake 4.4.4

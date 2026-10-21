@@ -477,3 +477,25 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 3. **不追求形式整洁的大重构**：审计确认分层、所有权与状态机健康；
    `app.c` 规模作为观察项保留，拆分留到有独立收益时进行。测试、日志与
    文档优先记录真实行为，不用“看起来完整”的报告替代验证。
+
+## 18. Phase 7 发布工程决策
+
+1. **版本单一来源**：根目录 `VERSION` 由 CMake 读取并校验，生成
+   `reversi/version.h`；窗口标题、`--version`、Info.plist 与 Windows
+   版本资源都从同一版本派生，避免多处手写。
+2. **安装布局平台化**：macOS 使用 `Reversi.app`，字体与许可证进入
+   `Contents/Resources/`；Windows/Linux 保持可执行文件与同级 `assets/`
+   的便携布局。CMake install 只安装 `Reversi` 组件，不把 raylib/GLFW
+   开发文件带入发行包。
+3. **签名在资源之后**：macOS 先复制字体、`LICENSE` 与第三方声明，再做
+   ad-hoc 重签名，保证 bundle 的资源封印有效；Developer ID 通过
+   `REVERSI_MACOS_CODESIGN_IDENTITY` 可选注入，不提交任何私钥。
+4. **发布构建锁定依赖**：CI 与 `scripts/package.sh` 强制
+   `REVERSI_FORCE_FETCH_RAYLIB=ON`，使用已审计的 raylib 6.2，而不是
+   构建机上的系统版本。
+5. **验收脚本独立于源码**：`verify-package.sh` 校验归档校验和、解压到
+   临时目录、从 `/` 连续启动、检查字体/许可证/用户数据持久化，并在
+   Linux 上检查 `ldd`；CI 在 Xvfb 下复用同一脚本。
+6. **发布与打包分离**：`ci.yml` 负责每次提交的矩阵验证与产物上传；
+   `release.yml` 只在 `v*` 标签触发正式 GitHub Release，标签必须与
+   `VERSION` 一致，避免误发布。

@@ -17,8 +17,9 @@ Linux Xvfb 软件渲染下做过冒烟。
 - 线程库（AI 后台搜索；macOS/Linux 为 pthread，Windows 为 Win32 线程）
 - OpenGL 驱动与桌面图形会话（运行游戏时）
 
-字体文件位于 `assets/fonts/`，构建时复制到可执行文件旁。字体缺失时程序
-回退到 raylib 默认字体，不会阻止启动。
+字体文件位于 `assets/fonts/`。Windows/Linux 构建复制到可执行文件旁；
+macOS 构建复制到 `Reversi.app/Contents/Resources/assets/`。字体缺失时
+程序回退到 raylib 默认字体，不会阻止启动。
 
 ## 2. Debug 构建
 
@@ -32,12 +33,16 @@ cmake --build build -j
 ## 3. Release 构建
 
 ```bash
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DREVERSI_FORCE_FETCH_RAYLIB=ON
 cmake --build build-release -j
 ```
 
+发行包必须使用固定的 raylib 6.2；`scripts/package.sh` 会自动启用该选项。
+
 macOS 下产物为 `build-release/bin/Reversi.app`；Windows/Linux 为
-`build/bin/<Config>/reversi[.exe]` 或 `build/bin/reversi`。
+`build-release/bin/<Config>/reversi[.exe]` 或
+`build-release/bin/reversi`。
 
 ## 4. 运行
 
@@ -58,8 +63,11 @@ Linux / Windows：
 仅渲染指定帧数后退出，用于窗口初始化/关闭冒烟：
 
 ```bash
+# macOS
 ./build/bin/Reversi.app/Contents/MacOS/Reversi --frames 10
-./build/bin/reversi --version
+./build/bin/Reversi.app/Contents/MacOS/Reversi --version
+# Linux（Windows 为 build\bin\<Config>\reversi.exe）
+./build/bin/reversi --frames 10
 ```
 
 退出码 `0` 表示窗口、字体、音频与清理路径完成。没有活动图形会话时，
@@ -116,7 +124,8 @@ LeakSanitizer；不要设置 `ASAN_OPTIONS=detect_leaks=1`，否则测试会直�
 1. `find_package(raylib 6.2 QUIET)` 使用系统版本；
 2. 未找到时下载固定版本 6.2：
    `df7a13129b1bec9e73a6962efff170beba310ee6eab8f94cd000b7316b4db5ee`；
-3. 强制下载：`-DREVERSI_FORCE_FETCH_RAYLIB=ON`；
+3. 强制下载：`-DREVERSI_FORCE_FETCH_RAYLIB=ON`；发布脚本与发布 CI
+   始终启用，确保发行包使用已审计的 6.2；
 4. 离线构建：
 
 ```bash
@@ -145,9 +154,10 @@ cmake --build build -j
 ./build/bin/reversi
 ```
 
-以上两条路径的 Debug 构建与无窗口测试已由 `.github/workflows/ci.yml`
-在 GitHub Actions 的 Linux/Windows 托管 VM 上验证（运行 `39588002802`），
-Linux 另有 Xvfb GUI 冒烟。物理机与桌面 GUI 仍未验证。
+以上两条路径的 Debug/Release 构建、无窗口测试与 Release 打包已由
+`.github/workflows/ci.yml` 在 GitHub Actions 的 Linux/Windows 托管 VM
+上验证（运行 `39613503376`）；Linux 另有 Xvfb GUI 冒烟与发行包独立
+启动验收。物理机与桌面 GUI 仍未验证。
 
 ## 9. 打包与许可证
 
@@ -172,7 +182,8 @@ cpack -C Release -B package
 ```
 
 安装或用 `cmake --install` 时，macOS 安装 `Reversi.app`，其
-`Contents/Resources/assets/` 含字体；Windows/Linux 安装可执行文件与
-同级 `assets/`。字体许可证为 `assets/fonts/OFL.txt`；项目自身为
-GPL-3.0；raylib、GLFW、miniaudio 的声明见
-[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+`Contents/Resources/assets/` 含字体，`Contents/Resources/` 还包含
+`LICENSE` 与 `THIRD_PARTY_NOTICES.md`；Windows/Linux 安装可执行文件与
+同级 `assets/`、`LICENSE`、`THIRD_PARTY_NOTICES.md`。字体许可证为
+`assets/fonts/OFL.txt`；项目自身为 GPL-3.0；raylib、GLFW、miniaudio
+的声明见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

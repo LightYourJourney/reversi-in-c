@@ -51,14 +51,16 @@ Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、
 - Debug + GUI：17/17 通过；`app.smoke` 打开窗口、加载字体与音频、渲染两帧
   并正常关闭；`app.autoplay` 完成一局并核对统计 1 次、无终局自动存档。
 - Release：15/15 通过；Release 二进制的 `--frames 2` 实际退出码 0。
-- ASan+UBSan：15/15 通过，无 Sanitizer 报告；Sanitizer 二进制的
-  `--frames 2` 退出码 0。
-- 全新 Debug 构建树（`build-phase6-fresh`）15/15 通过，确认不是旧产物；
-  该树使用固定 6.2 源码树的离线路径（本会话直接联网 FetchContent 超时）。
-- GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部 `success`：
-  Linux、Windows（MSVC）、macOS 各 15/15；Linux Xvfb 下 `app.smoke` 与
-  `app.autoplay` 通过。CI 获取 raylib 走联网 FetchContent 路径 — PASS。
-  这些运行器是托管 VM，不是物理机；Windows/macOS GUI 未在 CI 中运行。
+- ASan+UBSan：审查后无 GUI 测试 15/15 通过，无 Sanitizer 报告；此前
+  GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
+- 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
+  并通过 `scripts/verify-package.sh` 独立启动验收。
+- GitHub Actions 运行 `39613503376`（2026-10-21）9 个作业全部 `success`：
+  Linux/Windows（MSVC）/macOS 的 Debug 与 Release 各 15/15；Linux
+  ASan+UBSan；Linux Xvfb GUI；Linux 发行包在 Xvfb 下执行
+  `scripts/verify-package.sh`；Windows 发行包 `--version` 断言通过。
+  CI 强制获取 raylib 6.2。这些运行器是托管 VM，不是物理机；
+  Windows/macOS GUI 未在 CI 中运行。
 
 ## 3. 需求到测试的映射
 
@@ -70,7 +72,7 @@ Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、
 | Pass 与终局 | `core.game`、`core.match`、`core.random` | PASS |
 | 撤销/重做 | `core.history`、`core.match`、`ui.views` | PASS |
 | 游戏状态机 | `core.match` 阶段/一致性/转换 | PASS |
-| 存档与读档 | `storage.save`、`core.match`、GUI 自动对局 | PASS |
+| 存档与读档 | `storage.save`、`core.match`、GUI 自动对局、打包进程用户数据持久化 | PASS（逻辑）；GUI 手动存/读档 NOT TESTED |
 | 损坏文件 | `storage.save` 截断/校验和/版本/非法值 | PASS |
 | AI 合法性 | `ai.core` 每步复核 + 基准 `illegal=0` | PASS |
 | AI 自动对局 | `ai.core` 固定对局、`reversi_ai_bench` 27 个局面 | PASS |
@@ -82,6 +84,7 @@ Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、
 | Linux GUI（Xvfb） | `app.smoke`、`app.autoplay`（软件渲染） | PASS |
 | Windows/macOS GUI | 未运行 | NOT TESTED |
 | 跨平台物理机 | 仅 macOS arm64 为本机 | Windows/Linux 物理机 NOT TESTED |
+| 发行包独立验收 | 校验 `.sha256`、双启动、字体、许可证、用户数据、`ldd`（Linux） | PASS |
 
 ## 4. GUI 与手工验证
 
