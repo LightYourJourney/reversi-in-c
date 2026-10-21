@@ -6,6 +6,14 @@
 #include <stddef.h>
 #include <stdio.h>
 
+enum {
+    RESULT_FOCUS_PLAY_AGAIN = 0,
+    RESULT_FOCUS_UNDO,
+    RESULT_FOCUS_SAVE,
+    RESULT_FOCUS_MENU,
+    RESULT_FOCUS_COUNT
+};
+
 typedef struct ResultLayout {
     Rectangle panel;
     Rectangle again;
@@ -113,8 +121,8 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
     }
     if (input->up_pressed || input->down_pressed) {
         view->focus = ui_focus_step(
-            view->focus, input->down_pressed ? 1 : -1, 4,
-            can_undo ? 0u : (1u << 1));
+            view->focus, input->down_pressed ? 1 : -1, RESULT_FOCUS_COUNT,
+            can_undo ? 0u : (1u << RESULT_FOCUS_UNDO));
         view->focus_visible = true;
     }
 
@@ -131,16 +139,16 @@ ResultAction result_view_update(ResultView *view, const UiInput *input,
         return RESULT_ACTION_MENU;
     }
     if (input->enter_pressed) {
-        if (view->focus == 0) {
+        if (view->focus == RESULT_FOCUS_PLAY_AGAIN) {
             return RESULT_ACTION_PLAY_AGAIN;
         }
-        if (view->focus == 1 && can_undo) {
+        if (view->focus == RESULT_FOCUS_UNDO && can_undo) {
             return RESULT_ACTION_UNDO;
         }
-        if (view->focus == 2) {
+        if (view->focus == RESULT_FOCUS_SAVE) {
             return RESULT_ACTION_SAVE;
         }
-        if (view->focus == 3) {
+        if (view->focus == RESULT_FOCUS_MENU) {
             return RESULT_ACTION_MENU;
         }
     }
@@ -229,11 +237,12 @@ void result_view_draw(const ResultView *view, const UiFonts *fonts,
         1.0f, REVERSI_UI_COLOR_BORDER);
 
     ui_button_draw(&view->menu, fonts,
-                   view->focus_visible && view->focus == 3);
+                   view->focus_visible && view->focus == RESULT_FOCUS_MENU);
     ui_button_draw(&view->save, fonts,
-                   view->focus_visible && view->focus == 2);
+                   view->focus_visible && view->focus == RESULT_FOCUS_SAVE);
     ui_button_draw(&view->undo, fonts,
-                   view->focus_visible && view->focus == 1);
+                   view->focus_visible && view->focus == RESULT_FOCUS_UNDO);
     ui_button_draw(&view->again, fonts,
-                   view->focus_visible && view->focus == 0);
+                   view->focus_visible
+                       && view->focus == RESULT_FOCUS_PLAY_AGAIN);
 }

@@ -158,6 +158,7 @@ target_link_libraries(reversi_ai
 
 add_library(reversi_persistence STATIC
     src/storage/storage.c
+    src/storage/text.c
     src/storage/save.c
     src/storage/stats.c
     src/settings/settings.c)

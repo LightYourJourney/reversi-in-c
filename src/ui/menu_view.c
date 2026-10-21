@@ -5,6 +5,31 @@
 #include <math.h>
 #include <stddef.h>
 
+enum {
+    MENU_INDEX_CONTINUE = 0,
+    MENU_INDEX_PLAY,
+    MENU_INDEX_LOAD,
+    MENU_INDEX_HELP,
+    MENU_INDEX_STATS,
+    MENU_INDEX_SETTINGS,
+    MENU_INDEX_QUIT
+};
+
+typedef struct MenuEntry {
+    const char *label;
+    MenuAction action;
+} MenuEntry;
+
+static const MenuEntry MENU_ENTRIES[REVERSI_MENU_BUTTON_COUNT] = {
+    {"Continue", MENU_ACTION_CONTINUE},
+    {"New game", MENU_ACTION_PLAY},
+    {"Load game", MENU_ACTION_LOAD},
+    {"How to play", MENU_ACTION_HELP},
+    {"Statistics", MENU_ACTION_STATS},
+    {"Settings", MENU_ACTION_SETTINGS},
+    {"Quit", MENU_ACTION_QUIT}
+};
+
 typedef struct MenuLayout {
     Rectangle buttons[REVERSI_MENU_BUTTON_COUNT];
     float mark_y;
@@ -44,28 +69,15 @@ static MenuLayout menu_layout(void)
 
 static MenuAction action_for_index(int index)
 {
-    switch (index) {
-    case 0:
-        return MENU_ACTION_CONTINUE;
-    case 1:
-        return MENU_ACTION_PLAY;
-    case 2:
-        return MENU_ACTION_LOAD;
-    case 3:
-        return MENU_ACTION_HELP;
-    case 4:
-        return MENU_ACTION_STATS;
-    case 5:
-        return MENU_ACTION_SETTINGS;
-    case 6:
-    default:
-        return MENU_ACTION_QUIT;
+    if (index < 0 || index >= REVERSI_MENU_BUTTON_COUNT) {
+        return MENU_ACTION_NONE;
     }
+    return MENU_ENTRIES[index].action;
 }
 
 static unsigned disabled_mask(bool has_continue)
 {
-    return has_continue ? 0u : 1u;
+    return has_continue ? 0u : (1u << MENU_INDEX_CONTINUE);
 }
 
 void menu_view_init(MenuView *view)
@@ -74,14 +86,11 @@ void menu_view_init(MenuView *view)
         return;
     }
 
-    ui_button_init(&view->buttons[0], "Continue", true);
-    ui_button_init(&view->buttons[1], "New game", false);
-    ui_button_init(&view->buttons[2], "Load game", false);
-    ui_button_init(&view->buttons[3], "How to play", false);
-    ui_button_init(&view->buttons[4], "Statistics", false);
-    ui_button_init(&view->buttons[5], "Settings", false);
-    ui_button_init(&view->buttons[6], "Quit", false);
-    view->focus = 1;
+    for (int index = 0; index < REVERSI_MENU_BUTTON_COUNT; ++index) {
+        ui_button_init(&view->buttons[index], MENU_ENTRIES[index].label,
+                       index == MENU_INDEX_CONTINUE);
+    }
+    view->focus = MENU_INDEX_PLAY;
     view->focus_visible = false;
 }
 
@@ -94,12 +103,12 @@ MenuAction menu_view_update(MenuView *view, const UiInput *input,
 
     const MenuLayout layout = menu_layout();
     const unsigned disabled = disabled_mask(has_continue);
-    view->buttons[0].enabled = has_continue;
-    view->buttons[0].primary = has_continue;
-    view->buttons[1].primary = !has_continue;
+    view->buttons[MENU_INDEX_CONTINUE].enabled = has_continue;
+    view->buttons[MENU_INDEX_CONTINUE].primary = has_continue;
+    view->buttons[MENU_INDEX_PLAY].primary = !has_continue;
     for (int index = 0; index < REVERSI_MENU_BUTTON_COUNT; ++index) {
         ui_button_set_bounds(&view->buttons[index], layout.buttons[index]);
-        if (index != 0) {
+        if (index != MENU_INDEX_CONTINUE) {
             view->buttons[index].enabled = true;
         }
     }

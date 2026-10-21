@@ -128,7 +128,6 @@ bool audio_init(int volume, bool sfx_enabled)
     sounds[AUDIO_CUE_WIN] = synth_notes(win_notes, 4, 0.095f, 0.13f);
     sounds[AUDIO_CUE_LOSE] = synth_notes(lose_notes, 3, 0.115f, 0.13f);
     sounds[AUDIO_CUE_DRAW] = synth_notes(draw_notes, 2, 0.100f, 0.11f);
-    sounds[AUDIO_CUE_ERROR] = synth_tone(190.0f, 135.0f, 0.130f, 0.13f);
 
     for (int index = 0; index < AUDIO_CUE_COUNT; ++index) {
         if (!sound_valid(sounds[index])) {

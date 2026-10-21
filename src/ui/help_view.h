@@ -5,6 +5,8 @@
 
 typedef enum HelpAction {
     HELP_ACTION_NONE = 0,
+    HELP_ACTION_PREVIOUS,
+    HELP_ACTION_NEXT,
     HELP_ACTION_BACK
 } HelpAction;
 

@@ -1,12 +1,39 @@
 #include "settings/settings.h"
 
 #include "storage/storage.h"
+#include "storage/text.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define REVERSI_SETTINGS_MAX_BYTES 4096u
+
+static const int SETTINGS_SPEEDS[REVERSI_SETTINGS_SPEED_COUNT] = {
+    50, 75, 100, 150, 200
+};
+
+int settings_speed_next(int speed, int direction)
+{
+    int index = -1;
+    for (int candidate = 0; candidate < REVERSI_SETTINGS_SPEED_COUNT;
+         ++candidate) {
+        if (SETTINGS_SPEEDS[candidate] == speed) {
+            index = candidate;
+            break;
+        }
+    }
+    if (index < 0) {
+        return 100;
+    }
+    index += direction < 0 ? -1 : 1;
+    if (index < 0) {
+        index = 0;
+    } else if (index >= REVERSI_SETTINGS_SPEED_COUNT) {
+        index = REVERSI_SETTINGS_SPEED_COUNT - 1;
+    }
+    return SETTINGS_SPEEDS[index];
+}
 
 void settings_defaults(Settings *settings)
 {
@@ -25,60 +52,56 @@ void settings_defaults(Settings *settings)
     };
 }
 
-static bool parse_int(const char *text, int *out)
-{
-    char *end = NULL;
-    const long value = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || value < -1000000L || value > 1000000L) {
-        return false;
-    }
-    *out = (int)value;
-    return true;
-}
-
 static bool apply_setting(Settings *settings, const char *key,
                           const char *value)
 {
     int number = 0;
     if (strcmp(key, "volume") == 0) {
-        if (!parse_int(value, &number) || number < 0 || number > 100) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || number < 0 || number > 100) {
             return false;
         }
         settings->volume = number;
     } else if (strcmp(key, "sfx") == 0) {
-        if (!parse_int(value, &number) || (number != 0 && number != 1)) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || (number != 0 && number != 1)) {
             return false;
         }
         settings->sfx = number == 1;
     } else if (strcmp(key, "animations") == 0) {
-        if (!parse_int(value, &number) || (number != 0 && number != 1)) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || (number != 0 && number != 1)) {
             return false;
         }
         settings->animations = number == 1;
     } else if (strcmp(key, "animation_speed") == 0) {
-        if (!parse_int(value, &number)
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
             || number < REVERSI_SETTINGS_ANIMATION_MIN
             || number > REVERSI_SETTINGS_ANIMATION_MAX) {
             return false;
         }
         settings->animation_speed = number;
     } else if (strcmp(key, "legal_hints") == 0) {
-        if (!parse_int(value, &number) || (number != 0 && number != 1)) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || (number != 0 && number != 1)) {
             return false;
         }
         settings->legal_hints = number == 1;
     } else if (strcmp(key, "last_move") == 0) {
-        if (!parse_int(value, &number) || (number != 0 && number != 1)) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || (number != 0 && number != 1)) {
             return false;
         }
         settings->last_move_highlight = number == 1;
     } else if (strcmp(key, "default_difficulty") == 0) {
-        if (!parse_int(value, &number) || number < 0 || number > 2) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || number < 0 || number > 2) {
             return false;
         }
         settings->default_difficulty = number;
     } else if (strcmp(key, "theme") == 0) {
-        if (!parse_int(value, &number) || (number != 0 && number != 1)) {
+        if (!storage_text_parse_int(value, -1000000, 1000000, &number)
+            || (number != 0 && number != 1)) {
             return false;
         }
         settings->theme = number;
@@ -111,19 +134,8 @@ bool settings_load_path(const char *path, Settings *settings)
     bool ok = false;
     bool saw_header = false;
     char *cursor = file;
-    while (*cursor != '\0') {
-        char *line = cursor;
-        char *newline = strchr(cursor, '\n');
-        if (newline != NULL) {
-            *newline = '\0';
-            cursor = newline + 1;
-        } else {
-            cursor = line + strlen(line);
-        }
-        const size_t length = strlen(line);
-        if (length > 0 && line[length - 1] == '\r') {
-            line[length - 1] = '\0';
-        }
+    char *line = NULL;
+    while (storage_text_next_line(&cursor, &line)) {
         if (line[0] == '\0') {
             continue;
         }

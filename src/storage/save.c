@@ -2,6 +2,7 @@
 
 #include "core/game.h"
 #include "storage/storage.h"
+#include "storage/text.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -146,42 +147,16 @@ SaveStatus save_write(const char *path, const Match *match, int difficulty)
         ? SAVE_STATUS_OK : SAVE_STATUS_IO;
 }
 
-static bool split_line(char **cursor, char **line)
-{
-    if (cursor == NULL || *cursor == NULL || **cursor == '\0') {
-        return false;
-    }
-    char *start = *cursor;
-    char *newline = strchr(start, '\n');
-    if (newline != NULL) {
-        *newline = '\0';
-        *cursor = newline + 1;
-    } else {
-        *cursor = start + strlen(start);
-    }
-    const size_t length = strlen(start);
-    if (length > 0 && start[length - 1] == '\r') {
-        start[length - 1] = '\0';
-    }
-    *line = start;
-    return true;
-}
-
 static bool parse_int_value(const char *line, const char *key, int *out)
 {
     const size_t key_length = strlen(key);
     if (strncmp(line, key, key_length) != 0 || line[key_length] != ' ') {
         return false;
     }
-    const char *text = line + key_length + 1;
-    char *end = NULL;
-    const long value = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || value < -1000000L || value > 1000000L) {
-        return false;
-    }
-    *out = (int)value;
-    return true;
+    return storage_text_parse_int(line + key_length + 1,
+                                  -1000000, 1000000, out);
 }
+
 
 static bool parse_move_line(const char *line, Move *move)
 {
@@ -271,7 +246,7 @@ SaveStatus save_read(const char *path, SavedGame *out)
 
     char *cursor = file;
     char *line = NULL;
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || strncmp(line, "REVERSI_SAVE ", 13) != 0) {
         goto done;
     }
@@ -287,7 +262,7 @@ SaveStatus save_read(const char *path, SavedGame *out)
         }
     }
 
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || strncmp(line, "checksum ", 9) != 0) {
         goto done;
     }
@@ -307,22 +282,22 @@ SaveStatus save_read(const char *path, SavedGame *out)
     int human = 0;
     int difficulty = 0;
     int move_count = 0;
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_int_value(line, "mode", &mode)
         || (mode != (int)GAME_MODE_PVP && mode != (int)GAME_MODE_PVE)) {
         goto done;
     }
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_int_value(line, "human", &human)
         || (human != (int)STONE_BLACK && human != (int)STONE_WHITE)) {
         goto done;
     }
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_int_value(line, "difficulty", &difficulty)
         || difficulty < 0 || difficulty > 2) {
         goto done;
     }
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_int_value(line, "moves", &move_count)
         || move_count < 0 || move_count > REVERSI_SAVE_MAX_MOVES) {
         goto done;
@@ -334,24 +309,24 @@ SaveStatus save_read(const char *path, SavedGame *out)
     parsed.move_count = move_count;
 
     for (int index = 0; index < move_count; ++index) {
-        if (!split_line(&cursor, &line)
+        if (!storage_text_next_line(&cursor, &line)
             || !parse_move_line(line, &parsed.moves[index])) {
             goto done;
         }
     }
 
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_board_line(line, &parsed.expected.board)) {
         goto done;
     }
     int player = 0;
     int result = 0;
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_int_value(line, "player", &player)
         || (player != (int)STONE_BLACK && player != (int)STONE_WHITE)) {
         goto done;
     }
-    if (!split_line(&cursor, &line)
+    if (!storage_text_next_line(&cursor, &line)
         || !parse_int_value(line, "result", &result)
         || result < (int)GAME_RESULT_ONGOING
         || result > (int)GAME_RESULT_DRAW) {
@@ -362,7 +337,7 @@ SaveStatus save_read(const char *path, SavedGame *out)
 
     /* Only an optional trailing newline may remain. */
     while (cursor != NULL && *cursor != '\0') {
-        if (!split_line(&cursor, &line) || line[0] != '\0') {
+        if (!storage_text_next_line(&cursor, &line) || line[0] != '\0') {
             goto done;
         }
     }

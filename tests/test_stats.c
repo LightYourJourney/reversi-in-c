@@ -44,6 +44,55 @@ static void test_records(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, stats_human_losses(&record) == 1);
 }
 
+static void test_unrecord(TestStats *stats)
+{
+    GameStats record;
+    stats_reset(&record);
+    stats_record(&record, GAME_MODE_PVE, STONE_BLACK, 0,
+                 GAME_RESULT_BLACK_WIN);
+    stats_record(&record, GAME_MODE_PVE, STONE_BLACK, 0,
+                 GAME_RESULT_BLACK_WIN);
+    stats_record(&record, GAME_MODE_PVE, STONE_WHITE, 2,
+                 GAME_RESULT_WHITE_WIN);
+    stats_record(&record, GAME_MODE_PVP, STONE_BLACK, 0,
+                 GAME_RESULT_BLACK_WIN);
+    stats_record(&record, GAME_MODE_PVP, STONE_BLACK, 0,
+                 GAME_RESULT_DRAW);
+
+    stats_unrecord(&record, GAME_MODE_PVE, STONE_BLACK, 0,
+                   GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, record.pve[0].games == 1);
+    REVERSI_TEST_ASSERT(stats, record.pve[0].wins == 1);
+    REVERSI_TEST_ASSERT(stats, stats_total_games(&record) == 4);
+
+    stats_unrecord(&record, GAME_MODE_PVE, STONE_WHITE, 2,
+                   GAME_RESULT_WHITE_WIN);
+    REVERSI_TEST_ASSERT(stats, record.pve[2].games == 0);
+    REVERSI_TEST_ASSERT(stats, record.pve[2].wins == 0);
+
+    /* Unrecording a record that is not present must not go negative. */
+    stats_unrecord(&record, GAME_MODE_PVE, STONE_WHITE, 2,
+                   GAME_RESULT_WHITE_WIN);
+    stats_unrecord(&record, GAME_MODE_PVE, STONE_BLACK, 0,
+                   GAME_RESULT_DRAW);
+    REVERSI_TEST_ASSERT(stats, record.pve[0].games == 1);
+    REVERSI_TEST_ASSERT(stats, record.pve[0].draws == 0);
+
+    stats_unrecord(&record, GAME_MODE_PVP, STONE_BLACK, 0,
+                   GAME_RESULT_DRAW);
+    REVERSI_TEST_ASSERT(stats, record.pvp_games == 1);
+    REVERSI_TEST_ASSERT(stats, record.pvp_draws == 0);
+    stats_unrecord(&record, GAME_MODE_PVP, STONE_BLACK, 0,
+                   GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, record.pvp_games == 0);
+    stats_unrecord(&record, GAME_MODE_PVP, STONE_BLACK, 0,
+                   GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, record.pvp_games == 0);
+    stats_unrecord(&record, GAME_MODE_PVE, STONE_BLACK, 0,
+                   GAME_RESULT_ONGOING);
+    REVERSI_TEST_ASSERT(stats, record.pve[0].games == 1);
+}
+
 static void test_round_trip(TestStats *stats)
 {
     const char *path = "test-stats.dat";
@@ -114,6 +163,7 @@ int main(void)
     TestStats stats = {0};
 
     REVERSI_RUN_TEST(&stats, test_records);
+    REVERSI_RUN_TEST(&stats, test_unrecord);
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_invalid_and_missing);
 

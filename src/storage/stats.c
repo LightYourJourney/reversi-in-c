@@ -1,6 +1,7 @@
 #include "storage/stats.h"
 
 #include "storage/storage.h"
+#include "storage/text.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,73 +19,6 @@ void stats_reset(GameStats *stats)
         return;
     }
     memset(stats, 0, sizeof(*stats));
-}
-
-int stats_total_games(const GameStats *stats)
-{
-    if (stats == NULL) {
-        return 0;
-    }
-    int total = stats->pvp_games;
-    for (int index = 0; index < REVERSI_STATS_DIFFICULTY_COUNT; ++index) {
-        total += stats->pve[index].games;
-    }
-    return total;
-}
-
-int stats_human_games(const GameStats *stats)
-{
-    if (stats == NULL) {
-        return 0;
-    }
-    int games = 0;
-    for (int index = 0; index < REVERSI_STATS_DIFFICULTY_COUNT; ++index) {
-        games += stats->pve[index].games;
-    }
-    return games;
-}
-
-static int human_sum(const GameStats *stats,
-                     int (*pick)(const DifficultyStats *))
-{
-    if (stats == NULL) {
-        return 0;
-    }
-    int total = 0;
-    for (int index = 0; index < REVERSI_STATS_DIFFICULTY_COUNT; ++index) {
-        total += pick(&stats->pve[index]);
-    }
-    return total;
-}
-
-static int pick_wins(const DifficultyStats *record)
-{
-    return record->wins;
-}
-
-static int pick_draws(const DifficultyStats *record)
-{
-    return record->draws;
-}
-
-static int pick_losses(const DifficultyStats *record)
-{
-    return record->losses;
-}
-
-int stats_human_wins(const GameStats *stats)
-{
-    return human_sum(stats, pick_wins);
-}
-
-int stats_human_draws(const GameStats *stats)
-{
-    return human_sum(stats, pick_draws);
-}
-
-int stats_human_losses(const GameStats *stats)
-{
-    return human_sum(stats, pick_losses);
 }
 
 void stats_record(GameStats *stats, GameMode mode, Stone human_color,
@@ -122,22 +56,56 @@ void stats_record(GameStats *stats, GameMode mode, Stone human_color,
     }
 }
 
-static bool parse_int(const char *text, int *out)
+void stats_unrecord(GameStats *stats, GameMode mode, Stone human_color,
+                    int difficulty, GameResult result)
 {
-    char *end = NULL;
-    const long value = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || value < 0 || value > 100000000L) {
-        return false;
+    if (stats == NULL || result == GAME_RESULT_ONGOING) {
+        return;
     }
-    *out = (int)value;
-    return true;
+
+    if (mode == GAME_MODE_PVP) {
+        if (stats->pvp_games <= 0
+            || (result == GAME_RESULT_DRAW && stats->pvp_draws <= 0)) {
+            return;
+        }
+        --stats->pvp_games;
+        if (result == GAME_RESULT_DRAW) {
+            --stats->pvp_draws;
+        }
+        return;
+    }
+    if (mode != GAME_MODE_PVE || difficulty < 0
+        || difficulty >= REVERSI_STATS_DIFFICULTY_COUNT
+        || (human_color != STONE_BLACK && human_color != STONE_WHITE)) {
+        return;
+    }
+
+    DifficultyStats *record = &stats->pve[difficulty];
+    const GameResult human_win = human_color == STONE_BLACK
+        ? GAME_RESULT_BLACK_WIN : GAME_RESULT_WHITE_WIN;
+    if (record->games <= 0
+        || (result == GAME_RESULT_DRAW && record->draws <= 0)
+        || (result != GAME_RESULT_DRAW && result == human_win
+            && record->wins <= 0)
+        || (result != GAME_RESULT_DRAW && result != human_win
+            && record->losses <= 0)) {
+        return;
+    }
+    --record->games;
+    if (result == GAME_RESULT_DRAW) {
+        --record->draws;
+    } else if (result == human_win) {
+        --record->wins;
+    } else {
+        --record->losses;
+    }
 }
 
 static bool apply_field(GameStats *stats, const char *key, const char *value)
 {
     if (strcmp(key, "pvp_games") == 0 || strcmp(key, "pvp_draws") == 0) {
         int number = 0;
-        if (!parse_int(value, &number)) {
+        if (!storage_text_parse_int(value, 0, 100000000, &number)) {
             return false;
         }
         if (strcmp(key, "pvp_games") == 0) {
@@ -156,7 +124,7 @@ static bool apply_field(GameStats *stats, const char *key, const char *value)
         }
         const char *field = key + key_length + 1;
         int number = 0;
-        if (!parse_int(value, &number)) {
+        if (!storage_text_parse_int(value, 0, 100000000, &number)) {
             return false;
         }
         DifficultyStats *record = &stats->pve[index];
@@ -215,19 +183,8 @@ bool stats_load_path(const char *path, GameStats *stats)
     bool saw_header = false;
     bool ok = true;
     char *cursor = file;
-    while (*cursor != '\0') {
-        char *line = cursor;
-        char *newline = strchr(cursor, '\n');
-        if (newline != NULL) {
-            *newline = '\0';
-            cursor = newline + 1;
-        } else {
-            cursor = line + strlen(line);
-        }
-        const size_t length = strlen(line);
-        if (length > 0 && line[length - 1] == '\r') {
-            line[length - 1] = '\0';
-        }
+    char *line = NULL;
+    while (storage_text_next_line(&cursor, &line)) {
         if (line[0] == '\0') {
             continue;
         }

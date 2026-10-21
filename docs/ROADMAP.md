@@ -150,11 +150,11 @@ AI 对局的人工验证；设置与对局仍不持久化。
 - `storage/storage`：平台用户数据目录、目录创建、原子写入、受限读取
 - `storage/save`：版本 1 存档、FNV-1a 校验、着法序列 + 最终局面、
   严格格式/坐标/回放校验、自动存档与 3 个手动槽位
-- `core/match`：`match_restore()` 从着法序列恢复完整对局与历史
+- `core/match`：`match_restore()` / `match_restore_checked()` 从着法序列恢复完整对局与历史，并可校验期望局面
 - `settings/settings`：音量、音效、动画、动画速度、合法提示、最后一步、
   默认 AI 难度、主题；缺失/损坏时安全回退
-- `storage/stats`：总对局、人机 W/D/L、分难度战绩、PVP 局数/平局；
-  只有完成局计数且不重复计数
+- `storage/stats`：总对局、人机 W/D/L、分难度局数/胜/平/负、PVP 局数/平局；
+  只有完成局计数，结算后撤销会撤回记录，重做不重复计数
 - `audio/audio`：程序化落子/翻转/按钮/胜负/平局音效，无设备时静默降级
 - `ui/theme`：运行时明/暗调色板；`settings_view` 扩展为 8 项持久化设置
 - 新页面：帮助（3 页）、统计、存档管理；菜单增加继续/读档/帮助/统计；
@@ -166,8 +166,8 @@ AI 对局的人工验证；设置与对局仍不持久化。
 验收结果：
 
 - Debug/Release/ASan+UBSan 无 GUI 测试均 15/15 通过，Sanitizer 无报告。
-- 新增断言：`core.match` 974、`storage.save` 75、`storage.settings` 39、
-  `storage.stats` 32、`audio.noop` 2、`ui.helpers` 182、`ui.views` 32。
+- 新增断言：`core.match` 980、`storage.save` 91、`storage.settings` 58、
+  `storage.stats` 44、`audio.noop` 2、`ui.helpers` 189、`ui.views` 35。
 - 自动保存 50 步对局后退出并重启，应用通过读档路径恢复到相同的
   20:34 局面与最后一步 D2；损坏自动存档保持主菜单、显示校验错误、不崩溃。
 - 明暗主题、设置页、帮助页、统计页、读档页、对局页与结算页完成截图核对；

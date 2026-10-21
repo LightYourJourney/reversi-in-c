@@ -1,11 +1,51 @@
 #include "settings/settings.h"
 #include "storage/storage.h"
+#include "storage/text.h"
 #include "test_harness.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #define TEST_SETTINGS_PATH "test-settings.dat"
+
+
+static void test_text_helpers(TestStats *stats)
+{
+    char buffer[] = "alpha\r\n\nlast";
+    char *cursor = buffer;
+    char *line = NULL;
+    REVERSI_TEST_ASSERT(stats, storage_text_next_line(&cursor, &line));
+    REVERSI_TEST_ASSERT(stats, strcmp(line, "alpha") == 0);
+    REVERSI_TEST_ASSERT(stats, storage_text_next_line(&cursor, &line));
+    REVERSI_TEST_ASSERT(stats, line[0] == '\0');
+    REVERSI_TEST_ASSERT(stats, storage_text_next_line(&cursor, &line));
+    REVERSI_TEST_ASSERT(stats, strcmp(line, "last") == 0);
+    REVERSI_TEST_ASSERT(stats, !storage_text_next_line(&cursor, &line));
+
+    int value = 0;
+    REVERSI_TEST_ASSERT(stats,
+        storage_text_parse_int("42", 0, 100, &value) && value == 42);
+    REVERSI_TEST_ASSERT(stats,
+        storage_text_parse_int("100", 0, 100, &value) && value == 100);
+    REVERSI_TEST_ASSERT(stats,
+        !storage_text_parse_int("-1", 0, 100, &value));
+    REVERSI_TEST_ASSERT(stats,
+        !storage_text_parse_int("101", 0, 100, &value));
+    REVERSI_TEST_ASSERT(stats,
+        !storage_text_parse_int("12x", 0, 100, &value));
+    REVERSI_TEST_ASSERT(stats,
+        !storage_text_parse_int(NULL, 0, 100, &value));
+}
+
+static void test_speed_presets(TestStats *stats)
+{
+    REVERSI_TEST_ASSERT(stats, settings_speed_next(50, -1) == 50);
+    REVERSI_TEST_ASSERT(stats, settings_speed_next(50, 1) == 75);
+    REVERSI_TEST_ASSERT(stats, settings_speed_next(100, 1) == 150);
+    REVERSI_TEST_ASSERT(stats, settings_speed_next(150, -1) == 100);
+    REVERSI_TEST_ASSERT(stats, settings_speed_next(200, 1) == 200);
+    REVERSI_TEST_ASSERT(stats, settings_speed_next(33, 1) == 100);
+}
 
 static void test_defaults(TestStats *stats)
 {
@@ -124,6 +164,8 @@ int main(void)
 {
     TestStats stats = {0};
 
+    REVERSI_RUN_TEST(&stats, test_text_helpers);
+    REVERSI_RUN_TEST(&stats, test_speed_presets);
     REVERSI_RUN_TEST(&stats, test_defaults);
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_invalid_files);

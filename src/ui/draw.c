@@ -111,6 +111,19 @@ const char *ui_match_result_title(const Match *match)
     return ui_result_title(match->state.result);
 }
 
+bool ui_should_show_hints(const Match *match, bool enabled)
+{
+    if (!enabled || match == NULL
+        || match->state.result != GAME_RESULT_ONGOING) {
+        return false;
+    }
+    if (match->config.mode == GAME_MODE_PVP) {
+        return true;
+    }
+    return match->phase == MATCH_PHASE_PLAYER_TURN
+        && match->state.current_player == match->config.human_color;
+}
+
 int ui_focus_step(int focus, int direction, int count,
                   unsigned disabled_mask)
 {

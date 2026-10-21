@@ -93,6 +93,12 @@ const char *ui_result_title(GameResult result);
 const char *ui_match_result_title(const Match *match);
 
 /*
+ * Whether legal-move hints may be drawn. In PVE they are hidden whenever it
+ * is not the human's turn, so the computer's legal moves are never exposed.
+ */
+bool ui_should_show_hints(const Match *match, bool enabled);
+
+/*
  * Advances a focus index by direction (+1/-1), wrapping within [0, count)
  * and skipping entries whose bit is set in disabled_mask.
  */

@@ -59,6 +59,23 @@ static void test_ui_labels_and_focus(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, ui_match_result_title(&title_match) == NULL);
     REVERSI_TEST_ASSERT(stats, ui_match_result_title(NULL) == NULL);
 
+    title_match.config.mode = GAME_MODE_PVE;
+    title_match.config.human_color = STONE_BLACK;
+    title_match.phase = MATCH_PHASE_PLAYER_TURN;
+    title_match.state.current_player = STONE_BLACK;
+    title_match.state.result = GAME_RESULT_ONGOING;
+    REVERSI_TEST_ASSERT(stats, ui_should_show_hints(&title_match, true));
+    title_match.state.current_player = STONE_WHITE;
+    REVERSI_TEST_ASSERT(stats, !ui_should_show_hints(&title_match, true));
+    title_match.phase = MATCH_PHASE_ANIMATING;
+    REVERSI_TEST_ASSERT(stats, !ui_should_show_hints(&title_match, true));
+    title_match.config.mode = GAME_MODE_PVP;
+    REVERSI_TEST_ASSERT(stats, ui_should_show_hints(&title_match, true));
+    title_match.state.result = GAME_RESULT_BLACK_WIN;
+    REVERSI_TEST_ASSERT(stats, !ui_should_show_hints(&title_match, true));
+    REVERSI_TEST_ASSERT(stats, !ui_should_show_hints(&title_match, false));
+    REVERSI_TEST_ASSERT(stats, !ui_should_show_hints(NULL, true));
+
     REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 4, 1) == 1);
     REVERSI_TEST_ASSERT(stats, ui_focus_step(3, 1, 4, 1) == 1);
     REVERSI_TEST_ASSERT(stats, ui_focus_step(2, -1, 4, 1) == 1);

@@ -74,26 +74,6 @@ static void draw_label_value(const UiFonts *fonts, Rectangle row,
         REVERSI_UI_FONT_BODY, value_color, UI_ALIGN_RIGHT);
 }
 
-static int local_total_games(const GameStats *stats)
-{
-    int total = stats->pvp_games;
-    for (int index = 0; index < REVERSI_STATS_DIFFICULTY_COUNT; ++index) {
-        total += stats->pve[index].games;
-    }
-    return total;
-}
-
-static int local_human_sum(const GameStats *stats, int which)
-{
-    int total = 0;
-    for (int index = 0; index < REVERSI_STATS_DIFFICULTY_COUNT; ++index) {
-        const DifficultyStats *record = &stats->pve[index];
-        total += which == 0 ? record->wins
-            : which == 1 ? record->draws : record->losses;
-    }
-    return total;
-}
-
 void stats_view_draw(const StatsView *view, const UiFonts *fonts,
                      const GameStats *stats)
 {
@@ -121,13 +101,13 @@ void stats_view_draw(const StatsView *view, const UiFonts *fonts,
         layout.panel.x + 24.0f, layout.panel.y + 100.0f,
         layout.panel.width - 48.0f, 26.0f};
 
-    snprintf(value, sizeof(value), "%d", local_total_games(stats));
+    snprintf(value, sizeof(value), "%d", stats_total_games(stats));
     draw_label_value(fonts, first, "Total games", value,
                      REVERSI_UI_COLOR_TEXT);
 
     snprintf(value, sizeof(value), "%d W  -  %d D  -  %d L",
-             local_human_sum(stats, 0), local_human_sum(stats, 1),
-             local_human_sum(stats, 2));
+             stats_human_wins(stats), stats_human_draws(stats),
+             stats_human_losses(stats));
     Rectangle row = first;
     row.y += 34.0f;
     draw_label_value(fonts, row, "Your record vs computer", value,
@@ -147,9 +127,11 @@ void stats_view_draw(const StatsView *view, const UiFonts *fonts,
                   table_y - 16.0f},
         1.0f, REVERSI_UI_COLOR_BORDER);
 
-    const char *headers[4] = {"Difficulty", "Games", "Wins", "Losses"};
-    const float column_width = (layout.panel.width - 48.0f) / 4.0f;
-    for (int index = 0; index < 4; ++index) {
+    const char *headers[5] = {
+        "Difficulty", "Games", "Wins", "Draws", "Losses"
+    };
+    const float column_width = (layout.panel.width - 48.0f) / 5.0f;
+    for (int index = 0; index < 5; ++index) {
         ui_draw_text_aligned(
             fonts, UI_TEXT_REGULAR, headers[index],
             (Rectangle){layout.panel.x + 24.0f + column_width * (float)index,
@@ -165,18 +147,21 @@ void stats_view_draw(const StatsView *view, const UiFonts *fonts,
          difficulty < REVERSI_STATS_DIFFICULTY_COUNT; ++difficulty) {
         const DifficultyStats *record = &stats->pve[difficulty];
         const float y = table_y + 34.0f + (float)difficulty * 34.0f;
-        const char *cells[4];
+        const char *cells[5];
         char games[16];
         char wins[16];
+        char draws[16];
         char losses[16];
         snprintf(games, sizeof(games), "%d", record->games);
         snprintf(wins, sizeof(wins), "%d", record->wins);
+        snprintf(draws, sizeof(draws), "%d", record->draws);
         snprintf(losses, sizeof(losses), "%d", record->losses);
         cells[0] = names[difficulty];
         cells[1] = games;
         cells[2] = wins;
-        cells[3] = losses;
-        for (int index = 0; index < 4; ++index) {
+        cells[3] = draws;
+        cells[4] = losses;
+        for (int index = 0; index < 5; ++index) {
             ui_draw_text_aligned(
                 fonts,
                 index == 0 ? UI_TEXT_SEMIBOLD : UI_TEXT_REGULAR,
@@ -193,7 +178,7 @@ void stats_view_draw(const StatsView *view, const UiFonts *fonts,
 
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR,
-        "Draws are included in games but are not counted as wins or losses.",
+        "Draws are included in games and are not counted as wins or losses.",
         (Rectangle){layout.panel.x + 24.0f,
                     layout.back.y - 34.0f,
                     layout.panel.width - 48.0f, 20.0f},

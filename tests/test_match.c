@@ -474,7 +474,6 @@ static void test_pve_redo_branch_end(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
 }
 
-
 static void test_restore_from_moves(TestStats *stats)
 {
     Match original;
@@ -502,9 +501,28 @@ static void test_restore_from_moves(TestStats *stats)
     REVERSI_TEST_ASSERT(stats,
         game_state_equal(&restored.state, &original.state));
 
+    Match checked;
+    REVERSI_TEST_ASSERT(stats,
+        match_restore_checked(&checked, &config, moves, count,
+                              &original.state));
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&checked.state, &original.state));
+
     Match untouched;
     REVERSI_TEST_ASSERT(stats, match_start(&untouched, &config));
     const GameState sentinel = untouched.state;
+    GameState wrong = original.state;
+    wrong.result = original.state.result == GAME_RESULT_ONGOING
+        ? GAME_RESULT_BLACK_WIN : GAME_RESULT_ONGOING;
+    REVERSI_TEST_ASSERT(stats,
+        !match_restore_checked(&untouched, &config, moves, count, &wrong));
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&untouched.state, &sentinel));
+    REVERSI_TEST_ASSERT(stats,
+        !match_restore_checked(&untouched, &config, moves, count, NULL));
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&untouched.state, &sentinel));
+
     const Move illegal = {0, 0};
     REVERSI_TEST_ASSERT(stats,
         !match_restore(&untouched, &config, &illegal, 1));

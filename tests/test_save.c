@@ -7,6 +7,7 @@
 #include "test_helpers.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define TEST_SAVE_PATH "test-save.rvs"
@@ -287,6 +288,44 @@ static void test_reject_bad_files(TestStats *stats)
     (void)storage_remove(path);
 }
 
+static void test_status_messages(TestStats *stats)
+{
+    const SaveStatus statuses[] = {
+        SAVE_STATUS_OK,
+        SAVE_STATUS_NOT_FOUND,
+        SAVE_STATUS_VERSION,
+        SAVE_STATUS_CHECKSUM,
+        SAVE_STATUS_STATE,
+        SAVE_STATUS_FORMAT,
+        SAVE_STATUS_IO
+    };
+    for (size_t index = 0; index < sizeof(statuses) / sizeof(statuses[0]);
+         ++index) {
+        const char *message = save_status_message(statuses[index]);
+        REVERSI_TEST_ASSERT(stats, message != NULL && message[0] != '\0');
+    }
+    REVERSI_TEST_ASSERT(stats,
+        save_status_message((SaveStatus)999) != NULL);
+}
+
+static void test_storage_path(TestStats *stats)
+{
+    char path[1024];
+    REVERSI_TEST_ASSERT(stats, !storage_path(NULL, path, sizeof(path)));
+    REVERSI_TEST_ASSERT(stats, !storage_path("", path, sizeof(path)));
+    REVERSI_TEST_ASSERT(stats, !storage_path(".", path, sizeof(path)));
+    REVERSI_TEST_ASSERT(stats, !storage_path("..", path, sizeof(path)));
+    REVERSI_TEST_ASSERT(stats, !storage_path("a/b", path, sizeof(path)));
+    REVERSI_TEST_ASSERT(stats, !storage_path("save.rvs", path, 1));
+
+    const char *home = getenv("HOME");
+    if (home != NULL && home[0] != '\0') {
+        REVERSI_TEST_ASSERT(stats,
+            storage_path("save.rvs", path, sizeof(path)));
+        REVERSI_TEST_ASSERT(stats, strstr(path, "save.rvs") != NULL);
+    }
+}
+
 static void test_atomic_overwrite(TestStats *stats)
 {
     const char *path = "test-save-atomic.rvs";
@@ -316,6 +355,8 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_pve_round_trip);
     REVERSI_RUN_TEST(&stats, test_reject_bad_files);
+    REVERSI_RUN_TEST(&stats, test_status_messages);
+    REVERSI_RUN_TEST(&stats, test_storage_path);
     REVERSI_RUN_TEST(&stats, test_atomic_overwrite);
 
     return reversi_test_summary(&stats, "storage.save");

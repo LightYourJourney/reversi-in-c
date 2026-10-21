@@ -6,8 +6,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define SETTINGS_ROW_COUNT 8
-#define SETTINGS_FOCUS_BACK SETTINGS_ROW_COUNT
+#define REVERSI_SETTINGS_ROW_COUNT 8
+#define REVERSI_SETTINGS_FOCUS_BACK REVERSI_SETTINGS_ROW_COUNT
 
 typedef enum SettingsRow {
     ROW_ANIMATIONS = 0,
@@ -22,7 +22,7 @@ typedef enum SettingsRow {
 
 typedef struct SettingsLayout {
     Rectangle panel;
-    Rectangle rows[SETTINGS_ROW_COUNT];
+    Rectangle rows[REVERSI_SETTINGS_ROW_COUNT];
 } SettingsLayout;
 
 static SettingsLayout settings_layout(void)
@@ -39,7 +39,7 @@ static SettingsLayout settings_layout(void)
                                panel_width, panel_height};
 
     const float rows_top = panel_y + 96.0f;
-    for (int i = 0; i < SETTINGS_ROW_COUNT; ++i) {
+    for (int i = 0; i < REVERSI_SETTINGS_ROW_COUNT; ++i) {
         layout.rows[i] = (Rectangle){
             .x = panel_x + 24.0f,
             .y = rows_top + (float)i * 44.0f,
@@ -100,7 +100,7 @@ static bool toggle_value(const Settings *settings, int row)
 static void update_toggles(SettingsView *view, float dt,
                            const Settings *settings)
 {
-    for (int row = 0; row < SETTINGS_ROW_COUNT; ++row) {
+    for (int row = 0; row < REVERSI_SETTINGS_ROW_COUNT; ++row) {
         if (!row_is_toggle(row)) {
             continue;
         }
@@ -177,13 +177,13 @@ SettingsAction settings_view_update(SettingsView *view,
     }
 
     ui_focus_update(&view->focus, &view->focus_visible,
-                    SETTINGS_ROW_COUNT + 1, input);
+                    REVERSI_SETTINGS_ROW_COUNT + 1, input);
 
     if (back_clicked || input->escape_pressed) {
         return SETTINGS_ACTION_BACK;
     }
 
-    for (int row = 0; row < SETTINGS_ROW_COUNT; ++row) {
+    for (int row = 0; row < REVERSI_SETTINGS_ROW_COUNT; ++row) {
         if (CheckCollisionPointRec(input->mouse, layout.rows[row])
             && input->mouse_pressed) {
             return action_for_row(row, true);
@@ -191,35 +191,18 @@ SettingsAction settings_view_update(SettingsView *view,
     }
 
     if ((input->left_pressed || input->right_pressed)
-        && view->focus_visible && view->focus < SETTINGS_ROW_COUNT) {
+        && view->focus_visible && view->focus < REVERSI_SETTINGS_ROW_COUNT) {
         return action_for_row(view->focus, input->right_pressed);
     }
 
     if (input->enter_pressed) {
-        if (view->focus == SETTINGS_FOCUS_BACK) {
+        if (view->focus == REVERSI_SETTINGS_FOCUS_BACK) {
             return SETTINGS_ACTION_BACK;
         }
         return action_for_row(view->focus, true);
     }
 
     return SETTINGS_ACTION_NONE;
-}
-
-static const char *speed_label(int speed)
-{
-    switch (speed) {
-    case 50:
-        return "0.5x";
-    case 75:
-        return "0.75x";
-    case 150:
-        return "1.5x";
-    case 200:
-        return "2.0x";
-    case 100:
-    default:
-        return "1.0x";
-    }
 }
 
 static const char *difficulty_label(int difficulty)
@@ -260,7 +243,7 @@ static void row_value_text(const Settings *settings, int row,
 {
     switch (row) {
     case ROW_SPEED:
-        snprintf(out, cap, "%s", speed_label(settings->animation_speed));
+        snprintf(out, cap, "%d%%", settings->animation_speed);
         break;
     case ROW_VOLUME:
         snprintf(out, cap, "%d%%", settings->volume);
@@ -302,7 +285,7 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts,
                     layout.panel.width - 48.0f, 20.0f},
         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
 
-    const char *labels[SETTINGS_ROW_COUNT] = {
+    const char *labels[REVERSI_SETTINGS_ROW_COUNT] = {
         "Animations",
         "Animation speed",
         "Legal move hints",
@@ -313,7 +296,7 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts,
         "Theme"
     };
 
-    for (int row = 0; row < SETTINGS_ROW_COUNT; ++row) {
+    for (int row = 0; row < REVERSI_SETTINGS_ROW_COUNT; ++row) {
         if (view->focus_visible && view->focus == row) {
             ui_draw_rounded_rect(layout.rows[row], REVERSI_UI_RADIUS_SM,
                                  ui_color_alpha(REVERSI_UI_COLOR_ACCENT, 0.08f));
@@ -353,5 +336,5 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts,
     }
 
     ui_button_draw(&view->back, fonts,
-                   view->focus_visible && view->focus == SETTINGS_FOCUS_BACK);
+                   view->focus_visible && view->focus == REVERSI_SETTINGS_FOCUS_BACK);
 }

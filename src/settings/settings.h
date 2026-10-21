@@ -6,6 +6,7 @@
 #define REVERSI_SETTINGS_FILE "settings.dat"
 #define REVERSI_SETTINGS_ANIMATION_MIN 50
 #define REVERSI_SETTINGS_ANIMATION_MAX 200
+#define REVERSI_SETTINGS_SPEED_COUNT 5
 
 typedef struct Settings {
     int volume;              /* 0..100 */
@@ -19,6 +20,9 @@ typedef struct Settings {
 } Settings;
 
 void settings_defaults(Settings *settings);
+
+/* Next preset speed in direction (-1 slower, +1 faster), clamped. */
+int settings_speed_next(int speed, int direction);
 
 /*
  * Loads persisted settings from the user data directory. Missing, corrupt,

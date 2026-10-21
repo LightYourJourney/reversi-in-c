@@ -80,8 +80,9 @@ bool match_start_from(Match *match, const MatchConfig *config,
     return match_initialize(match, config, initial);
 }
 
-bool match_restore(Match *match, const MatchConfig *config,
-                   const Move *moves, int count)
+static bool restore_replay(Match *match, const MatchConfig *config,
+                           const Move *moves, int count,
+                           const GameState *expected)
 {
     if (match == NULL || count < 0 || count > REVERSI_HISTORY_MAX_MOVES
         || (moves == NULL && count > 0)) {
@@ -109,11 +110,28 @@ bool match_restore(Match *match, const MatchConfig *config,
         }
     }
 
-    if (!match_is_consistent(&restored)) {
+    if (!match_is_consistent(&restored)
+        || (expected != NULL && !states_equal(&restored.state, expected))) {
         return false;
     }
     *match = restored;
     return true;
+}
+
+bool match_restore(Match *match, const MatchConfig *config,
+                   const Move *moves, int count)
+{
+    return restore_replay(match, config, moves, count, NULL);
+}
+
+bool match_restore_checked(Match *match, const MatchConfig *config,
+                           const Move *moves, int count,
+                           const GameState *expected)
+{
+    if (expected == NULL) {
+        return false;
+    }
+    return restore_replay(match, config, moves, count, expected);
 }
 
 static int count_flips(const Board *before, const Board *after,

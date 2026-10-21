@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define SAVES_FOCUS_BACK REVERSI_SAVES_ROW_COUNT
+#define REVERSI_SAVES_FOCUS_BACK REVERSI_SAVES_ROW_COUNT
 
 typedef struct SavesLayout {
     Rectangle panel;
@@ -61,10 +61,8 @@ static bool delete_enabled(bool saving, int row, const SaveSlotInfo *slot)
     return slot->present;
 }
 
-static unsigned disabled_mask(bool saving,
-                              const SaveSlotInfo *slots)
+static unsigned disabled_mask(bool saving)
 {
-    (void)slots;
     /* In save mode the autosave row has no action; all other rows stay
        focusable so Delete can reach present-but-corrupt saves. */
     return saving ? 1u : 0u;
@@ -125,7 +123,7 @@ SavesAction saves_view_update(
     if (input->mouse_pressed) {
         view->focus_visible = false;
     }
-    const unsigned disabled = disabled_mask(saving, slots);
+    const unsigned disabled = disabled_mask(saving);
     if (input->up_pressed || input->down_pressed) {
         view->focus = ui_focus_step(
             view->focus, input->down_pressed ? 1 : -1,
@@ -159,7 +157,7 @@ SavesAction saves_view_update(
         return result;
     }
     if (input->enter_pressed) {
-        if (focus == SAVES_FOCUS_BACK) {
+        if (focus == REVERSI_SAVES_FOCUS_BACK) {
             result.type = SAVES_ACTION_BACK;
             return result;
         }
@@ -243,5 +241,5 @@ void saves_view_draw(
     }
 
     ui_button_draw(&view->back, fonts,
-                   view->focus_visible && view->focus == SAVES_FOCUS_BACK);
+                   view->focus_visible && view->focus == REVERSI_SAVES_FOCUS_BACK);
 }

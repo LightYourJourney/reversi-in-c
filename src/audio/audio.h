@@ -10,7 +10,6 @@ typedef enum AudioCue {
     AUDIO_CUE_WIN,
     AUDIO_CUE_LOSE,
     AUDIO_CUE_DRAW,
-    AUDIO_CUE_ERROR,
     AUDIO_CUE_COUNT
 } AudioCue;
 

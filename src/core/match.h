@@ -66,6 +66,11 @@ bool match_start_from(Match *match, const MatchConfig *config,
 bool match_restore(Match *match, const MatchConfig *config,
                    const Move *moves, int count);
 
+/* As match_restore, but also requires the replayed state to equal expected. */
+bool match_restore_checked(Match *match, const MatchConfig *config,
+                           const Move *moves, int count,
+                           const GameState *expected);
+
 /* Applies a move in PLAYER_TURN and enters ANIMATING. */
 bool match_apply_move(Match *match, Move move);
 

@@ -6,10 +6,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define HELP_PAGE_COUNT 3
-#define HELP_FOCUS_PREVIOUS 0
-#define HELP_FOCUS_NEXT 1
-#define HELP_FOCUS_BACK 2
+#define REVERSI_HELP_PAGE_COUNT 3
+#define REVERSI_HELP_FOCUS_PREVIOUS 0
+#define REVERSI_HELP_FOCUS_NEXT 1
+#define REVERSI_HELP_FOCUS_BACK 2
 
 typedef struct HelpLayout {
     Rectangle panel;
@@ -24,7 +24,7 @@ typedef struct HelpPage {
     const char *lines[10];
 } HelpPage;
 
-static const HelpPage HELP_PAGES[HELP_PAGE_COUNT] = {
+static const HelpPage HELP_PAGES[REVERSI_HELP_PAGE_COUNT] = {
     {
         "The goal",
         {
@@ -94,10 +94,10 @@ static unsigned disabled_mask(const HelpView *view)
 {
     unsigned mask = 0u;
     if (view->page <= 0) {
-        mask |= 1u << HELP_FOCUS_PREVIOUS;
+        mask |= 1u << REVERSI_HELP_FOCUS_PREVIOUS;
     }
-    if (view->page >= HELP_PAGE_COUNT - 1) {
-        mask |= 1u << HELP_FOCUS_NEXT;
+    if (view->page >= REVERSI_HELP_PAGE_COUNT - 1) {
+        mask |= 1u << REVERSI_HELP_FOCUS_NEXT;
     }
     return mask;
 }
@@ -119,7 +119,7 @@ void help_view_reset(HelpView *view)
         return;
     }
     view->page = 0;
-    view->focus = HELP_FOCUS_NEXT;
+    view->focus = REVERSI_HELP_FOCUS_NEXT;
     view->focus_visible = false;
 }
 
@@ -135,8 +135,9 @@ HelpAction help_view_update(HelpView *view, const UiInput *input,
     ui_button_set_bounds(&view->next, layout.next);
     ui_button_set_bounds(&view->back, layout.back);
     const unsigned disabled = disabled_mask(view);
-    view->previous.enabled = (disabled & (1u << HELP_FOCUS_PREVIOUS)) == 0;
-    view->next.enabled = (disabled & (1u << HELP_FOCUS_NEXT)) == 0;
+    view->previous.enabled =
+        (disabled & (1u << REVERSI_HELP_FOCUS_PREVIOUS)) == 0;
+    view->next.enabled = (disabled & (1u << REVERSI_HELP_FOCUS_NEXT)) == 0;
 
     const bool previous_clicked = ui_button_update(
         &view->previous, input, accept_input && view->previous.enabled, dt);
@@ -162,27 +163,30 @@ HelpAction help_view_update(HelpView *view, const UiInput *input,
         if (view->page > 0) {
             --view->page;
         }
-        return HELP_ACTION_NONE;
+        return HELP_ACTION_PREVIOUS;
     }
     if (next_clicked
-        || (input->right_pressed && view->page < HELP_PAGE_COUNT - 1)) {
-        if (view->page < HELP_PAGE_COUNT - 1) {
+        || (input->right_pressed && view->page < REVERSI_HELP_PAGE_COUNT - 1)) {
+        if (view->page < REVERSI_HELP_PAGE_COUNT - 1) {
             ++view->page;
         }
-        return HELP_ACTION_NONE;
+        return HELP_ACTION_NEXT;
     }
     if (back_clicked || input->escape_pressed) {
         return HELP_ACTION_BACK;
     }
     if (input->enter_pressed) {
-        if (view->focus == HELP_FOCUS_BACK) {
+        if (view->focus == REVERSI_HELP_FOCUS_BACK) {
             return HELP_ACTION_BACK;
         }
-        if (view->focus == HELP_FOCUS_PREVIOUS && view->page > 0) {
+        if (view->focus == REVERSI_HELP_FOCUS_PREVIOUS && view->page > 0) {
             --view->page;
-        } else if (view->focus == HELP_FOCUS_NEXT
-                   && view->page < HELP_PAGE_COUNT - 1) {
+            return HELP_ACTION_PREVIOUS;
+        }
+        if (view->focus == REVERSI_HELP_FOCUS_NEXT
+            && view->page < REVERSI_HELP_PAGE_COUNT - 1) {
             ++view->page;
+            return HELP_ACTION_NEXT;
         }
     }
     return HELP_ACTION_NONE;
@@ -207,7 +211,7 @@ void help_view_draw(const HelpView *view, const UiFonts *fonts)
 
     char indicator[32];
     snprintf(indicator, sizeof(indicator), "%d / %d",
-             view->page + 1, HELP_PAGE_COUNT);
+             view->page + 1, REVERSI_HELP_PAGE_COUNT);
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR, indicator,
         (Rectangle){layout.panel.x + layout.panel.width - 120.0f,
@@ -233,9 +237,12 @@ void help_view_draw(const HelpView *view, const UiFonts *fonts)
     }
 
     ui_button_draw(&view->back, fonts,
-                   view->focus_visible && view->focus == HELP_FOCUS_BACK);
+                   view->focus_visible
+                       && view->focus == REVERSI_HELP_FOCUS_BACK);
     ui_button_draw(&view->previous, fonts,
-                   view->focus_visible && view->focus == HELP_FOCUS_PREVIOUS);
+                   view->focus_visible
+                       && view->focus == REVERSI_HELP_FOCUS_PREVIOUS);
     ui_button_draw(&view->next, fonts,
-                   view->focus_visible && view->focus == HELP_FOCUS_NEXT);
+                   view->focus_visible
+                       && view->focus == REVERSI_HELP_FOCUS_NEXT);
 }

@@ -205,7 +205,7 @@ static void app_notice(App *app, const char *text)
         return;
     }
     snprintf(app->notice, sizeof(app->notice), "%s", text);
-    app->notice_timer = 3.2f;
+    app->notice_timer = REVERSI_UI_DUR_NOTICE;
 }
 
 static void app_update_notice(App *app, float dt)
@@ -226,7 +226,7 @@ static void app_draw_notice(const App *app)
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
     const float alpha = app->notice_timer < 0.4f
-        ? app->notice_timer / 0.4f : 1.0f;
+        ? app->notice_timer / REVERSI_UI_DUR_NOTICE_FADE : 1.0f;
     const float box_width = fminf(560.0f, width - 64.0f);
     const Rectangle box = {
         (width - box_width) * 0.5f, height - 96.0f, box_width, 44.0f
@@ -323,36 +323,6 @@ static void app_init(App *app)
     if (app->autoplay) {
         app->screen = APP_SCREEN_GAME;
     }
-
-#ifndef NDEBUG
-    /* Debug-only visual harness: opens a page directly so UI layouts can be
-       captured without synthetic input. Release builds ignore it. */
-    const char *start_screen = getenv("REVERSI_START_SCREEN");
-    if (!app->autoplay && start_screen != NULL) {
-        if (strcmp(start_screen, "game") == 0) {
-            char autosave[1024];
-            if (storage_path(REVERSI_AUTOSAVE_FILE, autosave,
-                             sizeof(autosave))
-                && storage_exists(autosave)) {
-                (void)app_restore_saved(app, autosave);
-            }
-        } else if (strcmp(start_screen, "settings") == 0) {
-            app->screen = APP_SCREEN_SETTINGS;
-        } else if (strcmp(start_screen, "setup") == 0) {
-            app->screen = APP_SCREEN_SETUP;
-        } else if (strcmp(start_screen, "help") == 0) {
-            help_view_reset(&app->help_view);
-            app->screen = APP_SCREEN_HELP;
-        } else if (strcmp(start_screen, "stats") == 0) {
-            app->screen = APP_SCREEN_STATS;
-        } else if (strcmp(start_screen, "saves") == 0) {
-            app_refresh_slots(app);
-            app->saves_saving = false;
-            app->saves_return = APP_SCREEN_MENU;
-            app->screen = APP_SCREEN_SAVES;
-        }
-    }
-#endif
 }
 
 static void app_reset_match_ui(App *app)
@@ -540,8 +510,7 @@ static void app_autosave(App *app)
         || !app_save_path(0, path, sizeof(path))) {
         return;
     }
-    if (app->match.phase == MATCH_PHASE_GAME_OVER
-        || app->match.state.result != GAME_RESULT_ONGOING) {
+    if (app->match.phase == MATCH_PHASE_GAME_OVER) {
         (void)storage_remove(path);
         app->has_autosave = false;
         return;
@@ -575,6 +544,20 @@ static void app_play_result_sound(const App *app)
         audio_play(result == human_win ? AUDIO_CUE_WIN : AUDIO_CUE_LOSE);
     } else {
         audio_play(AUDIO_CUE_WIN);
+    }
+}
+
+static void app_unrecord_result(App *app, GameResult previous)
+{
+    if (!app->stats_recorded || previous == GAME_RESULT_ONGOING) {
+        return;
+    }
+    app->stats_recorded = false;
+    stats_unrecord(&app->stats, app->match.config.mode,
+                   app->match.config.human_color, (int)app->ai_difficulty,
+                   previous);
+    if (!stats_save(&app->stats)) {
+        app_notice(app, "Statistics could not be saved.");
     }
 }
 
@@ -615,18 +598,16 @@ static bool app_restore_saved(App *app, const char *path)
         .human_color = saved.human_color,
         .ai = ai
     };
-    Match restored;
-    if (!match_restore(&restored, &config, saved.moves, saved.move_count)
-        || !game_state_equal(&restored.state, &saved.expected)) {
+    if (!match_restore_checked(&app->match, &config, saved.moves,
+                               saved.move_count, &saved.expected)) {
         app_notice(app, "Save data is inconsistent");
         return false;
     }
 
     app_cancel_ai(app);
-    app->match = restored;
     app->ai = ai;
     app->ai_difficulty = difficulty;
-    app->stats_recorded = restored.phase == MATCH_PHASE_GAME_OVER;
+    app->stats_recorded = app->match.phase == MATCH_PHASE_GAME_OVER;
     app->pending_action = PENDING_GAME_LOAD;
     app_notice(app, "Game loaded");
     app_request_screen(app, APP_SCREEN_GAME);
@@ -680,14 +661,17 @@ static void app_switch_screen(App *app, AppScreen target)
         app_maybe_start_ai(app);
         app_autosave(app);
         break;
-    case PENDING_GAME_UNDO:
+    case PENDING_GAME_UNDO: {
+        const GameResult previous = app->match.state.result;
         if (match_undo(&app->match)) {
+            app_unrecord_result(app, previous);
             app_reset_match_ui(app);
             app_autosave(app);
         } else {
             app->screen = APP_SCREEN_RESULT;
         }
         break;
+    }
     case PENDING_GAME_NONE:
     default:
         break;
@@ -876,7 +860,9 @@ static void app_after_history_change(App *app)
 
 static void app_undo(App *app)
 {
+    const GameResult previous = app->match.state.result;
     if (match_undo(&app->match)) {
+        app_unrecord_result(app, previous);
         app_after_history_change(app);
     }
 }
@@ -1177,18 +1163,6 @@ static void app_update_game(App *app, const UiInput *input, float dt)
     }
 }
 
-static const int SETTINGS_SPEEDS[5] = {50, 75, 100, 150, 200};
-
-static int settings_speed_index(int speed)
-{
-    for (int index = 0; index < 5; ++index) {
-        if (SETTINGS_SPEEDS[index] == speed) {
-            return index;
-        }
-    }
-    return 2;
-}
-
 static void app_apply_settings(App *app)
 {
     ui_theme_set((UiThemeKind)app->settings.theme);
@@ -1221,17 +1195,11 @@ static void app_handle_settings_action(App *app, SettingsAction action)
         app->settings.animations = !app->settings.animations;
         break;
     case SETTINGS_ACTION_SPEED_DOWN:
-    case SETTINGS_ACTION_SPEED_UP: {
-        int index = settings_speed_index(app->settings.animation_speed);
-        index += action == SETTINGS_ACTION_SPEED_UP ? 1 : -1;
-        if (index < 0) {
-            index = 0;
-        } else if (index > 4) {
-            index = 4;
-        }
-        app->settings.animation_speed = SETTINGS_SPEEDS[index];
+    case SETTINGS_ACTION_SPEED_UP:
+        app->settings.animation_speed = settings_speed_next(
+            app->settings.animation_speed,
+            action == SETTINGS_ACTION_SPEED_UP ? 1 : -1);
         break;
-    }
     case SETTINGS_ACTION_TOGGLE_HINTS:
         app->settings.legal_hints = !app->settings.legal_hints;
         break;
@@ -1357,8 +1325,6 @@ static void app_update(App *app, const UiInput *input, float dt)
                 app->ai_difficulty = app_ai_difficulty_from_setup(
                     app->setup_view.difficulty);
                 app->ai = ai_controller_for_difficulty(app->ai_difficulty);
-                app->settings.default_difficulty = (int)app->ai_difficulty;
-                (void)settings_save(&app->settings);
             }
             MatchConfig config = {
                 .mode = app->setup_view.mode,
@@ -1420,8 +1386,10 @@ static void app_update(App *app, const UiInput *input, float dt)
     case APP_SCREEN_HELP: {
         const HelpAction action = help_view_update(
             &app->help_view, input, true, dt);
-        if (action == HELP_ACTION_BACK) {
+        if (action != HELP_ACTION_NONE) {
             audio_play(AUDIO_CUE_BUTTON);
+        }
+        if (action == HELP_ACTION_BACK) {
             app_request_screen(app, APP_SCREEN_MENU);
         }
         break;
@@ -1456,7 +1424,9 @@ static void app_draw(const App *app)
         break;
     case APP_SCREEN_GAME:
         game_view_draw(&app->game_view, &app->match, &app->animation,
-                       &app->fonts, app->settings.legal_hints,
+                       &app->fonts,
+                       ui_should_show_hints(&app->match,
+                                            app->settings.legal_hints),
                        app->settings.last_move_highlight,
                        app->last_move_age, app->settings.animations);
         if (app->match.phase == MATCH_PHASE_PAUSED) {

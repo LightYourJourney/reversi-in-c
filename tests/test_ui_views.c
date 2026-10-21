@@ -164,12 +164,16 @@ static void test_help_and_stats(TestStats *stats)
     UiInput right = {0};
     right.right_pressed = true;
     REVERSI_TEST_ASSERT(stats,
-        help_view_update(&help, &right, true, 0.016f) == HELP_ACTION_NONE);
+        help_view_update(&help, &right, true, 0.016f) == HELP_ACTION_NEXT);
     REVERSI_TEST_ASSERT(stats, help.page == 1);
 
     UiInput left = {0};
     left.left_pressed = true;
-    (void)help_view_update(&help, &left, true, 0.016f);
+    REVERSI_TEST_ASSERT(stats,
+        help_view_update(&help, &left, true, 0.016f) == HELP_ACTION_PREVIOUS);
+    REVERSI_TEST_ASSERT(stats, help.page == 0);
+    REVERSI_TEST_ASSERT(stats,
+        help_view_update(&help, &left, true, 0.016f) == HELP_ACTION_NONE);
     REVERSI_TEST_ASSERT(stats, help.page == 0);
 
     UiInput escape = {0};
