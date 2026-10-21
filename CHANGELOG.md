@@ -50,9 +50,9 @@
 
 ### Verified
 
-- Debug 16/16（含 GUI 冒烟）、Release 15/15、ASan+UBSan 15/15。
+- Debug 17/17（含 GUI 冒烟与自动对局）、Release 15/15、ASan+UBSan 15/15。
 - 全新 Debug 构建树 15/15。
-- AI 基准 27 局 `illegal=0 failures=0 unfinished=0`。
+- AI 基准 27 个局面 `illegal=0 failures=0 unfinished=0`。
 - 主菜单实际窗口截图、字体/音频/清理日志、无资源字体回退、自动对局
   600 帧与统计递增。
 - Windows/Linux、人工点击流程、真实听感与窗口缩放仍为 NOT TESTED。

@@ -167,7 +167,7 @@ AI 对局的人工验证；设置与对局仍不持久化。
 
 - Debug/Release/ASan+UBSan 无 GUI 测试均 15/15 通过，Sanitizer 无报告。
 - 新增断言：`core.match` 980、`storage.save` 91、`storage.settings` 58、
-  `storage.stats` 44、`audio.noop` 2、`ui.helpers` 189、`ui.views` 35。
+  `storage.stats` 44、`audio.noop` 2、`ui.helpers` 191、`ui.views` 35。
 - 自动保存 50 步对局后退出并重启，应用通过读档路径恢复到相同的
   20:34 局面与最后一步 D2；损坏自动存档保持主菜单、显示校验错误、不崩溃。
 - 明暗主题、设置页、帮助页、统计页、读档页、对局页与结算页完成截图核对；
@@ -209,7 +209,7 @@ Windows/Linux 未实机验证。详见 [PHASE_5_REPORT.md](PHASE_5_REPORT.md)。
 
 - 完整代码审计：分层、依赖、重复、全局状态、内存所有权、边界/UB、
   错误处理、资源生命周期、持久化、AI 安全、状态机、死代码、平台与依赖。
-- 测试矩阵实际执行：Debug 16/16（含 GUI 冒烟）、Release 15/15、
+- 测试矩阵实际执行：Debug 17/17（含 GUI 冒烟与自动对局）、Release 15/15、
   ASan+UBSan 15/15、全新 Debug 构建树 15/15。
 - 性能测量：AI Hard 500 ms 预算、Medium 3 ms、Easy 0–1 ms；
   存档读 0.086 ms/次、写 0.162 ms/次；菜单/自动对局约 54 FPS。

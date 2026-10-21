@@ -350,5 +350,19 @@ if(REVERSI_BUILD_TESTS)
                 "HOME=${CMAKE_BINARY_DIR}/test-home;XDG_DATA_HOME=${CMAKE_BINARY_DIR}/test-home;APPDATA=${CMAKE_BINARY_DIR}/test-home"
             LABELS "gui"
             TIMEOUT 30)
+
+        # Debug-only autoplay hook: one completed game, one stats record,
+        # terminal autosave removed. Requires a display like app.smoke.
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            add_test(NAME app.autoplay
+                COMMAND "${CMAKE_COMMAND}"
+                    "-DREVERSI=$<TARGET_FILE:reversi>"
+                    "-DTEST_HOME=${CMAKE_BINARY_DIR}/autoplay-test-home"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/app_autoplay_test.cmake")
+            set_tests_properties(app.autoplay PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                LABELS "gui"
+                TIMEOUT 120)
+        endif()
     endif()
 endif()

@@ -93,7 +93,8 @@
 │   ├── test_save.c       存档往返、损坏/版本/状态校验、原子覆盖
 │   ├── test_settings.c   设置往返与损坏文件回退
 │   ├── test_stats.c      统计记录、往返与非法数据拒绝
-│   └── test_audio.c      无音频设备时的安全降级
+│   ├── test_audio.c      无音频设备时的安全降级
+│   └── app_autoplay_test.cmake 自动完成一局的 GUI 集成检查
 ├── docs/
 │   ├── ARCHITECTURE.md   模块职责、依赖方向与数据流
 │   ├── BUILD.md          构建、运行、测试、打包与平台说明
@@ -362,7 +363,7 @@ ctest --test-dir build --output-on-failure
 - `audio.noop`：2 项断言；未初始化设备时所有音效调用为安全空操作
 - `ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
   悬停、按下、释放、移出取消、禁用、输入阻断与 reduced-motion 语义。
-- `ui.helpers`（189 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、提示可见性、显示名称/
+- `ui.helpers`（191 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、提示可见性、显示名称/
   终局标题（含 PvE “You win/Computer wins”）、焦点跳转、对局输入门控、
   AI_THINKING 门控、新游戏难度选择、各视图的键盘与鼠标动作，以及动画插值。
 - `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
@@ -372,7 +373,7 @@ ctest --test-dir build --output-on-failure
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug + GUI | 16/16 通过；`app.smoke` 实际打开窗口并正常关闭 |
+| Debug + GUI | 17/17 通过；`app.smoke` 与 `app.autoplay` 实际打开窗口并完成一局 |
 | Debug | 15/15 无 GUI 测试通过 |
 | Release | 15/15 通过；`reversi --frames 2` 退出码 0 |
 | ASan+UBSan | 15/15 通过，无 Sanitizer 报告；GUI 冒烟退出码 0 |
@@ -392,7 +393,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-它会运行 `reversi --frames 2`，打开窗口渲染两帧后退出，用于验证窗口初始化与关闭路径。
+`app.smoke` 运行 `reversi --frames 2`，验证窗口初始化与关闭；Debug 下还会注册
+`app.autoplay`，用自动对局完成一局并核对统计只增加一次、终局自动存档已删除。
 
 ### Sanitizer（可选）
 
@@ -412,7 +414,7 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 16/16（含 GUI）、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；真实窗口/字体/音频、自动对局与无资源回退已验证；逐按钮人工点击、窗口缩放、真实听感未验证 |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 17/17（含 GUI）、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；真实窗口/字体/音频、自动对局与无资源回退已验证；逐按钮人工点击、窗口缩放、真实听感未验证 |
 | Windows | NOT TESTED |
 | Linux | NOT TESTED |
 

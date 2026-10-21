@@ -387,21 +387,25 @@ static void test_single_and_pass_positions(TestStats *stats)
     Move move = {0, 0};
     REVERSI_TEST_ASSERT(stats,
         !ai_choose_move(&state, &config, &move, NULL));
-
-    GameState opening;
-    game_init(&opening);
-    AiConfig invalid = ai_default_config(AI_DIFFICULTY_MEDIUM, 0);
-    invalid.max_depth = 0;
-    REVERSI_TEST_ASSERT(stats,
-        !ai_search_choose_ex(&opening, &invalid, false, &move, NULL));
-    REVERSI_TEST_ASSERT(stats,
-        !ai_easy_choose(&opening, &invalid, &move, NULL));
 }
 
 static bool always_cancel(void *context)
 {
     (void)context;
     return true;
+}
+
+static void test_invalid_config_rejected(TestStats *stats)
+{
+    GameState opening;
+    game_init(&opening);
+    Move move = {0, 0};
+    AiConfig invalid = ai_default_config(AI_DIFFICULTY_MEDIUM, 0);
+    invalid.max_depth = 0;
+    REVERSI_TEST_ASSERT(stats,
+        !ai_search_choose_ex(&opening, &invalid, false, &move, NULL));
+    REVERSI_TEST_ASSERT(stats,
+        !ai_easy_choose(&opening, &invalid, &move, NULL));
 }
 
 static void test_cancel_and_determinism(TestStats *stats)
@@ -565,6 +569,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_search_many_positions);
     REVERSI_RUN_TEST(&stats, test_tt_matches_plain_search);
     REVERSI_RUN_TEST(&stats, test_single_and_pass_positions);
+    REVERSI_RUN_TEST(&stats, test_invalid_config_rejected);
     REVERSI_RUN_TEST(&stats, test_cancel_and_determinism);
     REVERSI_RUN_TEST(&stats, test_pve_full_games);
     REVERSI_RUN_TEST(&stats, test_pve_undo_during_thinking);

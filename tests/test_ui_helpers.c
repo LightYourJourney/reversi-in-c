@@ -86,6 +86,12 @@ static void test_ui_labels_and_focus(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, ui_focus_step(1, -1, 3, 1) == 2);
     REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 0, 1) == 0);
     REVERSI_TEST_ASSERT(stats, ui_focus_step(0, 1, 1, 0) == 0);
+
+    const Rectangle row = {10.0f, 0.0f, 100.0f, 20.0f};
+    REVERSI_TEST_ASSERT(stats,
+        ui_point_left_of_center(row, (Vector2){20.0f, 10.0f}));
+    REVERSI_TEST_ASSERT(stats,
+        !ui_point_left_of_center(row, (Vector2){80.0f, 10.0f}));
 }
 
 static void test_clamp_and_easing(TestStats *stats)

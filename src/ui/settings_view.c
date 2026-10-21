@@ -186,7 +186,9 @@ SettingsAction settings_view_update(SettingsView *view,
     for (int row = 0; row < REVERSI_SETTINGS_ROW_COUNT; ++row) {
         if (CheckCollisionPointRec(input->mouse, layout.rows[row])
             && input->mouse_pressed) {
-            return action_for_row(row, true);
+            const bool forward = row_is_toggle(row)
+                || !ui_point_left_of_center(layout.rows[row], input->mouse);
+            return action_for_row(row, forward);
         }
     }
 
@@ -280,7 +282,8 @@ void settings_view_draw(const SettingsView *view, const UiFonts *fonts,
         REVERSI_UI_FONT_HEADING, REVERSI_UI_COLOR_TEXT, UI_ALIGN_LEFT);
     ui_draw_text_aligned(
         fonts, UI_TEXT_REGULAR,
-        "Changes are saved automatically.",
+        "Changes save automatically. Click a value's left/right half "
+        "to adjust.",
         (Rectangle){layout.panel.x + 24.0f, layout.panel.y + 62.0f,
                     layout.panel.width - 48.0f, 20.0f},
         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);

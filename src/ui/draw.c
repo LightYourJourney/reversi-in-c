@@ -124,6 +124,11 @@ bool ui_should_show_hints(const Match *match, bool enabled)
         && match->state.current_player == match->config.human_color;
 }
 
+bool ui_point_left_of_center(Rectangle rect, Vector2 point)
+{
+    return point.x < rect.x + rect.width * 0.5f;
+}
+
 int ui_focus_step(int focus, int direction, int count,
                   unsigned disabled_mask)
 {

@@ -12,8 +12,9 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 16 个测试：15 个无窗口测试与
-1 个 `app.smoke`。不开启时注册 15 个。CTest 名称、可执行文件和源码一一对应。
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 17 个测试（Debug）：15 个
+无窗口测试、`app.smoke` 与 `app.autoplay`。不开启时注册 15 个。CTest 名称、
+可执行文件和源码一一对应。
 
 ## 2. 无窗口测试清单
 
@@ -32,14 +33,14 @@ ctest --test-dir build --output-on-failure
 | storage.stats | reversi_stats_tests | 44 | 记录/撤回、视角、汇总、原子持久化 | PASS |
 | audio.noop | reversi_audio_tests | 2 | 无音频设备时安全空操作 | PASS |
 | ui.button | reversi_ui_button_tests | 30 | 悬停/按下/取消/禁用/reduced-motion | PASS |
-| ui.helpers | reversi_ui_helper_tests | 189 | 布局命中、提示门控、标题、焦点、动画 | PASS |
+| ui.helpers | reversi_ui_helper_tests | 191 | 布局命中、提示门控、标题、焦点、动画 | PASS |
 | ui.views | reversi_ui_views_tests | 35 | 主题、菜单、设置、存档、帮助、统计动作 | PASS |
 
 实际运行结果：
 
 - Debug：15/15 无窗口测试通过。
-- Debug + GUI：16/16 通过；`app.smoke` 实际打开窗口、加载字体与音频、
-  渲染两帧并正常关闭。
+- Debug + GUI：17/17 通过；`app.smoke` 打开窗口、加载字体与音频、渲染两帧
+  并正常关闭；`app.autoplay` 完成一局并核对统计 1 次、无终局自动存档。
 - Release：15/15 通过；Release 二进制的 `--frames 2` 实际退出码 0。
 - ASan+UBSan：15/15 通过，无 Sanitizer 报告；Sanitizer 二进制的
   `--frames 2` 退出码 0。
@@ -60,7 +61,7 @@ ctest --test-dir build --output-on-failure
 | 存档与读档 | `storage.save`、`core.match`、GUI 自动对局 | PASS |
 | 损坏文件 | `storage.save` 截断/校验和/版本/非法值 | PASS |
 | AI 合法性 | `ai.core` 每步复核 + 基准 `illegal=0` | PASS |
-| AI 自动对局 | `ai.core` 固定对局、`reversi_ai_bench` 27 局 | PASS |
+| AI 自动对局 | `ai.core` 固定对局、`reversi_ai_bench` 27 个局面 | PASS |
 | GUI 关键操作 | 真实窗口/冒烟/自动对局已通过；人工点击流程未完成 | NOT TESTED |
 | Debug/Release | 两套构建与测试 | PASS |
 | Sanitizer | ASan+UBSan 测试与 GUI 冒烟 | PASS |
@@ -101,7 +102,7 @@ ctest --test-dir build --output-on-failure
 ./build-release/bin/reversi_ai_bench --games 3
 ```
 
-- 27 个基准对局/局面：`illegal=0 failures=0 unfinished=0`，总耗时 8.92 s。
+- 27 个基准局面：`illegal=0 failures=0 unfinished=0`，总耗时 8.92 s。
 - Hard 中局：depth 8，约 158,720 nodes，501 ms（预算 500 ms）。
 - Hard 开局：depth 10，约 63,487 nodes，258 ms。
 - Medium 中局：depth 4，约 832 nodes，3 ms。
@@ -121,8 +122,11 @@ ctest --test-dir build --output-on-failure
   约 **1.27 ms CPU/帧**。
 - 自动对局 600 帧：11.23 s，约 **53.4 FPS**；user 0.54 s + sys 0.33 s，
   约 **1.45 ms CPU/帧**；完成两局且正常清理。
-- 目标 FPS 为 60；实际受 vsync 与当前显示会话影响。多分钟/多小时
-  稳定性未单独测试。
+- 菜单 3600 帧（62.32 s）：约 **57.8 FPS**，约 **1.24 ms CPU/帧**；
+  峰值内存约 232 MB，与 300 帧时基本一致。
+- 100,000 次 `match_restart`：5.45 s，macOS `leaks` 为 0 leaks。
+- 目标 FPS 为 60；实际受 vsync 与当前显示会话影响。小时级稳定性与
+  GUI 反复重启/缩放未单独测试。
 
 ## 6. 静态分析与泄漏检查
 
@@ -143,7 +147,7 @@ ctest --test-dir build --output-on-failure
 
 - 人工点击/键盘流程、窗口缩放、真实音频听感、Windows/Linux 实机、
   多显示器/锁屏路径未验证。
-- 结算后撤销与统计撤回有 `storage.stats` 单元测试和应用层代码审查，
-  但没有自动化 GUI 点击测试。
+- 终局统计只计一次由 `app.autoplay` 集成测试覆盖；结算后撤销与统计撤回
+  仍有 `storage.stats` 单元测试和应用层代码审查，但没有自动化 GUI 点击测试。
 - 存档的“终局动画中断”路径通过提前记录统计与自动存档保留逻辑处理，
   未做崩溃注入/断电测试。

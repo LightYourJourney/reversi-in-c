@@ -105,4 +105,7 @@ bool ui_should_show_hints(const Match *match, bool enabled);
 int ui_focus_step(int focus, int direction, int count,
                   unsigned disabled_mask);
 
+/* Left half of a row is the decrement/previous hit zone. */
+bool ui_point_left_of_center(Rectangle rect, Vector2 point);
+
 #endif

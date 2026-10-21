@@ -293,7 +293,8 @@ app ──> match_restore_checked（以 Match API 回放并比对期望局面）
 | 冒烟测试 | `reversi --frames N` 验证窗口初始化、渲染、关闭 | 是（需显示环境） |
 
 CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
-`-DREVERSI_ENABLE_GUI_TESTS=ON` 注册为 `app.smoke`，避免在无显示环境中失败。
+`-DREVERSI_ENABLE_GUI_TESTS=ON` 注册为 `app.smoke`（Debug 另有
+`app.autoplay`），避免在无显示环境中失败。
 第一方目标的编译警告视为缺陷。新增**纯逻辑**公开函数必须同时新增单元测试
 （`ui.button`、`ui.helpers`、`ui.views` 覆盖按钮、缓动、颜色、动画插值与
 各页面动作映射）；依赖窗口尺寸/绘制上下文的视图函数由 `app.smoke` 与人工
@@ -470,9 +471,9 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 1. **完成由状态决定，不由动画决定**：`GameState.result` 进入终局时即记录
    统计并写盘；`ANIMATING`/`GAME_OVER` 只影响展示。这消除了“终局动画中
    退出/存档导致漏记”的窄路径。
-2. **内部入口也要防守**：`ai_search_choose_ex()`、`ai_easy_choose()` 在
-   分配搜索状态前校验 `AiConfig`，避免维护者绕过 `ai_choose_move()` 时把
-   非法深度/预算带入搜索。
+2. **内部入口也要防守**：`ai_search_choose_ex()`、`ai_easy_choose()` 在进入
+   搜索前校验 `AiConfig`，避免维护者绕过 `ai_choose_move()` 时把非法深度/
+   预算带入搜索。
 3. **不追求形式整洁的大重构**：审计确认分层、所有权与状态机健康；
    `app.c` 规模作为观察项保留，拆分留到有独立收益时进行。测试、日志与
    文档优先记录真实行为，不用“看起来完整”的报告替代验证。

@@ -577,13 +577,13 @@ static void app_maybe_record_result(App *app)
                  app->match.config.human_color, (int)app->ai_difficulty,
                  app->match.state.result);
     app_save_stats(app);
-    app_play_result_sound(app);
 }
 
 static void app_complete_game_over(App *app)
 {
     app_autosave(app);
     app_maybe_record_result(app);
+    app_play_result_sound(app);
 }
 
 static bool app_restore_saved(App *app, const char *path)
@@ -668,6 +668,9 @@ static void app_switch_screen(App *app, AppScreen target)
         app_reset_match_ui(app);
         app->outcome_delay = app->match.phase == MATCH_PHASE_GAME_OVER
             ? REVERSI_UI_DUR_GAME_OVER_FAST : 0.0f;
+        if (app->match.phase == MATCH_PHASE_GAME_OVER) {
+            app_play_result_sound(app);
+        }
         app_maybe_start_ai(app);
         app_autosave(app);
         break;
