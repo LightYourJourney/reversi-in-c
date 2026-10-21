@@ -468,7 +468,7 @@ ctest --test-dir build --output-on-failure
 - `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
   存档槽位保存/加载/删除、帮助翻页与统计页返回。
 
-实际结果（2026-10-21，macOS arm64，v1.0.0 发布工程）：
+实际结果（2026-10-22，macOS arm64，v1.0.1）：
 
 | 构建 | 测试结果 |
 |---|---|
@@ -476,7 +476,7 @@ ctest --test-dir build --output-on-failure
 | Release | 15/15 通过；发行包 `--frames 2` 退出码 0 |
 | ASan+UBSan | 无 GUI 15/15 通过，无 Sanitizer 报告；GUI 冒烟通过 |
 | 全新 Release 构建树（联网获取 raylib 6.2） | 15/15 通过 |
-| GitHub Actions | Linux/Windows/macOS Debug+Release、ASan、Xvfb、Linux 包验收全部通过 |
+| GitHub Actions | Linux/Windows/macOS Debug、三平台 Release 打包、ASan、Xvfb、Linux 包验收全部通过（运行 `39633821096`） |
 | 发行包验收 | `.sha256`、双启动、字体、许可证、用户数据持久化、`ldd` 检查通过 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
@@ -520,11 +520,11 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
   Linux `$XDG_DATA_HOME/reversi`（或 `~/.local/share/reversi`），
   Windows `%APPDATA%\Reversi`。设置、统计与存档均写入该目录。
 - 存档只保存当前撤销分支；撤销后尚未重做的“未来”分支不会写入文件。
-- v1.0.0 的窗口、字体、音频、自动对局、发行包启动与鼠标点击流程已验证；
+- v1.0.1 的窗口、字体、音频、自动对局、发行包启动与鼠标点击流程已验证；
   键盘导航未单独走查，也没有自动化 GUI 点击/键盘回归测试。相关动作由
   `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
-- v1.0.0 已于 2026-10-21 发布；发布后审查修正已在 `main`，但不在
-  v1.0.0 附件中。若要让修正进入发行包，需要新的补丁版本标签。
+- v1.0.1 已于 2026-10-22 发布，包含 Phase 7 发布后的审查修正、应用图标
+  与 CI 打包流程收敛。
 - 音效设备初始化成功且音效加载无警告，但**未进行人工听感验证**；
   无音频设备路径由 `audio.noop` 与代码降级分支覆盖。
 - 760×600 最小窗口的 Phase 5 新页面按布局常量核对，未逐页截图；

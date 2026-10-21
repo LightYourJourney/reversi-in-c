@@ -61,12 +61,13 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
 - 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
   并通过 `scripts/verify-package.sh` 独立启动验收。
-- GitHub Actions 运行 `39613503376`（2026-10-21）9 个作业全部 `success`：
-  Linux/Windows（MSVC）/macOS 的 Debug 与 Release 各 15/15；Linux
+- GitHub Actions 运行 `39633821096`（2026-10-22）9 个作业全部 `success`：
+  Linux/Windows（MSVC）/macOS 的 Debug 各 15/15；三平台 Release 打包
+  作业（含 Release 15/15 与 Windows `--version` 断言）；Linux
   ASan+UBSan；Linux Xvfb GUI；Linux 发行包在 Xvfb 下执行
-  `scripts/verify-package.sh`；Windows 发行包 `--version` 断言通过。
-  CI 强制获取 raylib 6.2。这些运行器是托管 VM，不是物理机；
-  Windows/macOS GUI 未在 CI 中运行。
+  `scripts/verify-package.sh`。该运行同时验证了 Phase 8 提取的
+  `.github/workflows/package.yml` 可复用工作流。运行器是托管 VM，
+  不是物理机；Windows/macOS GUI 未在 CI 中运行。
 
 ## 3. 需求到测试的映射
 
