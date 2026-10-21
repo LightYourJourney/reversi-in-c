@@ -41,6 +41,7 @@ macOS 未使用 Developer ID 签名/公证，Windows 未做 Authenticode 签名�
 - macOS 生成 `Reversi.app`：
   - 自定义 `Info.plist`（bundle id、版本、最低系统 11.0、HiDPI）；
   - 字体位于 `Contents/Resources/assets/fonts`，运行时优先从该目录加载；
+  - 复制资源后重新做 ad-hoc 签名，`codesign --verify --deep --strict` 通过；
   - 无可执行文件旁的重复资源依赖。
 - Windows 生成版本资源 `.rc`，并使用静态 MSVC 运行库。
 - CPack 只安装项目 `Reversi` 组件，不携带 raylib/GLFW 开发文件。
@@ -84,6 +85,7 @@ macOS 的 ASan 不支持 LeakSanitizer，因此 LeakSanitizer 仍为
 | 关闭和重新启动 | 连续两次启动均退出 0，第二次读取已有用户数据 | PASS |
 | 保存与读取 | 打包 Debug 版自动对局完成一局，`pvp_games 0→1`，重启后再跑一局变为 2；`storage.save` 往返/损坏拒绝测试 15/15 通过 | PASS（逻辑）；打包 GUI 手动存/读档 **NOT TESTED** |
 | 无缺失动态库 | `otool -L` 仅显示系统 Framework 与 `libSystem` | PASS |
+| 包结构签名 | ad-hoc 签名；`codesign --verify --deep --strict` 通过 | PASS |
 | 运行目录改变 | 从 `/` 启动成功 | PASS |
 | 发布版/开发版行为一致 | Debug 17/17、Release 15/15，同一代码路径 | PASS |
 | LaunchServices | `open Reversi.app` 可启动进程 | PASS |
@@ -146,8 +148,9 @@ Windows/Linux 物理桌面仍未验证。
 
 ## 8. 尚未解决的发布阻碍
 
-1. **macOS 未签名、未公证**：无 Developer ID，Gatekeeper 可能阻止首次
-   启动。当前只能作为未签名测试构建分发，不能宣称“双击即无警告”。
+1. **macOS 无 Developer ID、未公证**：当前只做 ad-hoc 签名（包结构校验
+   通过），Gatekeeper 仍可能阻止首次启动。不能宣称“双击即无警告”，
+   也不能作为已公证正式构建分发。
 2. **Windows 未做 Authenticode 签名**：SmartScreen 可能提示未知发布者。
 3. **Windows/macOS 桌面 GUI 未在物理机验证**：CI 只验证构建、无窗口
    测试、Windows `--version` 与 macOS 本机包；Windows GUI 为

@@ -10,7 +10,8 @@ Phase 6 一致。
 ### Added
 
 - `VERSION` 单一版本源与生成式版本头；`--version` 输出版本、提交与构建类型。
-- macOS `Reversi.app` 应用包、自定义 `Info.plist` 与 Resources 资源布局。
+- macOS `Reversi.app` 应用包、自定义 `Info.plist`、Resources 资源布局与
+  ad-hoc 重签名（可选 Developer ID）。
 - CMake/CPack 发行包：macOS ZIP、Windows ZIP、Linux ZIP/TGZ，附 SHA-256。
 - Windows 静态 MSVC 运行库与版本资源。
 - `scripts/package.sh` 与 `scripts/verify-package.sh`。

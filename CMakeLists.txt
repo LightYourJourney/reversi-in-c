@@ -295,6 +295,23 @@ add_custom_command(TARGET reversi POST_BUILD
         "${REVERSI_ASSET_DESTINATION}"
     COMMENT "Copying assets into the application directory")
 
+if(APPLE)
+    # Re-seal the bundle after adding Resources. The default ad-hoc signature
+    # keeps local builds runnable; a Developer ID can be supplied for release.
+    set(REVERSI_MACOS_CODESIGN_IDENTITY "-" CACHE STRING
+        "macOS codesign identity ('-' for ad-hoc)")
+    set(REVERSI_MACOS_CODESIGN_FLAGS "")
+    if(NOT REVERSI_MACOS_CODESIGN_IDENTITY STREQUAL "-")
+        list(APPEND REVERSI_MACOS_CODESIGN_FLAGS
+            --options runtime --timestamp)
+    endif()
+    add_custom_command(TARGET reversi POST_BUILD
+        COMMAND codesign --force --deep ${REVERSI_MACOS_CODESIGN_FLAGS}
+            --sign "${REVERSI_MACOS_CODESIGN_IDENTITY}"
+            "$<TARGET_BUNDLE_DIR:reversi>"
+        COMMENT "Codesigning Reversi.app")
+endif()
+
 # A runnable distribution tree: application + assets + licenses + docs.
 install(TARGETS reversi
     BUNDLE DESTINATION . COMPONENT Reversi

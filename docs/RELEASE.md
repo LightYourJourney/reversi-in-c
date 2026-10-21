@@ -13,7 +13,8 @@ CMake/CPack 生成，包含可执行程序、运行时资源、文档、许可�
 | Linux x86_64 | `Reversi-1.0.0-Linux-x86_64.zip` / `.tar.gz` | 便携目录，含 `reversi` |
 
 每个归档旁有 `.sha256` 文件；GitHub Release 另提供汇总的 `SHA256SUMS`。
-当前 macOS 构建**未签名、未公证**，Windows 构建**未做代码签名**。
+当前 macOS 构建只做 **ad-hoc 签名**（用于保证包结构完整），**没有
+Developer ID、未公证**；Windows 构建**未做 Authenticode 签名**。
 
 ## 2. macOS 安装与卸载
 
@@ -21,8 +22,8 @@ CMake/CPack 生成，包含可执行程序、运行时资源、文档、许可�
 
 1. 解压 zip。
 2. 把 `Reversi.app` 拖入 `/Applications`（或任意用户目录）。
-3. 首次启动可右键选择“打开”。未签名构建可能被 Gatekeeper 拦截；这是
-   当前分发限制，不是程序损坏。
+3. 首次启动可右键选择“打开”。构建只有 ad-hoc 签名，可能被 Gatekeeper
+   拦截；这是当前分发限制，不是程序损坏。
 
 卸载：
 
