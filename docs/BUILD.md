@@ -2,7 +2,9 @@
 
 本文档记录经过验证的构建、运行、测试与打包命令。验证平台为
 macOS 26.6.2（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，
-CMake 4.4.4）。Windows 与 Linux 命令仅作为移植说明，尚未实机验证。
+CMake 4.4.4）。Windows（MSVC）与 Linux 的 Debug 构建和测试已在
+GitHub Actions 托管 VM 上实际运行；托管运行器不是物理机，桌面 GUI 只在
+Linux Xvfb 软件渲染下做过冒烟。
 
 ## 1. 依赖
 
@@ -131,7 +133,9 @@ cmake --build build -j
 ./build/bin/reversi
 ```
 
-以上两条路径未在 Windows/Linux 实机验证。
+以上两条路径的 Debug 构建与无窗口测试已由 `.github/workflows/ci.yml`
+在 GitHub Actions 的 Linux/Windows 托管 VM 上验证（运行 `39588002802`），
+Linux 另有 Xvfb GUI 冒烟。物理机与桌面 GUI 仍未验证。
 
 ## 9. 打包与许可证
 

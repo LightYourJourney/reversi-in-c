@@ -294,7 +294,9 @@ cmake --build build -j
 
 不同发行版的包名可能不同；raylib 通过其内置 GLFW 处理 X11/Wayland 后端。
 
-> Windows 与 Linux 的构建说明已补充，但**尚未在实机验证**；macOS 为当前已验证平台。
+> Windows（MSVC）与 Linux 的 Debug 构建和 15 个无窗口测试已在 GitHub
+> Actions 托管 VM 上通过；Linux 另有 Xvfb 软件渲染 GUI 冒烟。托管运行器
+> 不是物理机，Windows/Linux 物理桌面 GUI 仍未验证。
 
 ### raylib 依赖策略
 
@@ -414,12 +416,13 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
 
 | 平台 | 状态 |
 |---|---|
-| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 17/17（含 GUI）、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；真实窗口/字体/音频、自动对局与无资源回退已验证；逐按钮人工点击、窗口缩放、真实听感未验证 |
-| Windows | NOT TESTED |
-| Linux | NOT TESTED |
+| macOS（Darwin 25.6.0，Apple M3 / arm64，Apple Clang 21，CMake 4.4.4） | Debug 17/17（含 GUI）、Release 15/15、ASan+UBSan 15/15 已实际验证（2026-10-21）；真实窗口/字体/音频、自动对局、无资源回退与鼠标点击流程已验证；键盘导航、窗口缩放、真实听感未验证 |
+| Windows x64（GitHub Actions 托管 VM） | MSVC Debug 构建与 15/15 无窗口测试 PASS；GUI 与物理机 NOT TESTED |
+| Linux x86_64（GitHub Actions 托管 VM） | Debug 构建与 15/15 无窗口测试 PASS；Xvfb + Mesa 软件渲染下 `app.smoke`/`app.autoplay` PASS；物理机桌面 GUI NOT TESTED |
 
-工程未使用平台相关路径或硬编码编译选项；跨平台构建需要对应的 raylib
-依赖与 OpenGL 环境。
+GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部通过。
+托管运行器是虚拟机，不是物理机。工程未使用平台相关路径或硬编码编译
+选项；跨平台构建需要对应的 raylib 依赖与 OpenGL 环境。
 
 ## 已知问题
 
@@ -431,24 +434,26 @@ AddressSanitizer 不支持 LeakSanitizer，运行测试时请使用
   Linux `$XDG_DATA_HOME/reversi`（或 `~/.local/share/reversi`），
   Windows `%APPDATA%\Reversi`。设置、统计与存档均写入该目录。
 - 存档只保存当前撤销分支；撤销后尚未重做的“未来”分支不会写入文件。
-- Phase 6 的窗口实际创建、字体/音频加载、主菜单截图与 600 帧自动对局已
-  验证；当前会话窗口不在可交互 Space，逐按钮点击/键盘流程仍未完成，
+- Phase 6 的窗口实际创建、字体/音频加载、主菜单截图、600 帧自动对局与
+  鼠标点击流程已验证；键盘导航未单独走查，也没有自动化 GUI 点击回归测试。
   相关动作由 `storage.*`、`ui.views` 与 `core.match` 测试覆盖。
 - 音效设备初始化成功且音效加载无警告，但**未进行人工听感验证**；
   无音频设备路径由 `audio.noop` 与代码降级分支覆盖。
 - 760×600 最小窗口的 Phase 5 新页面按布局常量核对，未逐页截图；
-  Windows/Linux 仍未实机验证。
+  Windows/Linux 物理机与桌面 GUI 仍未验证。
 - Phase 4 界面已实际验证：难度与颜色选择、人机执黑/执白、思考提示、
   AI 自动落子、思考中撤销、重做后重新搜索、重开与确认框取消。
   完整人机对局到结算页、人机自动跳过提示、思考中关闭窗口这三项**未人工验证**；
   对应逻辑由 `ai.core` / `core.match` / `ai.worker` 测试覆盖。
 - AI 基准每组 20 局（共 180 局），固定深度使结果可复现；仍不应把胜率当作
-  精确估计。Windows 的 `CreateThread` 后端尚未实机运行；AI 测试进程经
-  macOS `leaks` 检测为 0 leaks，raylib/UI 进程未做泄漏检测。
+  精确估计。Windows 的 `CreateThread` 后端已由 GitHub Actions 上的
+  `ai.worker` 测试执行；AI 测试进程经 macOS `leaks` 检测为 0 leaks，
+  raylib/UI 进程未做泄漏检测。
 - 在锁屏、显示器休眠或没有活动图形会话时，GLFW 无法获取主显示器，
   `app.smoke` 与手动运行都会以 “Failed to get primary monitor /
   Failed to initialize platform” 失败；解锁并保持显示唤醒后重跑即可。
-- Windows 与 Linux 构建路径已记录，但尚未实机验证。
+- Windows 与 Linux 构建/测试已在 GitHub Actions 托管 VM 上验证；
+  物理机与桌面 GUI 仍未验证。
 
 ## 文档
 

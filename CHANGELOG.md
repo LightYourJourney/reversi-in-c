@@ -25,6 +25,8 @@
 - 程序化音效：落子、翻转、按钮、胜利、失败、平局；无设备时静默降级。
 - Inter 4.1 字体（OFL 1.1）与字体缺失回退。
 - 自动化测试、AI 基准、ASan/UBSan 构建选项。
+- GitHub Actions：Linux/Windows/macOS Debug 构建与测试矩阵，以及 Linux
+  Xvfb GUI 冒烟。
 - `docs/BUILD.md`、`docs/TESTING.md`、`docs/PHASE_6_REPORT.md`、
   `THIRD_PARTY_NOTICES.md`。
 
@@ -54,5 +56,9 @@
 - 全新 Debug 构建树 15/15。
 - AI 基准 27 个局面 `illegal=0 failures=0 unfinished=0`。
 - 主菜单实际窗口截图、字体/音频/清理日志、无资源字体回退、自动对局
-  600 帧与统计递增。
-- Windows/Linux、人工点击流程、真实听感与窗口缩放仍为 NOT TESTED。
+  600 帧与统计递增；鼠标点击流程经用户人工验证。
+- GitHub Actions `39588002802`：Linux、Windows（MSVC）、macOS 的 Debug
+  构建与 15/15 无窗口测试通过；Linux Xvfb 软件渲染下 GUI 冒烟与自动对局
+  通过。托管运行器为 VM，不等同物理机验证。
+- 键盘导航、窗口缩放、真实听感、Windows/Linux 物理机与 Windows/macOS
+  桌面 GUI 仍为 NOT TESTED。

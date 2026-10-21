@@ -2,7 +2,7 @@
 
 日期：2026-10-21  
 平台：macOS 26.6.2（Darwin 25.6.0），Apple M3 / arm64  
-工具链：Apple Clang 21，CMake 4.4.4  
+工具链：Apple Clang 21，CMake 4.4.4；GitHub Actions（Linux/Windows/macOS）  
 固定点：Phase 5 完成提交及 Phase 5 审查修正  
 状态标记：PASS / FAIL / NOT TESTED
 
@@ -17,7 +17,8 @@
 | 后台 AI 线程、取消、快照隔离 | `ai/ai_worker` | `ai.worker`、`ai.core` | PASS |
 | 本地双人、人机执黑/执白 | `app`、`ui/setup_view` | UI 逻辑测试、自动对局 | PASS |
 | 菜单/设置/对局/暂停/历史/结算/帮助/统计/读档页面逻辑与渲染 | `ui/*` | UI 逻辑测试、真实窗口截图、GUI 冒烟 | PASS |
-| 逐按钮点击/键盘 GUI 流程 | 全应用 | 合成输入未送达窗口 | NOT TESTED |
+| GUI 鼠标点击流程 | 全应用 | 用户人工验证 | PASS |
+| 键盘导航流程 | 全应用 | 未单独验证 | NOT TESTED |
 | 存档/读档、自动存档、3 个槽位、删除确认 | `storage/*`、`app` | `storage.save`、自动对局、UI 测试 | PASS |
 | 损坏/截断/版本/校验和/非法存档拒绝 | `storage/save` | `storage.save` | PASS |
 | 设置持久化、明暗主题 | `settings/*`、`ui/theme` | `storage.settings`、`ui.views` | PASS |
@@ -74,7 +75,15 @@
 | Release | `build-release` + CTest | 15/15；`--frames 2` 退出码 0 | PASS |
 | ASan+UBSan | `build-sanitize` + CTest | 15/15，无报告；GUI 冒烟退出码 0 | PASS |
 | 全新 Debug 树 | `build-phase6-fresh`（复用本地 raylib 源码） | 15/15 | PASS |
+| Linux x86_64（GitHub Actions） | `ubuntu-latest` 托管 VM，Debug，无 GUI 测试 | 15/15 | PASS |
+| Linux Xvfb GUI（GitHub Actions） | `ubuntu-latest` 托管 VM，Xvfb + Mesa 软件渲染 | `app.smoke`、`app.autoplay` | PASS |
+| Windows x64（GitHub Actions） | `windows-latest` 托管 VM，MSVC Debug，无 GUI 测试 | 15/15 | PASS |
+| macOS arm64（GitHub Actions） | `macos-latest` 托管 VM，Debug，无 GUI 测试 | 15/15 | PASS |
 | LeakSanitizer | macOS ASan | 平台不支持，测试中止 | NOT TESTED |
+
+CI 运行 `39588002802` 的四个作业均为 `success`。托管运行器是虚拟机，
+不是物理机；CI 也未运行 Windows/macOS GUI。Windows 上的 `CreateThread`
+后端由 `ai.worker` 测试实际执行。
 
 CTest 注册项与实际测试程序一致：15 个无窗口测试 + `app.smoke` +
 `app.autoplay`（Debug）；`reversi_ai_bench` 不注册（独立基准工具）。
@@ -98,8 +107,11 @@ CTest 注册项与实际测试程序一致：15 个无窗口测试 + `app.smoke`
   0→1→2；终局自动存档删除。
 - CTest `app.autoplay`：约 11 s 通过；从空数据目录完成一局，核对
   `pvp_games 1` 且无 `autosave.rvs`。
-- **未完成**：逐按钮点击/键盘流程、760×600 逐页、窗口缩放、
-  真实听感、多显示器/锁屏。标记 NOT TESTED。
+- GitHub Actions Linux Xvfb 作业：在软件 OpenGL 下通过 `app.smoke` 与
+  `app.autoplay`。
+- GUI 鼠标点击流程：用户已在可交互图形会话中人工验证。
+- **未完成**：键盘导航流程、760×600 逐页、窗口缩放、真实听感、
+  多显示器/锁屏。标记 NOT TESTED。
 
 ### 3.4 首次使用体验审查
 
@@ -115,11 +127,12 @@ CTest 注册项与实际测试程序一致：15 个无窗口测试 + `app.smoke`
 | 是否存在无法返回的页面 | 所有页面有 Back/Esc；History/Saves 返回来源页 | PASS |
 | 出错时是否有可理解反馈 | 损坏存档状态文本、自动存档失败提示、加载失败提示 | PASS |
 | 鼠标调节设置 | 原先数值行只能向右增加；已改为左半减、右半增，并加说明与单元测试 | PASS |
-| 逐按钮真实点击 | 窗口不在可交互 Space，人工点击未完成 | NOT TESTED |
+| 逐按钮真实点击 | 用户在实际窗口中人工点击验证 | PASS |
+| 键盘导航 | 未单独走查 | NOT TESTED |
 
 审计中修复的体验问题：设置页音量/速度/难度在鼠标操作下只能单向增加，
 达到上限后无法用鼠标调低；现在值行左右半区分别发出减小/增大动作，
-并在设置页说明。实际点击仍未人工验证。
+并在设置页说明。该行为已随 GUI 点击流程由用户人工验证。
 
 ## 4. 性能测试结果
 
@@ -146,9 +159,12 @@ CTest 注册项与实际测试程序一致：15 个无窗口测试 + `app.smoke`
 
 ## 5. 仍然存在的问题
 
-1. **GUI 人工交互未验证**：当前会话窗口不在可交互 Space，合成点击未
-   送达；逐按钮流程 — **NOT TESTED**。
-2. **跨平台未实机验证**：Windows/Linux 仅代码审查 — **NOT TESTED**。
+1. **GUI 键盘导航未单独验证**：鼠标点击流程已由用户人工验证 —
+   **PASS**；键盘导航 — **NOT TESTED**；缺少自动化 GUI 点击回归测试。
+2. **跨平台物理机未验证**：Linux、Windows、macOS 的 Debug 构建与无窗口
+   测试已在 GitHub Actions 托管 VM 上通过 — **PASS**；Linux Xvfb GUI
+   冒烟通过 — **PASS**；Windows/macOS GUI 与物理机桌面 —
+   **NOT TESTED**。
 3. **LeakSanitizer 不可用**：macOS ASan 不支持 — **NOT TESTED**；
    非 GUI 测试经 macOS `leaks` 为 0 leaks — **PASS**；GUI 进程仅见
    系统框架分配，不能据此宣称零泄漏。
@@ -156,8 +172,9 @@ CTest 注册项与实际测试程序一致：15 个无窗口测试 + `app.smoke`
    反复缩放 — **NOT TESTED**。
 5. **真实听感未验证**：音频初始化/加载/清理成功；音色与混合听感 —
    **NOT TESTED**。
-6. **raylib 联网获取未完成**：首次 FetchContent 在超时内未结束；离线
-   固定 6.2 源码树 PASS，联网下载路径 — **NOT TESTED**。
+6. **raylib 获取路径**：本机直接联网 FetchContent 在超时内未结束 —
+   **NOT TESTED**；离线固定 6.2 源码树 — **PASS**；GitHub Actions 中
+   联网 FetchContent 构建 — **PASS**。
 （`app.c` 约 1.5k 行是架构观察项，已在 §2 说明；存档只保存当前撤销
 分支是明确设计，不作为遗留缺陷。）
 
@@ -184,11 +201,16 @@ Phase 6 实际代码修复：终局统计时点、结果音效时机、AI 内部
 
 | 平台 | 构建 | 运行 | 测试 | 状态 |
 |---|---|---|---|---|
-| macOS arm64（Darwin 25.6.0） | PASS | PASS | 17/17（含 GUI） | PASS |
-| Windows x64 | 未执行 | 未执行 | 未执行 | NOT TESTED |
-| Linux x86_64 | 未执行 | 未执行 | 未执行 | NOT TESTED |
+| macOS arm64（Darwin 25.6.0，物理机） | PASS | PASS | 17/17（含 GUI） | PASS |
+| macOS arm64（GitHub Actions 托管 VM） | PASS | 无窗口测试进程 | 15/15 | PASS |
+| Windows x64（GitHub Actions 托管 VM） | PASS（MSVC） | 无窗口测试进程 | 15/15 | PASS |
+| Linux x86_64（GitHub Actions 托管 VM） | PASS | 无窗口测试进程 | 15/15 | PASS |
+| Linux Xvfb（GitHub Actions 托管 VM） | PASS | `app.smoke`、`app.autoplay`（软件 OpenGL） | 2/2 | PASS |
+| Windows/macOS 物理机 GUI | — | — | — | NOT TESTED |
 
-未生成 Windows/Linux 安装包，也不声称其可用。
+CI 运行 `39588002802` 于 2026-10-21 通过。GitHub 托管运行器是虚拟机；
+上表不把它们等同于物理机验证，也不据此声称 Windows/Linux 桌面 GUI 已
+在真实显示器上运行。未生成 Windows/Linux 安装包。
 
 ## 8. 最终交付物清单
 

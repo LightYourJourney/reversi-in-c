@@ -1,7 +1,9 @@
 # 测试与验证
 
 日期：2026-10-21。验证平台：macOS 26.6.2（Darwin 25.6.0，Apple M3 /
-arm64，Apple Clang 21，CMake 4.4.4）。
+arm64，Apple Clang 21，CMake 4.4.4）。跨平台构建与无窗口测试另在
+GitHub Actions 的 `ubuntu-latest`、`windows-latest`、`macos-latest`
+托管虚拟机（VM）上执行；Linux GUI 冒烟在 Xvfb + Mesa 软件渲染下执行。
 
 ## 1. 测试命令
 
@@ -45,8 +47,11 @@ ctest --test-dir build --output-on-failure
 - ASan+UBSan：15/15 通过，无 Sanitizer 报告；Sanitizer 二进制的
   `--frames 2` 退出码 0。
 - 全新 Debug 构建树（`build-phase6-fresh`）15/15 通过，确认不是旧产物；
-  raylib 使用固定 6.2 源码树的离线路径（本会话联网 FetchContent 超时，
-  联网下载路径 NOT TESTED）。
+  该树使用固定 6.2 源码树的离线路径（本会话直接联网 FetchContent 超时）。
+- GitHub Actions 运行 `39588002802`（2026-10-21）四个作业全部 `success`：
+  Linux、Windows（MSVC）、macOS 各 15/15；Linux Xvfb 下 `app.smoke` 与
+  `app.autoplay` 通过。CI 获取 raylib 走联网 FetchContent 路径 — PASS。
+  这些运行器是托管 VM，不是物理机；Windows/macOS GUI 未在 CI 中运行。
 
 ## 3. 需求到测试的映射
 
@@ -62,10 +67,14 @@ ctest --test-dir build --output-on-failure
 | 损坏文件 | `storage.save` 截断/校验和/版本/非法值 | PASS |
 | AI 合法性 | `ai.core` 每步复核 + 基准 `illegal=0` | PASS |
 | AI 自动对局 | `ai.core` 固定对局、`reversi_ai_bench` 27 个局面 | PASS |
-| GUI 关键操作 | 真实窗口/冒烟/自动对局已通过；人工点击流程未完成 | NOT TESTED |
+| GUI 鼠标点击 | 用户人工点击验证；真实窗口/冒烟/自动对局通过 | PASS |
+| GUI 键盘导航 | 未单独走查；无自动化点击/键盘回归测试 | NOT TESTED |
 | Debug/Release | 两套构建与测试 | PASS |
 | Sanitizer | ASan+UBSan 测试与 GUI 冒烟 | PASS |
-| 跨平台 | 仅 macOS arm64 实机 | Windows/Linux NOT TESTED |
+| 跨平台构建/测试 | GitHub Actions 托管 VM：Linux/Windows/macOS 均 15/15 | PASS |
+| Linux GUI（Xvfb） | `app.smoke`、`app.autoplay`（软件渲染） | PASS |
+| Windows/macOS GUI | 未运行 | NOT TESTED |
+| 跨平台物理机 | 仅 macOS arm64 为本机 | Windows/Linux 物理机 NOT TESTED |
 
 ## 4. GUI 与手工验证
 
@@ -80,15 +89,18 @@ ctest --test-dir build --output-on-failure
 - `REVERSI_AUTOPLAY=7 --frames 600`（Debug）：自动完成两局 PVP，
   600 帧约 11.23 秒，退出码 0；统计 `pvp_games` 分别从 0→1、1→2，
   终局自动存档被删除。用于验证实际游戏循环、结果页与持久化路径。
+- GUI 鼠标点击流程：用户已在可交互图形会话中实际点击验证。
+- Linux Xvfb（GitHub Actions）：`app.smoke` 与 `app.autoplay` 在软件
+  OpenGL 下通过。
 
 未完成：
 
-- 逐按钮人工点击与键盘操作（当前图形会话的窗口不在可交互 Space，
-  合成点击未送达应用）。
+- 键盘导航流程单独走查；没有自动化 GUI 点击/键盘回归测试。
 - 760×600 最小窗口逐页截图。
 - 真实听感验证。
 - 锁屏/休眠/多显示器场景。
 - 反复调整窗口大小的实机稳定性。
+- Windows/macOS 桌面 GUI、Windows/Linux 物理机。
 
 这些项目在报告中标记为 NOT TESTED，不视为通过。
 
@@ -145,8 +157,10 @@ ctest --test-dir build --output-on-failure
 
 ## 7. 已知测试缺口
 
-- 人工点击/键盘流程、窗口缩放、真实音频听感、Windows/Linux 实机、
-  多显示器/锁屏路径未验证。
+- 键盘导航、窗口缩放、真实音频听感、Windows/Linux 物理机、Windows/macOS
+  桌面 GUI、多显示器/锁屏路径未验证。
+- 鼠标点击已由用户人工验证，但没有自动化 GUI 点击回归测试；CI 仅在
+  Linux Xvfb 下运行冒烟与自动对局。
 - 终局统计只计一次由 `app.autoplay` 集成测试覆盖；结算后撤销与统计撤回
   仍有 `storage.stats` 单元测试和应用层代码审查，但没有自动化 GUI 点击测试。
 - 存档的“终局动画中断”路径通过提前记录统计与自动存档保留逻辑处理，
