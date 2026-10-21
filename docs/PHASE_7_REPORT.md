@@ -106,7 +106,7 @@ Windows 包中的 `reversi.exe --version` 在 CI 上实际执行成功；Windows
   - 三平台 Release 打包、`SHA256SUMS`、GitHub Release；
   - 标签必须等于 `VERSION` 对应的 `v` + 版本号。
 
-最终 Phase 7 CI（运行 `39597445741`，提交 `6117ab7`）结果：
+发布工程验证 CI（运行 `39597445741`，提交 `6117ab7`）结果：
 
 | 作业 | 结果 |
 |---|---|

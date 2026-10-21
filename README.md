@@ -164,6 +164,26 @@ GitHub Actions 运行器是虚拟机，不等同物理机验证。具体命令�
 `storage/settings` 均不依赖 UI；存档与统计只通过 `storage` 提供的路径与
 原子写入访问文件系统，规则层仍然只使用 C 标准库。
 
+## 技术架构
+
+代码按依赖方向分层，禁止反向依赖：
+
+```text
+main -> app -> { ui, ai, persistence, audio }
+                 |       |        |
+                 v       v        v
+               raylib   core <- storage/settings
+```
+
+- `core`：纯 ISO C11 规则、历史与对局状态机，不依赖图形库。
+- `ai`：Negamax/Alpha-Beta、置换表与后台 worker，只读取核心快照。
+- `persistence`：版本化存档、设置与统计，负责原子文件写入。
+- `ui`：raylib 绘制与输入，只通过 `const Match *` 读取对局。
+- `app`：页面路由、动画、AI 生命周期与持久化编排。
+
+`Match` 是唯一允许修改对局状态的入口；UI 不接触可写棋盘。详细模块职责与
+数据流见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
 ## 规则引擎与对局流程
 
 - `board`：8×8 棋盘、安全的格子读写、棋子统计、坐标与标准记谱互转。
