@@ -12,6 +12,19 @@
 #define BENCH_MAX_PLIES 200
 #define BENCH_SEED 0x5EED1234ULL
 
+#define REVERSI_BENCH_STRINGIFY_IMPL(value) #value
+#define REVERSI_BENCH_STRINGIFY(value) REVERSI_BENCH_STRINGIFY_IMPL(value)
+#if defined(_MSC_VER)
+#define REVERSI_BENCH_COMPILER "MSVC " \
+    REVERSI_BENCH_STRINGIFY(_MSC_FULL_VER)
+#elif defined(__clang__)
+#define REVERSI_BENCH_COMPILER "Clang " __clang_version__
+#elif defined(__GNUC__)
+#define REVERSI_BENCH_COMPILER "GCC " __VERSION__
+#else
+#define REVERSI_BENCH_COMPILER "unknown compiler"
+#endif
+
 typedef enum BenchKind {
     BENCH_RANDOM = 0,
     BENCH_GREEDY,
@@ -360,7 +373,7 @@ int main(int argc, char **argv)
     }
 
     printf("Reversi AI benchmark\n");
-    printf("compiler=%s\n", __VERSION__);
+    printf("compiler=%s\n", REVERSI_BENCH_COMPILER);
     printf("seed=0x%" PRIX64 " games=%d\n", (uint64_t)BENCH_SEED, games);
     printf("matchup configs: Easy depth 1; Medium depth 4 (10 s cap); "
            "Hard depth 6 (10 s cap)\n\n");
