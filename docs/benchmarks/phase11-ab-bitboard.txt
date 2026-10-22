@@ -1,0 +1,25 @@
+Reversi AI corpus benchmark
+micro iterations per position: 10000
+fixed search: Medium depth 6, no TT; practical: Hard default (500 ms budget)
+
+position           empty scalar-gen scalar-play     bb-gen    bb-play
+opening               60    23923.9      542.3        9.1        9.3
+midgame-40            40    49318.4       57.9      678.6        8.7
+corner-contest        52    26701.4     1058.4     1611.6       11.1
+mobility-<=3          59    43575.9     1489.5        5.3        9.6
+must-pass             12    11748.5        0.0     1345.7       -1.0
+terminal               0       30.1        0.0      345.5       -1.0
+endgame-12            12     9553.4     1911.7     1138.2      630.5
+endgame-8              8     2553.5      478.6      244.8       10.5
+endgame-4              4     7537.4       61.4       25.0       11.1
+
+search (ns/op above; times below)
+opening            fixed6=ok nodes=1820      ms=90.216 nps=20174 | hard=ok depth=7 nodes=10240     ms=542.3
+midgame-40         fixed6=ok nodes=39686     ms=3220.890 nps=12321 | hard=ok depth=6 nodes=9216      ms=522.8
+corner-contest     fixed6=ok nodes=15200     ms=1268.499 nps=11983 | hard=ok depth=6 nodes=11264     ms=586.2
+mobility-<=3       fixed6=ok nodes=1752      ms=229.137 nps=7646 | hard=ok depth=7 nodes=7154      ms=513.7
+must-pass          search=skip
+terminal           search=skip
+endgame-12         fixed6=ok nodes=4076      ms=37.800 nps=107831 | hard=no depth=0 nodes=0         ms=516.0
+endgame-8          fixed6=ok nodes=1899      ms=8.908 nps=213179 | hard=ok depth=8 nodes=868       ms=0.8
+endgame-4          fixed6=ok nodes=36        ms=0.035 nps=1028571 | hard=ok depth=4 nodes=12        ms=0.1

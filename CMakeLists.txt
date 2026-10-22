@@ -200,6 +200,7 @@ endif()
 add_library(reversi_ai STATIC
     src/ai/ai.c
     src/ai/ai_eval.c
+    src/ai/ai_endgame.c
     src/ai/ai_search.c
     ${REVERSI_AI_WORKER_SOURCE})
 target_include_directories(reversi_ai PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -476,6 +477,7 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     reversi_add_core_test(reversi_match_tests tests/test_match.c
         core.match)
     reversi_add_ai_test(reversi_ai_tests tests/test_ai.c ai.core)
+    reversi_add_ai_test(reversi_endgame_tests tests/test_endgame.c ai.endgame)
     reversi_add_ai_test(reversi_ai_worker_tests tests/test_ai_worker.c
         ai.worker)
     reversi_add_persistence_test(reversi_save_tests tests/test_save.c
@@ -503,6 +505,15 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(reversi_ai_bench PRIVATE
         reversi_ai reversi_warnings)
     set_target_properties(reversi_ai_bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+    add_executable(reversi_ai_corpus tests/bench_corpus.c)
+    target_include_directories(reversi_ai_corpus PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_ai_corpus PRIVATE
+        reversi_ai reversi_warnings)
+    set_target_properties(reversi_ai_corpus PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
     if(REVERSI_ENABLE_GUI_TESTS)

@@ -1,5 +1,6 @@
 #include "ai/ai_search.h"
 
+#include "ai/ai_endgame.h"
 #include "ai/ai_internal.h"
 #include "core/bitboard.h"
 #include "core/rules.h"
@@ -9,7 +10,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#else
 #include <time.h>
+#endif
 
 #define REVERSI_AI_CANCEL_CHECK_MASK 1023u
 #define REVERSI_AI_TT_SIZE (1u << 16)
@@ -32,6 +40,7 @@ typedef struct AiSearch {
     const AiConfig *config;
     AiStats stats;
     uint64_t start_ms;
+    int budget_ms;
     bool stopped;
     bool cancelled;
     bool timed_out;
@@ -43,14 +52,27 @@ typedef struct AiSearch {
 
 static uint64_t ai_now_ms(void)
 {
+#if defined(_WIN32)
+    return (uint64_t)GetTickCount64();
+#elif defined(__EMSCRIPTEN__)
+    return (uint64_t)emscripten_get_now();
+#elif defined(CLOCK_MONOTONIC)
     struct timespec ts;
-    if (timespec_get(&ts, TIME_UTC) != TIME_UTC) {
-        /* Zero only disables the wall-clock budget; the depth limit still
-           bounds the search, so this degrades instead of breaking. */
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         return 0;
     }
     return (uint64_t)ts.tv_sec * 1000u
         + (uint64_t)ts.tv_nsec / 1000000u;
+#else
+    struct timespec ts;
+    if (timespec_get(&ts, TIME_UTC) != TIME_UTC) {
+        /* Zero only disables the time budget; the depth limit still bounds
+           the search, so this degrades instead of breaking. */
+        return 0;
+    }
+    return (uint64_t)ts.tv_sec * 1000u
+        + (uint64_t)ts.tv_nsec / 1000000u;
+#endif
 }
 
 static uint64_t splitmix64(uint64_t *state)
@@ -113,7 +135,7 @@ static bool check_stop(AiSearch *search, bool force)
         return true;
     }
     if (ai_now_ms() - search->start_ms
-        >= (uint64_t)search->config->time_budget_ms) {
+        >= (uint64_t)search->budget_ms) {
         search->timed_out = true;
         search->stopped = true;
         return true;
@@ -427,6 +449,7 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     memset(&search, 0, sizeof(search));
     search.config = config;
     search.start_ms = ai_now_ms();
+    search.budget_ms = config->time_budget_ms;
     init_zobrist(&search);
     const uint64_t root_hash = state_hash(&search, state);
 
@@ -449,6 +472,36 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     const int black = board_count(&state->board, STONE_BLACK);
     const int white = board_count(&state->board, STONE_WHITE);
     const int empty = REVERSI_BOARD_CELL_COUNT - black - white;
+
+    if (config->difficulty == AI_DIFFICULTY_HARD && empty <= 12) {
+        AiConfig endgame_config = *config;
+        if (config->time_budget_ms > 1) {
+            /* Leave headroom for the regular search if the solve is cut. */
+            endgame_config.time_budget_ms =
+                config->time_budget_ms * 3 / 4;
+        }
+        Move endgame_move = {0, 0};
+        int endgame_score = 0;
+        AiStats endgame_stats;
+        AiEndgameStatus endgame_status = AI_ENDGAME_INCOMPLETE;
+        const bool solved = ai_endgame_solve(
+            state, &endgame_config, 12, &endgame_move, &endgame_score,
+            &endgame_stats, &endgame_status);
+        if (solved && endgame_status == AI_ENDGAME_EXACT) {
+            if (out_stats != NULL) {
+                *out_stats = endgame_stats;
+            }
+            free(search.tt);
+            *out_move = endgame_move;
+            return true;
+        }
+        const uint64_t elapsed = ai_now_ms() - search.start_ms;
+        const int remaining =
+            config->time_budget_ms - (int)elapsed;
+        search.budget_ms = remaining > 50 ? remaining : 50;
+        search.start_ms = ai_now_ms();
+    }
+
     if (config->difficulty == AI_DIFFICULTY_HARD && empty <= 12
         && max_depth < empty) {
         max_depth = empty;
