@@ -89,7 +89,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | GUI 键盘导航 | 未单独走查；无自动化点击/键盘回归测试 | NOT TESTED |
 | Debug/Release | 两套构建与测试 | PASS |
 | Sanitizer | ASan+UBSan 测试与 GUI 冒烟 | PASS |
-| 跨平台构建/测试 | GitHub Actions 托管 VM：Linux/Windows/macOS 均 15/15 | PASS |
+| 跨平台构建/测试 | GitHub Actions 托管 VM：Linux/Windows/macOS 均 15/15（v1.0.1）；v1.2.0 未推送 | PASS（v1.0.1）；v1.2.0 NOT TESTED |
 | Linux GUI（Xvfb） | `app.smoke`、`app.autoplay`（软件渲染） | PASS |
 | Windows/macOS GUI | 未运行 | NOT TESTED |
 | 跨平台物理机 | 仅 macOS arm64 为本机 | Windows/Linux 物理机 NOT TESTED |
@@ -133,12 +133,15 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 ./build-release/bin/reversi_ai_bench --games 3
 ```
 
-- 27 个基准局面：`illegal=0 failures=0 unfinished=0`，总耗时 8.92 s。
-- Hard 中局：depth 8，约 158,720 nodes，501 ms（预算 500 ms）。
-- Hard 开局：depth 10，约 63,487 nodes，258 ms。
-- Medium 中局：depth 4，约 832 nodes，3 ms。
+- 27 个基准局面：`illegal=0 failures=0 unfinished=0`，总耗时 9.51 s。
+- Hard 中局：depth 8，约 123,904 nodes，502 ms（预算 500 ms）。
+- Hard 开局：depth 10，约 63,487 nodes，461 ms。
+- Medium 中局：depth 4，约 832 nodes，4 ms。
 - Easy：depth 1，0–1 ms。
-- 10 组（90 个局面）压力运行峰值内存约 5.19 MB。
+- 同一次运行峰值 RSS 约 9.17 MiB（`/usr/bin/time -l`）；搜索 TT 与
+  残局求解器 TT 各约 2 MiB，是相对 v1.1.0 的主要增量。该值随分配器
+  复用波动（轻载复跑约 4.9 MiB），只作数量级参考。
+- 本轮机器有外部负载，绝对毫秒数不代表空载性能。
 
 ### 存档
 
@@ -221,10 +224,11 @@ Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。GUI 测试
 ./build-release/bin/reversi_ai_corpus
 ```
 
-`reversi_ai_corpus` 生成 9 个固定局面（开局、40 空中局、角点争夺、
-≤3 机动、必须 Pass、终局、12/8/4 空），测量标量/位板着法生成与落子，
-以及固定深度 6 和 Hard 500 ms 搜索。A/B 方法：把同一
-`tests/bench_corpus.c` 编译到基线提交的源码，同一时段交替运行；固定深度
+`reversi_ai_corpus` 生成 14 个固定局面（开局、40/30 空中局、角点争夺、
+≤3 机动、必须 Pass、终局、20/12/10/8/6/4/2 空），测量标量/位板着法生成
+与落子，以及固定深度 6 和 Hard 500 ms 搜索（含剪枝率、TT 命中与峰值
+RSS）。A/B 方法：把同一 `tests/bench_corpus.c` 编译到基线提交的源码，
+同一时段交替运行；固定深度
 节点数一致说明搜索树未变。原始输出在 `docs/benchmarks/`，结论见
 [PHASE_11_REPORT.md](PHASE_11_REPORT.md) §5。测量期间机器有外部负载，
 绝对毫秒数不代表空载性能。

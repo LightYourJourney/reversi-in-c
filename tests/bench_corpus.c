@@ -22,13 +22,31 @@
 #if defined(_WIN32)
 #include <windows.h>
 #else
+#include <sys/resource.h>
 #include <time.h>
 #endif
 
-#define CORPUS_SIZE 9
+#define CORPUS_SIZE 14
 #define MICRO_ITERATIONS 10000
 
 static volatile uint64_t g_sink;
+
+static long peak_rss_kb(void)
+{
+#if defined(_WIN32)
+    return -1;
+#else
+    struct rusage usage;
+    if (getrusage(RUSAGE_SELF, &usage) != 0) {
+        return -1;
+    }
+#if defined(__APPLE__)
+    return usage.ru_maxrss / 1024; /* macOS reports bytes */
+#else
+    return usage.ru_maxrss;        /* Linux reports KiB */
+#endif
+#endif
+}
 
 typedef struct CorpusEntry {
     const char *name;
@@ -251,14 +269,20 @@ static void measure_search(const CorpusEntry *entry)
         &entry->state, &practical, &move, &practical_stats);
     const uint64_t practical_ns = now_ns() - practical_start;
 
+    const double hard_cut = practical_stats.nodes > 0
+        ? (double)practical_stats.cutoffs * 100.0
+            / (double)practical_stats.nodes
+        : 0.0;
     printf("%-18s fixed6=%s nodes=%-9" PRIu64 " ms=%.3f nps=%.0f"
-           " | hard=%s depth=%d nodes=%-9" PRIu64 " ms=%.1f\n",
+           " | hard=%s depth=%d nodes=%-9" PRIu64 " ms=%.1f"
+           " cut=%.1f%% tt=%" PRIu64 "\n",
            entry->name, fixed_ok ? "ok" : "no", fixed_stats.nodes,
            (double)fixed_ns / 1e6,
            fixed_ns > 0 ? (double)fixed_stats.nodes * 1e9 / (double)fixed_ns
                         : 0.0,
            practical_ok ? "ok" : "no", practical_stats.depth,
-           practical_stats.nodes, (double)practical_ns / 1e6);
+           practical_stats.nodes, (double)practical_ns / 1e6,
+           hard_cut, practical_stats.tt_hits);
 }
 
 int main(void)
@@ -274,43 +298,55 @@ int main(void)
         memset(&corpus[1].state, 0, sizeof(corpus[1].state));
     }
 
-    corpus[2].name = "corner-contest";
-    if (!find_position(0x2222ULL, is_corner_contest, &corpus[2].state)) {
+    corpus[2].name = "midgame-30";
+    if (!play_to_empty(0x1212ULL, 30, &corpus[2].state)) {
         memset(&corpus[2].state, 0, sizeof(corpus[2].state));
     }
 
-    corpus[3].name = "mobility-<=3";
-    if (!find_position(0x3333ULL, is_mobility_limited, &corpus[3].state)) {
+    corpus[3].name = "corner-contest";
+    if (!find_position(0x2222ULL, is_corner_contest, &corpus[3].state)) {
         memset(&corpus[3].state, 0, sizeof(corpus[3].state));
     }
 
-    corpus[4].name = "must-pass";
-    if (find_position(0x4444ULL, is_pass_candidate, &corpus[4].state)) {
-        /* Hand the turn to the side with no legal move. */
-        corpus[4].state.current_player = stone_opponent(
-            corpus[4].state.current_player);
-    } else {
+    corpus[4].name = "mobility-<=3";
+    if (!find_position(0x3333ULL, is_mobility_limited, &corpus[4].state)) {
         memset(&corpus[4].state, 0, sizeof(corpus[4].state));
     }
 
-    corpus[5].name = "terminal";
-    if (!play_to_end(0x5555ULL, &corpus[5].state)) {
+    corpus[5].name = "must-pass";
+    if (find_position(0x4444ULL, is_pass_candidate, &corpus[5].state)) {
+        /* Hand the turn to the side with no legal move. */
+        corpus[5].state.current_player = stone_opponent(
+            corpus[5].state.current_player);
+    } else {
         memset(&corpus[5].state, 0, sizeof(corpus[5].state));
     }
 
-    corpus[6].name = "endgame-12";
-    if (!play_to_empty(0x6666ULL, 12, &corpus[6].state)) {
+    corpus[6].name = "terminal";
+    if (!play_to_end(0x5555ULL, &corpus[6].state)) {
         memset(&corpus[6].state, 0, sizeof(corpus[6].state));
     }
 
-    corpus[7].name = "endgame-8";
-    if (!play_to_empty(0x7777ULL, 8, &corpus[7].state)) {
-        memset(&corpus[7].state, 0, sizeof(corpus[7].state));
-    }
-
-    corpus[8].name = "endgame-4";
-    if (!play_to_empty(0x8888ULL, 4, &corpus[8].state)) {
-        memset(&corpus[8].state, 0, sizeof(corpus[8].state));
+    static const struct {
+        const char *name;
+        uint64_t seed;
+        int empties;
+    } endgames[] = {
+        {"endgame-20", 0x6060ULL, 20},
+        {"endgame-12", 0x6666ULL, 12},
+        {"endgame-10", 0x6A6AULL, 10},
+        {"endgame-8", 0x7777ULL, 8},
+        {"endgame-6", 0x7878ULL, 6},
+        {"endgame-4", 0x8888ULL, 4},
+        {"endgame-2", 0x8989ULL, 2}
+    };
+    for (size_t i = 0; i < sizeof(endgames) / sizeof(endgames[0]); ++i) {
+        CorpusEntry *entry = &corpus[7 + i];
+        entry->name = endgames[i].name;
+        if (!play_to_empty(endgames[i].seed, endgames[i].empties,
+                           &entry->state)) {
+            memset(&entry->state, 0, sizeof(entry->state));
+        }
     }
 
     printf("Reversi AI corpus benchmark\n");
@@ -346,5 +382,6 @@ int main(void)
     for (int i = 0; i < CORPUS_SIZE; ++i) {
         measure_search(&corpus[i]);
     }
+    printf("\npeak_rss_kb=%ld\n", peak_rss_kb());
     return 0;
 }

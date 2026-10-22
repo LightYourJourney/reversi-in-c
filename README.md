@@ -36,10 +36,10 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 17/17、Release 15/15、ASan+UBSan 15/15（无窗口） | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM：Debug/Release 15/15，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
-| Linux x86_64 | GitHub Actions 托管 VM：Debug/Release 15/15，Xvfb GUI 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
-| Web（Chrome） | Emscripten 6.0.13；浏览器套件 6/6 | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
+| macOS 11+ arm64 | 本机 Debug 17/17、Release 17/17、ASan+UBSan 17/17（无窗口） | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
+| Windows x64 | GitHub Actions 托管 VM（v1.0.1）：Debug/Release 15/15，发行包 `--version` 冒烟；v1.2.0 未推送 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM（v1.0.1）：Debug/Release 15/15，Xvfb GUI 与发行包验收；v1.2.0 未推送 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| Web（Chrome） | Emscripten 6.0.13；浏览器套件 9/9（v1.1.0），v1.2.0 复验 NOT TESTED | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
 SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
@@ -497,7 +497,7 @@ ctest --test-dir build --output-on-failure
 - `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
   存档槽位保存/加载/删除、帮助翻页与统计页返回。
 
-实际结果（2026-10-22，macOS arm64，v1.1.0 源码）：
+实际结果（2026-10-23，macOS arm64，v1.2.0 源码）：
 
 | 构建 | 测试结果 |
 |---|---|
@@ -507,7 +507,7 @@ ctest --test-dir build --output-on-failure
 | Debug + GUI | 本轮图形会话不可用，`app.smoke` / `app.autoplay` **NOT TESTED** |
 | 浏览器（Chrome） | v1.1.0 套件 9/9；v1.2.0 浏览器复验 **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（wasm 316 KB） |
-| GitHub Actions | v1.0.1 发布时运行 `39633821096` 9/9 通过；v1.1.0 尚未推送 |
+| GitHub Actions | v1.0.1 发布时运行 `39633821096` 9/9 通过；v1.1.0/v1.2.0 尚未推送 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
@@ -516,9 +516,9 @@ Easy 对 Random 13:1:6、对 Greedy 11:9。完整数据见
 [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
 
 Phase 11 的 AI 2.0 在同一语料、同一时段做了固定深度 6 的 A/B：两套引擎
-节点数完全相同，开局 284→90 ms、残局 8 空 45→9 ms、残局 12 空 184→38 ms；
-中局因评估仍为标量基本持平。Hard 500 ms 下开局 6→7 层、中局 5→6 层、
-残局 12 空由 7 层变为精确 12 层。数据与测量环境见
+节点数完全相同，开局 73.8→9.7 ms、中局 516→198 ms、残局 12 空
+72→8.6 ms。Hard 500 ms 下开局 7→10 层、中局 6→7 层、残局 12 空精确
+（281→22.6 ms）。数据与测量环境见
 [docs/PHASE_11_REPORT.md](docs/PHASE_11_REPORT.md)；引擎设计见
 [docs/AI_ENGINE.md](docs/AI_ENGINE.md)。
 

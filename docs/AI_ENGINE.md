@@ -76,8 +76,9 @@ while walk:
 - `uint64_t hash`（增量 Zobrist）
 
 `apply_search_move()` 是唯一的状态转换点：先按标量规则落子（保持评估
-语义），再用 Bitboard 落子并取得翻转位；两者不一致时该分支失败。差分
-测试保证两套规则对同一着法给出相同棋盘。
+语义），再用 Bitboard 落子并取得翻转位；Bitboard 落子失败时该分支失败。
+两套规则对同一着法给出相同棋盘由差分测试保证；运行时不逐节点比对，
+以避免热路径开销。
 
 节省的热点：
 
@@ -108,7 +109,12 @@ TT 语义未改：键含棋子与回合，条目含深度、EXACT/LOWER/UPPER �
 | `AI_ENDGAME_INCOMPLETE` | 超时或取消，分数不是精确值 |
 
 Hard 在剩余空格 ≤ 12 时先尝试求解；EXACT 直接返回，否则回退到常规
-迭代加深。
+迭代加深。求解被截断时，求解器的 nodes/cutoffs/tt_hits 会计入最终统计，
+耗时从本次搜索开始计算（不受预算重置影响）；若在首个子树完成前被取消，
+返回首个有序合法着法并标记 INCOMPLETE。
+
+`ai_search_choose_ex()` 同时禁用 TT 与残局求解器，作为测试用的独立
+plain alpha-beta 参照。
 
 ## 6. 计时
 
@@ -126,8 +132,9 @@ Hard 在剩余空格 ≤ 12 时先尝试求解；EXACT 直接返回，否则回�
 
 - `core.bitboard`：约 62 万次差分断言（200 局随机对局逐步比较合法着法、
   翻转位、结果棋盘、Pass/终局），外加边界/非法状态/对称用例。
-- `ai.endgame`：12/10/8/6/4/2 空位置与“全深度无 TT 搜索”分数一致；
-  取消后分类为 INCOMPLETE。
+- `ai.endgame`：12/10/8/6/4/2 空位置与**独立**的全深度 alpha-beta
+  （`ai_search_choose_ex` 已禁用求解器）分数一致；取消后分类为
+  INCOMPLETE。
 - `ai.core` / `ai.worker` / 全量桌面测试保持通过。
 - 固定深度 6 的 A/B 中两套引擎节点数完全相同，说明搜索树未因位板而改变。
 
@@ -138,3 +145,5 @@ Hard 在剩余空格 ≤ 12 时先尝试求解；EXACT 直接返回，否则回�
 - Hard 的 TT 仍是每次搜索 `calloc/free` 2 MiB，替换策略为直接覆盖。
 - 残局求解器与主搜索各自维护一份 Zobrist 表与 TT；后续可合并。
 - 未实现 PVS、Aspiration Window、Killer/History；这些需要单独测量后再决定。
+- 没有运行时可切换的标量后端；标量规则只作为测试 Oracle。
+- 残局求解器未实现奇偶排序与跨调用 TT 复用。

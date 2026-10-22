@@ -333,6 +333,12 @@ bool ai_endgame_solve(const GameState *state, const AiConfig *config,
                       int max_empties, Move *out_move, int *out_score,
                       AiStats *out_stats, AiEndgameStatus *out_status)
 {
+    if (out_stats != NULL) {
+        memset(out_stats, 0, sizeof(*out_stats));
+    }
+    if (out_status != NULL) {
+        *out_status = AI_ENDGAME_INCOMPLETE;
+    }
     if (state == NULL || config == NULL || out_move == NULL
         || max_empties < 0 || !ai_config_is_valid(config)) {
         return false;
@@ -397,6 +403,17 @@ bool ai_endgame_solve(const GameState *state, const AiConfig *config,
     }
 
     const bool complete = !search.stopped;
+    free(search.tt);
+
+    if (best == -REVERSI_AI_INF) {
+        if (complete) {
+            return false;
+        }
+        /* Cancelled before any root subtree finished: still hand back the
+           first ordered legal move, flagged INCOMPLETE by the caller. */
+        best_move = moves[0];
+        best = 0;
+    }
     if (out_stats != NULL) {
         *out_stats = search.stats;
         out_stats->depth = empties;
@@ -405,11 +422,6 @@ bool ai_endgame_solve(const GameState *state, const AiConfig *config,
             (int)(endgame_now_ms() - search.start_ms);
         out_stats->cancelled = search.cancelled;
         out_stats->timed_out = search.timed_out;
-    }
-    free(search.tt);
-
-    if (best == -REVERSI_AI_INF) {
-        return false;
     }
     *out_move = best_move;
     if (out_score != NULL) {

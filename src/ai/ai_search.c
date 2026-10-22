@@ -21,6 +21,7 @@
 
 #define REVERSI_AI_CANCEL_CHECK_MASK 1023u
 #define REVERSI_AI_TT_SIZE (1u << 16)
+#define REVERSI_AI_ENDGAME_MAX_EMPTIES 12
 
 typedef enum AiTtFlag {
     AI_TT_EXACT = 0,
@@ -40,6 +41,7 @@ typedef struct AiSearch {
     const AiConfig *config;
     AiStats stats;
     uint64_t start_ms;
+    uint64_t session_start_ms;
     int budget_ms;
     bool stopped;
     bool cancelled;
@@ -432,13 +434,15 @@ static void finish_stats(AiSearch *search, int completed_depth, int score,
     *out_stats = search->stats;
     out_stats->depth = completed_depth;
     out_stats->score = score;
-    out_stats->elapsed_ms = (int)(ai_now_ms() - search->start_ms);
+    out_stats->elapsed_ms =
+        (int)(ai_now_ms() - search->session_start_ms);
     out_stats->cancelled = search->cancelled;
     out_stats->timed_out = search->timed_out;
 }
 
 static bool search_choose(const GameState *state, const AiConfig *config,
-                          bool use_tt, Move *out_move, AiStats *out_stats)
+                          bool use_tt, bool use_endgame,
+                          Move *out_move, AiStats *out_stats)
 {
     if (state == NULL || config == NULL || out_move == NULL
         || !ai_config_is_valid(config)) {
@@ -449,6 +453,7 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     memset(&search, 0, sizeof(search));
     search.config = config;
     search.start_ms = ai_now_ms();
+    search.session_start_ms = search.start_ms;
     search.budget_ms = config->time_budget_ms;
     init_zobrist(&search);
     const uint64_t root_hash = state_hash(&search, state);
@@ -473,7 +478,8 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     const int white = board_count(&state->board, STONE_WHITE);
     const int empty = REVERSI_BOARD_CELL_COUNT - black - white;
 
-    if (config->difficulty == AI_DIFFICULTY_HARD && empty <= 12) {
+    if (use_endgame && config->difficulty == AI_DIFFICULTY_HARD
+        && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES) {
         AiConfig endgame_config = *config;
         if (config->time_budget_ms > 1) {
             /* Leave headroom for the regular search if the solve is cut. */
@@ -485,8 +491,8 @@ static bool search_choose(const GameState *state, const AiConfig *config,
         AiStats endgame_stats;
         AiEndgameStatus endgame_status = AI_ENDGAME_INCOMPLETE;
         const bool solved = ai_endgame_solve(
-            state, &endgame_config, 12, &endgame_move, &endgame_score,
-            &endgame_stats, &endgame_status);
+            state, &endgame_config, REVERSI_AI_ENDGAME_MAX_EMPTIES,
+            &endgame_move, &endgame_score, &endgame_stats, &endgame_status);
         if (solved && endgame_status == AI_ENDGAME_EXACT) {
             if (out_stats != NULL) {
                 *out_stats = endgame_stats;
@@ -495,15 +501,18 @@ static bool search_choose(const GameState *state, const AiConfig *config,
             *out_move = endgame_move;
             return true;
         }
-        const uint64_t elapsed = ai_now_ms() - search.start_ms;
+        search.stats.nodes += endgame_stats.nodes;
+        search.stats.cutoffs += endgame_stats.cutoffs;
+        search.stats.tt_hits += endgame_stats.tt_hits;
+        const uint64_t elapsed = ai_now_ms() - search.session_start_ms;
         const int remaining =
             config->time_budget_ms - (int)elapsed;
         search.budget_ms = remaining > 50 ? remaining : 50;
         search.start_ms = ai_now_ms();
     }
 
-    if (config->difficulty == AI_DIFFICULTY_HARD && empty <= 12
-        && max_depth < empty) {
+    if (config->difficulty == AI_DIFFICULTY_HARD
+        && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES && max_depth < empty) {
         max_depth = empty;
     }
 
@@ -552,13 +561,13 @@ static bool search_choose(const GameState *state, const AiConfig *config,
 bool ai_search_choose(const GameState *state, const AiConfig *config,
                       Move *out_move, AiStats *out_stats)
 {
-    return search_choose(state, config, true, out_move, out_stats);
+    return search_choose(state, config, true, true, out_move, out_stats);
 }
 
 bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
                          bool use_tt, Move *out_move, AiStats *out_stats)
 {
-    return search_choose(state, config, use_tt, out_move, out_stats);
+    return search_choose(state, config, use_tt, false, out_move, out_stats);
 }
 
 bool ai_easy_choose(const GameState *state, const AiConfig *config,

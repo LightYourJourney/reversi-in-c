@@ -1,3 +1,7 @@
+NOTE: this run predates the endgame-budget fix; the endgame-12 hard=no
+line is the regression fixed afterwards. phase11-ab-bitboard-final.txt is
+the authoritative run.
+
 Reversi AI corpus benchmark
 micro iterations per position: 10000
 fixed search: Medium depth 6, no TT; practical: Hard default (500 ms budget)

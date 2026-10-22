@@ -81,11 +81,13 @@ static void test_exact_against_full_depth(TestStats *stats)
             }
             const int empties = empty_count(&state);
 
+            /* ai_search_choose_ex() disables both the TT and the endgame
+               solver, so this is an independent full-depth alpha-beta. */
             AiConfig reference = ai_default_config(AI_DIFFICULTY_HARD, seed);
             reference.max_depth = empties;
             reference.time_budget_ms = 10000;
             Move ref_move = {0, 0};
-            AiStats ref_stats;
+            AiStats ref_stats = {0};
             const bool ref_ok = ai_search_choose_ex(
                 &state, &reference, false, &ref_move, &ref_stats);
             REVERSI_TEST_ASSERT(stats, ref_ok);
@@ -113,6 +115,12 @@ static void test_incomplete_classification(TestStats *stats)
     if (!position_with_empties(0xABCDEFULL, 12, &state)) {
         return;
     }
+    const int root_moves = rules_count_legal_moves(
+        &state.board, state.current_player);
+    REVERSI_TEST_ASSERT(stats, root_moves >= 2);
+    if (root_moves < 2) {
+        return;
+    }
     CancelAfter cancel = {1};
     AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, 7);
     config.time_budget_ms = 10000;
@@ -125,10 +133,9 @@ static void test_incomplete_classification(TestStats *stats)
     AiEndgameStatus status = AI_ENDGAME_EXACT;
     const bool solved = ai_endgame_solve(&state, &config, 12, &move, &score,
                                          &solve_stats, &status);
-    if (solved) {
-        REVERSI_TEST_ASSERT(stats, status == AI_ENDGAME_INCOMPLETE);
-        REVERSI_TEST_ASSERT(stats, move_is_legal(&state, move));
-    }
+    REVERSI_TEST_ASSERT(stats, solved);
+    REVERSI_TEST_ASSERT(stats, status == AI_ENDGAME_INCOMPLETE);
+    REVERSI_TEST_ASSERT(stats, move_is_legal(&state, move));
 }
 
 static void test_limits(TestStats *stats)

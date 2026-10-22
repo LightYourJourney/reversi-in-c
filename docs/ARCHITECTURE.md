@@ -55,7 +55,7 @@
 | History | `src/core/history.[ch]` | Phase 3 已实现 | 局面快照栈、撤销/重做游标、重做分支截断、跳过事件记录 | Game |
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4/11 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
-| Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、AI 配置类型 |
+| Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
 | UI | `src/ui/` | Phase 2/3/4/5 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构 |
 | App | `src/app/` | Phase 2/3/4/5 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时、AI 回合生命周期、存档与统计编排 | 所有下层模块 |
 | Storage | `src/storage/` | Phase 5 已实现 | 用户数据目录、原子文件读写、版本化存档、严格回放校验、统计持久化 | Game、History、Match、C 标准库、平台文件 API |
@@ -533,7 +533,8 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    结果）与 `Bitboard`（合法着法、落子、翻转位、增量哈希）。`Board` 仍然是
    唯一对外棋盘类型，存档、UI 与历史未改。
 2. **单一状态转换点**：`apply_search_move()` 先按标量规则落子，再用
-   Bitboard 落子；两者不一致时该分支失败。差分测试保证两套规则等价。
+   Bitboard 落子；Bitboard 落子失败时该分支失败。两套规则等价由差分测试
+   保证，运行时不逐节点比对。
 3. **增量 Zobrist**：落子异或落点、翻转位与回合键；Pass 只交换回合键。
    TT 的键/深度/边界语义未改。
 4. **残局求解器独立**：`ai_endgame` 全宽度搜索剩余空位，返回 EXACT 或

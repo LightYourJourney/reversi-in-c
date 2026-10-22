@@ -1,0 +1,40 @@
+Reversi AI benchmark
+compiler=Clang 21.0.0 (clang-2100.3.34.2)
+seed=0x5EED1234 games=3
+matchup configs: Easy depth 1; Medium depth 4 (10 s cap); Hard depth 6 (10 s cap)
+
+Easy     vs Random    games=3  W=1 D=0 L=2  illegal=0 failures=0 unfinished=0
+         nodes=1001 cutoffs=0 (0.0%) tt_hits=0 ai_moves=91 avg_ms=0.1 max_depth=1
+Medium   vs Random    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=93260 cutoffs=21353 (22.9%) tt_hits=0 ai_moves=94 avg_ms=3.1 max_depth=4
+Hard     vs Random    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=999612 cutoffs=312304 (31.2%) tt_hits=36001 ai_moves=96 avg_ms=18.9 max_depth=12
+Easy     vs Greedy    games=3  W=1 D=0 L=2  illegal=0 failures=0 unfinished=0
+         nodes=727 cutoffs=0 (0.0%) tt_hits=0 ai_moves=89 avg_ms=0.0 max_depth=1
+Medium   vs Greedy    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=82871 cutoffs=17007 (20.5%) tt_hits=0 ai_moves=91 avg_ms=2.7 max_depth=4
+Hard     vs Greedy    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=946343 cutoffs=281835 (29.8%) tt_hits=31417 ai_moves=92 avg_ms=19.1 max_depth=12
+Easy     vs Medium    games=3  W=0 D=0 L=3  illegal=0 failures=0 unfinished=0
+         nodes=73421 cutoffs=16876 (23.0%) tt_hits=0 ai_moves=180 avg_ms=1.1 max_depth=4
+Medium   vs Hard      games=3  W=0 D=0 L=3  illegal=0 failures=0 unfinished=0
+         nodes=567028 cutoffs=151020 (26.6%) tt_hits=15004 ai_moves=180 avg_ms=7.4 max_depth=12
+Easy     vs Hard      games=3  W=0 D=0 L=3  illegal=0 failures=0 unfinished=0
+         nodes=736423 cutoffs=199815 (27.1%) tt_hits=16479 ai_moves=180 avg_ms=11.9 max_depth=12
+
+[opening] current=Black empty=60
+  Easy   found=1 move=e6 depth=1 score=-81 nodes=4 cutoffs=0.0% tt_hits=0 time=0ms
+  Medium found=1 move=e6 depth=4 score=-12 nodes=167 cutoffs=23.4% tt_hits=0 time=0ms
+  Hard   found=1 move=e6 depth=10 score=24 nodes=63487 cutoffs=22.7% tt_hits=597 time=244ms
+
+[midgame] current=Black empty=40
+  Easy   found=1 move=c4 depth=1 score=-1060 nodes=5 cutoffs=0.0% tt_hits=0 time=0ms
+  Medium found=1 move=e3 depth=4 score=-1213 nodes=832 cutoffs=12.3% tt_hits=0 time=3ms
+  Hard   found=1 move=e3 depth=8 score=-1292 nodes=179200 cutoffs=19.3% tt_hits=2721 time=500ms
+
+[endgame (one move)] current=White empty=2
+  Easy   found=1 move=c8 depth=1 score=-529 nodes=1 cutoffs=0.0% tt_hits=0 time=0ms
+  Medium found=1 move=c8 depth=1 score=100013 nodes=1 cutoffs=0.0% tt_hits=0 time=0ms
+  Hard   found=1 move=c8 depth=2 score=100013 nodes=1 cutoffs=0.0% tt_hits=0 time=0ms
+
+TOTAL games=27 illegal=0 failures=0 unfinished=0

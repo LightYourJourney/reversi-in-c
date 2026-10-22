@@ -15,15 +15,15 @@ Homebrew Clang 23.1.3，CMake 4.4.4，Emscripten 6.0.13
 
 | 任务 | 交付 | 状态 |
 |---|---|---|
-| 1. 真实性能基线 | `docs/benchmarks/phase11-baseline.txt`；固定语料工具 `tests/bench_corpus.c` | PASS（测量环境有外部负载，见 §5） |
+| 1. 真实性能基线 | `docs/benchmarks/phase11-baseline.txt`；14 局面语料（含 20/10/8/6/4/2 空、两个中局）与剪枝率/TT/内存输出 | PASS（测量环境见 §5） |
 | 2. Bitboard 数据结构 | `src/core/bitboard.[ch]`，row-major 位映射、转换、计数、空位 | PASS |
 | 3. 位运算规则引擎 | 合法着法/翻转/落子/Pass/终局；标量 Oracle 差分 | PASS（约 62 万次断言） |
 | 4. 接入搜索 | 搜索内部使用 Bitboard；`Board`/`Match`/存档/UI 接口不变 | PASS |
 | 5. 搜索优化 | 位板着法生成、叶子零着法数组、增量 Zobrist | PASS；其余候选项未合并（见 §2.4） |
-| 6. 精确残局求解器 | `ai_endgame.[ch]`，EXACT/INCOMPLETE，Hard ≤12 空接入 | PASS |
+| 6. 精确残局求解器 | `ai_endgame.[ch]`，EXACT/INCOMPLETE，Hard ≤12 空接入；对称/奇偶排序与跨调用 TT 复用未做 | PASS（部分） |
 | 7. 跨平台计时 | Windows / Emscripten / POSIX 单调时钟 + C11 回退 | PASS |
-| 8. 性能对照 | 同语料、同时段 A/B；固定深度节点数一致 | PASS（绝对时间受外部负载影响） |
-| 9. 正确性与兼容 | 桌面三套 17/17；Web 目标构建；存档/UI 未改 | PASS；Web 浏览器套件 NOT TESTED |
+| 8. 性能对照 | 同语料、同时段 A/B；节点/NPS/深度/剪枝率/TT 命中/峰值内存/对局结果 | PASS（绝对时间受外部负载影响） |
+| 9. 正确性与兼容 | 桌面三套 17/17；Web 目标构建；存档/UI 未改 | PASS（桌面 + Web 构建）；Web 浏览器、Windows/Linux 未实测 |
 
 ## 2. 关键架构决策
 
@@ -65,7 +65,9 @@ Homebrew Clang 23.1.3，CMake 4.4.4，Emscripten 6.0.13
 数据与文档（6）：
 
 - `docs/benchmarks/phase11-baseline.txt`、`phase11-ab-baseline.txt`、
-  `phase11-ab-bitboard.txt`、`phase11-ab-bitboard-rerun.txt`。
+  `phase11-ab-bitboard.txt`（修正前，文件头已标注）、
+  `phase11-ab-baseline-final.txt`、`phase11-ab-bitboard-final.txt`
+  （最终权威数据）、`phase11-matchups.txt`。
 - `docs/AI_ENGINE.md`、`docs/PHASE_11_REPORT.md`（本报告）。
 - `VERSION`、`CHANGELOG.md`、`README.md`、`docs/ARCHITECTURE.md`、
   `docs/ROADMAP.md`、`docs/TESTING.md`。
@@ -79,9 +81,9 @@ Homebrew Clang 23.1.3，CMake 4.4.4，Emscripten 6.0.13
 |---|---|
 | Debug 无窗口 `ctest` | 17/17 PASS（含 `core.bitboard`、`ai.endgame`） |
 | Release 无窗口 | 17/17 PASS |
-| ASan+UBSan 无窗口 | 17/17 PASS，无报告（205.6 s） |
+| ASan+UBSan 无窗口 | 17/17 PASS，无报告（29.7 s） |
 | `core.bitboard` | 约 620,000 次差分断言 PASS |
-| `ai.endgame` | 12/10/8/6/4/2 空分数与全深度搜索一致；INCOMPLETE 分类 PASS |
+| `ai.endgame` | 12/10/8/6/4/2 空分数与**独立**全深度 alpha-beta 一致（`ai_search_choose_ex` 已禁用残局求解器）；INCOMPLETE 分类 PASS |
 | `ai.core` / `ai.worker` | PASS（TT/无 TT、取消、确定性、完整对局） |
 | Emscripten Release 构建 | PASS（主 wasm 316 KB，AI Worker wasm 54 KB） |
 | Web 浏览器套件 | **NOT TESTED**：本地预览服务被系统因内存压力停止，未在本阶段重启 |
@@ -99,24 +101,40 @@ Homebrew Clang 23.1.3，CMake 4.4.4，Emscripten 6.0.13
 
 | 局面 | 空位 | 节点 | 基线 ms | 新 ms | 倍数 |
 |---|---:|---:|---:|---:|---:|
-| opening | 60 | 1,820 | 284.5 | 90.2 | 3.2× |
-| midgame-40 | 40 | 39,686 | 3066.3 | 3220.9 | 1.0× |
-| corner-contest | 52 | 15,200 | 1978.7 | 1268.5 | 1.6× |
-| mobility-≤3 | 59 | 1,752 | 271.7 | 229.1 | 1.2× |
-| endgame-12 | 12 | 4,076 | 184.4 | 37.8 | 4.9× |
-| endgame-8 | 8 | 1,899 | 45.2 | 8.9 | 5.1× |
-| endgame-4 | 4 | 36 | 0.04 | 0.04 | — |
+| opening | 60 | 1,820 | 73.8 | 9.7 | 7.6× |
+| midgame-40 | 40 | 39,686 | 516.2 | 198.2 | 2.6× |
+| midgame-30 | 30 | 89,997 | 1564.7 | 575.9 | 2.7× |
+| corner-contest | 52 | 15,200 | 149.0 | 160.7 | 0.93× |
+| mobility-≤3 | 59 | 1,752 | 46.8 | 10.1 | 4.6× |
+| endgame-20 | 20 | 33,844 | 276.6 | 113.1 | 2.4× |
+| endgame-12 | 12 | 4,076 | 72.4 | 8.6 | 8.4× |
+| endgame-10 | 10 | 1,086 | 1.74 | 1.93 | 0.90× |
+| endgame-8 | 8 | 1,899 | 3.58 | 3.33 | 1.08× |
+| endgame-6 | 6 | 543 | 0.42 | 0.49 | 0.85× |
+| endgame-4 | 4 | 36 | 0.030 | 0.031 | — |
+| endgame-2 | 2 | 10 | 0.008 | 0.009 | — |
+
+corner-contest 与 10/6 空的小幅回退在噪声范围内（同一时段、节点相同）；
+没有证据表明是系统性问题，未据此撤销位板实现。
 
 Hard 默认 500 ms 预算下的实际深度：
 
 | 局面 | 基线深度 | 新深度 | 备注 |
 |---|---:|---:|---|
-| opening | 6 | 7 | |
-| midgame-40 | 5 | 6 | |
-| corner-contest | 5 | 6 | |
-| mobility-≤3 | 7 | 7 | |
-| endgame-12 | 7 | 12 | 新引擎使用精确求解器，99,753 节点 / 95.5 ms |
-| endgame-8 | 8 | 8 | 节点 2,451 → 868 |
+| opening | 7 | 10 | 397 ms |
+| midgame-40 | 6 | 7 | |
+| midgame-30 | 6 | 7 | |
+| corner-contest | 7 | 8 | |
+| mobility-≤3 | 9 | 10 | |
+| endgame-20 | 7 | 8 | |
+| endgame-12 | 12 | 12 | 281 → 22.6 ms，精确求解器 |
+| endgame-10 | 10 | 10 | 12.5 → 1.7 ms |
+| endgame-8 | 8 | 8 | 4.1 → 0.6 ms |
+
+峰值 RSS：基线 5,072 KB，新引擎 9,136 KB（Hard TT 2 MiB 与残局 TT 在其
+中）；同机轻载复跑为 5,056 KB，说明该指标受分配器复用影响，只作数量级
+参考。对局基准 27 局 `illegal=0 failures=0 unfinished=0`，结果与基线一致；
+原始输出见 `docs/benchmarks/phase11-matchups.txt`。
 
 微基准（10,000 次/局面，Release）：
 
@@ -162,7 +180,30 @@ git revert <final-commit> 5ab2d0d 7102239
 
 回滚不影响存档、UI 或 Web 容器；`Board`/`Match` 接口从未改变。
 
-## 8. 下一阶段依赖
+## 8. 审查修正（`/code-review max --fix`）
+
+| 审查发现 | 修正 | 复验 |
+|---|---|---|
+| 残局测试的“全深度参照”也调用求解器，等于自我比较 | `ai_search_choose_ex` 现在同时禁用 TT 与残局求解器；参照是独立的全深度 alpha-beta | `ai.endgame` PASS |
+| 取消分类测试在 `if (solved)` 内断言，false 会静默通过 | 要求根节点 ≥2 个合法着法并断言 `solved && INCOMPLETE`；求解器在首个子树被取消时返回首个有序合法着法 | `ai.endgame` PASS |
+| 求解器节点/耗时未计入返回统计 | 合并 nodes/cutoffs/tt_hits，并用 `session_start_ms` 计算总耗时 | 代码审查 + 基准 |
+| Task 1 语料缺少 20/10/6/2 空、第二个中局、剪枝率/TT/内存 | 语料扩到 14 个局面，输出 cut%/tt/峰值 RSS | 最终 A/B 已重跑 |
+| `apply_search_move` 文档声称会比较两套结果 | 文档改为“Bitboard 落子失败则分支失败；等价性由差分测试保证” | 文档同步 |
+| ARCHITECTURE 的 AI/Endgame 依赖表过期 | 补充 `GameState`、`AiStats`、平台时钟头与 Emscripten | 文档同步 |
+| Task 9 在矩阵中标记全 PASS，但浏览器/Windows/Linux 未测 | 矩阵改为“桌面 + Web 构建；其余未实测” | 文档同步 |
+
+保留的偏差（记录而非掩盖）：
+
+- **没有运行时可切换后端**：位板接入通过独立提交与基线提交的同语料
+  A/B 验证；标量规则仍是 Oracle。运行时应答开关会增加一份需要长期维护
+  的搜索路径。
+- **提交粒度**：`5ab2d0d` 同时包含位板着法、增量哈希与叶子优化；它们
+  在同一次回归中验证，但没有拆成三个提交。
+- **残局求解器**：未实现奇偶排序、跨调用 TT 复用；集成上限为 12 空。
+- **平台**：只在本机 macOS 与 Emscripten 构建上执行；Windows/Linux
+  物理机与 Web 浏览器套件未在 1.2.0 上复验。
+
+## 9. 下一阶段依赖
 
 - 优先实现位板评估（机动性、潜在机动性、前沿、稳定子），再复测中局。
 - 评估位板化后，再考虑 PVS / Aspiration / Killer / History，并用同一
