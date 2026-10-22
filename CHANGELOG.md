@@ -4,6 +4,46 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-23
+
+### Added
+
+- `core/bitboard`：64 位棋盘表示、8 方向合法着法与翻转、位运算落子、
+  计数、Pass 与终局判定；位移带边界掩码，popcount/ctz 有内建与可移植
+  两条路径。
+- `ai/ai_endgame`：全宽度残局求解器，区分 `AI_ENDGAME_EXACT` 与
+  `AI_ENDGAME_INCOMPLETE`；Hard 在剩余 ≤12 空时接入。
+- `tests/test_bitboard.c`（621,111 次断言）与 `tests/test_endgame.c`：
+  位板与标量规则的差分测试、残局分数对照、取消分类。
+- `tests/bench_corpus.c`：固定局面语料、标量/位板微基准与固定深度搜索；
+  可在基线提交上编译做同时段 A/B。
+- `docs/AI_ENGINE.md`、`docs/benchmarks/`。
+
+### Changed
+
+- 搜索内部改用 Bitboard 生成着法、落子并取得翻转位；`GameState` 仍用于
+  评估与对外结果，`Board`/`Match`/存档/UI 接口未变。
+- Zobrist 改为增量更新：落子时异或落点、翻转位与回合键，不再每节点重算
+  64 格。
+- 叶子节点不再构造着法数组。
+- 搜索计时改为平台单调时钟（Windows / Emscripten / POSIX），C11
+  `timespec_get` 仅作回退。
+
+### Fixed
+
+- 残局求解器耗尽预算后，回退搜索会被同一时钟立即判为超时并返回无着法；
+  现在求解器只用 75% 预算，回退至少保留 50 ms。
+
+### Verified
+
+- 桌面 Debug / Release / ASan+UBSan 无窗口各 17/17。
+- 固定深度 6 的 A/B 中两套引擎节点数完全相同；开局 284→90 ms、
+  残局 8 空 45→9 ms、残局 12 空 184→38 ms；中局因评估仍为标量基本持平。
+- Hard 500 ms 预算下，开局 6→7 层、中局 5→6 层、残局 12 空由 7 层变为
+  精确 12 层。
+- Emscripten Release 构建通过；Web 浏览器套件在 1.2.0 上 **NOT TESTED**
+  （预览服务因系统内存压力停止）。
+
 ## [1.1.0] - 2026-10-22
 
 ### Added

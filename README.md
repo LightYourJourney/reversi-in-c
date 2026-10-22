@@ -2,7 +2,7 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **源码版本：1.1.0（WebAssembly 移植，尚未发布）。最新发行版为
+> **源码版本：1.2.0（AI 引擎 2.0，尚未发布）。最新发行版为
 > [v1.0.1](https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.1)。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
@@ -23,6 +23,7 @@
 
 - 完整 Reversi 规则：八方向翻转、自动 Pass、终局与胜负/平局。
 - 本地双人；人机执黑/执白；Easy / Medium / Hard 三档 AI。
+- Bitboard 着法生成、增量 Zobrist；Hard 在 ≤12 空时使用精确残局求解器。
 - 后台 AI 搜索、取消与快照隔离，思考期间界面保持响应。
 - 撤销/重做、暂停、重开、历史、帮助、统计与结算页。
 - 自动存档、3 个手动存档槽、严格校验与原子写入。
@@ -500,11 +501,12 @@ ctest --test-dir build --output-on-failure
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug（无窗口） | 15/15 通过 |
-| Release（无窗口） | 15/15 通过 |
-| ASan+UBSan（无窗口） | 15/15 通过，无 Sanitizer 报告 |
+| Debug（无窗口） | 17/17 通过 |
+| Release（无窗口） | 17/17 通过 |
+| ASan+UBSan（无窗口） | 17/17 通过，无 Sanitizer 报告 |
 | Debug + GUI | 本轮图形会话不可用，`app.smoke` / `app.autoplay` **NOT TESTED** |
-| 浏览器（Chrome） | 套件 9/9：冒烟、AI 三档、触摸、取消、存档恢复、页面关闭保存、五种视口、完整对局 |
+| 浏览器（Chrome） | v1.1.0 套件 9/9；v1.2.0 浏览器复验 **NOT TESTED** |
+| Web 构建 | Emscripten 6.0.13 编译通过（wasm 316 KB） |
 | GitHub Actions | v1.0.1 发布时运行 `39633821096` 9/9 通过；v1.1.0 尚未推送 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
@@ -512,6 +514,13 @@ AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局
 对 Medium 20:0、对 Easy 17:3；Medium 对 Easy 20:0 且对 Random 17:2:1；
 Easy 对 Random 13:1:6、对 Greedy 11:9。完整数据见
 [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
+
+Phase 11 的 AI 2.0 在同一语料、同一时段做了固定深度 6 的 A/B：两套引擎
+节点数完全相同，开局 284→90 ms、残局 8 空 45→9 ms、残局 12 空 184→38 ms；
+中局因评估仍为标量基本持平。Hard 500 ms 下开局 6→7 层、中局 5→6 层、
+残局 12 空由 7 层变为精确 12 层。数据与测量环境见
+[docs/PHASE_11_REPORT.md](docs/PHASE_11_REPORT.md)；引擎设计见
+[docs/AI_ENGINE.md](docs/AI_ENGINE.md)。
 
 GUI 冒烟测试默认不注册（需要可用的图形会话）。启用方式：
 

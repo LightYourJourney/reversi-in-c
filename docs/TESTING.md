@@ -14,8 +14,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 17 个测试（Debug）：15 个
-无窗口测试、`app.smoke` 与 `app.autoplay`。不开启时注册 15 个。CTest 名称、
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 19 个测试（Debug）：17 个
+无窗口测试、`app.smoke` 与 `app.autoplay`。不开启时注册 17 个。CTest 名称、
 可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
@@ -36,12 +36,14 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | CTest 名称 | 可执行文件 | 断言数 | 覆盖重点 | 结果 |
 |---|---|---:|---|---|
 | core.board | reversi_tests | 623 | 棋盘初始化、边界、记谱、安全访问 | PASS |
+| core.bitboard | reversi_bitboard_tests | 621,111 | 位映射/往返、边界位移、与标量规则的合法着法/翻转/棋盘差分、对称、非法状态 | PASS |
 | core.rules | reversi_rules_tests | 227 | 开局、八方向、多方向/多子翻转、非法落子 | PASS |
 | core.game | reversi_game_tests | 115 | 合法/非法落子、自动 Pass、主动 Pass 限制、终局 | PASS |
 | core.random | reversi_random_tests | 557,924 | 500 局随机对局 + 独立合法性 oracle、不变量 | PASS |
 | core.history | reversi_history_tests | 124 | 快照、撤销/重做、分支截断、Pass/终局 | PASS |
 | core.match | reversi_match_tests | 980 | 状态机、暂停、重开、AI 回合、撤销/重做、恢复 | PASS |
 | ai.core | reversi_ai_tests | 2,977 | 评估、搜索合法性、TT 一致性、取消、确定性、自动对局 | PASS |
+| ai.endgame | reversi_endgame_tests | 63 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
 | storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |
@@ -53,11 +55,11 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 
 实际运行结果：
 
-- Debug：15/15 无窗口测试通过。
-- Debug + GUI：17/17 通过；`app.smoke` 打开窗口、加载字体与音频、渲染两帧
-  并正常关闭；`app.autoplay` 完成一局并核对统计 1 次、无终局自动存档。
-- Release：15/15 通过；Release 二进制的 `--frames 2` 实际退出码 0。
-- ASan+UBSan：审查后无 GUI 测试 15/15 通过，无 Sanitizer 报告；此前
+- Debug：17/17 无窗口测试通过（v1.2.0）。
+- Debug + GUI：v1.1.0 为 19/19；v1.2.0 本轮图形会话不可用，
+  `app.smoke` / `app.autoplay` **NOT TESTED**。
+- Release：17/17 通过（v1.2.0）。
+- ASan+UBSan：v1.2.0 无窗口 17/17 通过，无 Sanitizer 报告；此前
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
 - 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
   并通过 `scripts/verify-package.sh` 独立启动验收。
@@ -211,3 +213,18 @@ Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。GUI 测试
   仍有 `storage.stats` 单元测试和应用层代码审查，但没有自动化 GUI 点击测试。
 - 存档的“终局动画中断”路径通过提前记录统计与自动存档保留逻辑处理，
   未做崩溃注入/断电测试。
+
+## 9. AI 引擎基准（Phase 11）
+
+```bash
+./build-release/bin/reversi_ai_bench --games 3
+./build-release/bin/reversi_ai_corpus
+```
+
+`reversi_ai_corpus` 生成 9 个固定局面（开局、40 空中局、角点争夺、
+≤3 机动、必须 Pass、终局、12/8/4 空），测量标量/位板着法生成与落子，
+以及固定深度 6 和 Hard 500 ms 搜索。A/B 方法：把同一
+`tests/bench_corpus.c` 编译到基线提交的源码，同一时段交替运行；固定深度
+节点数一致说明搜索树未变。原始输出在 `docs/benchmarks/`，结论见
+[PHASE_11_REPORT.md](PHASE_11_REPORT.md) §5。测量期间机器有外部负载，
+绝对毫秒数不代表空载性能。

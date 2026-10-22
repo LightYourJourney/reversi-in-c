@@ -302,6 +302,35 @@ Windows 图标的资源编译未在本机执行（无 MSVC），为 **NOT TESTED
 Safari/Firefox 与真实移动设备未验证；`localStorage` 可能被清理；本阶段
 未推送、未发布、未公开部署。详见 [PHASE_10_REPORT.md](PHASE_10_REPORT.md)。
 
+## Phase 11 — AI 引擎 2.0（已完成，2026-10-23）
+
+目标：在保持规则、存档、UI 与 Web 行为不变的前提下，引入 Bitboard、
+搜索热点优化与可分类的精确残局求解。版本标记 `1.2.0`（未发布）。
+
+交付内容：
+
+- `core/bitboard`：row-major 位映射、八方向合法着法/翻转、位运算落子、
+  计数、Pass/终局；位移带边界掩码，popcount/ctz 有内建与可移植回退。
+- 搜索接入：合法着法、落子与翻转位使用 Bitboard；Zobrist 改为增量；
+  叶子不再构造着法数组。
+- `ai/ai_endgame`：全宽度残局求解器，区分 EXACT / INCOMPLETE；Hard 在
+  ≤12 空时接入，并为回退搜索保留预算。
+- 平台单调时钟（Windows / Emscripten / POSIX，C11 回退）。
+- `tests/test_bitboard.c`（621,111 次差分断言）、`tests/test_endgame.c`、
+  `tests/bench_corpus.c`、`docs/AI_ENGINE.md` 与基准数据。
+
+验证（本机 macOS arm64）：
+
+- 桌面 Debug / Release / ASan+UBSan 无窗口各 17/17。
+- 固定深度 6 的 A/B：两套引擎节点数相同；开局 284→90 ms、残局 8 空
+  45→9 ms、残局 12 空 184→38 ms；中局基本持平（评估仍为标量）。
+- Hard 500 ms：开局 6→7 层、中局 5→6 层、残局 12 空精确 12 层。
+- Emscripten Release 构建通过（wasm 316 KB）。
+
+已知限制：中局评估仍是标量，是下一步热点；TT 生命周期与两份
+Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
+[PHASE_11_REPORT.md](PHASE_11_REPORT.md)。
+
 ## 非目标（当前）
 
 - 在线对战、账号系统、网络协议
