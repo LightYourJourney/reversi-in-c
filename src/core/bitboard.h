@@ -32,6 +32,9 @@ bool bitboard_to_board(const Bitboard *bb, Board *out);
 /* Portable popcount; uses the compiler builtin when one is detected. */
 int bitboard_popcount(uint64_t bits);
 
+/* Lowest set bit index, or -1 for zero. Uses a builtin when available. */
+int bitboard_next_index(uint64_t bits);
+
 uint64_t bitboard_occupied(const Bitboard *bb);
 uint64_t bitboard_empty(const Bitboard *bb);
 uint64_t bitboard_player(const Bitboard *bb, Stone player);

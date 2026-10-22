@@ -6,6 +6,9 @@
 #if __has_builtin(__builtin_popcountll)
 #define REVERSI_BITBOARD_USE_BUILTIN 1
 #endif
+#if __has_builtin(__builtin_ctzll)
+#define REVERSI_BITBOARD_USE_CTZ 1
+#endif
 #endif
 
 static uint64_t shift_east(uint64_t x)
@@ -163,6 +166,23 @@ int bitboard_popcount(uint64_t bits)
         + ((bits >> 2) & 0x3333333333333333ULL);
     bits = (bits + (bits >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
     return (int)((bits * 0x0101010101010101ULL) >> 56);
+#endif
+}
+
+int bitboard_next_index(uint64_t bits)
+{
+    if (bits == 0) {
+        return -1;
+    }
+#if defined(REVERSI_BITBOARD_USE_CTZ)
+    return __builtin_ctzll(bits);
+#else
+    int index = 0;
+    while ((bits & 1ULL) == 0) {
+        bits >>= 1;
+        ++index;
+    }
+    return index;
 #endif
 }
 
