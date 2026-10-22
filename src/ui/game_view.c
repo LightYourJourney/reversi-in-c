@@ -57,9 +57,10 @@ static GameLayout game_layout(void)
         return layout;
     }
 
-    const float margin = width < 520.0f ? 12.0f : REVERSI_UI_SPACE_LG;
+    const bool narrow_actions = width < REVERSI_UI_NARROW_ACTION_WIDTH;
+    const float margin = narrow_actions ? 12.0f : REVERSI_UI_SPACE_LG;
     const float top_height = 74.0f;
-    const float bottom_height = width < 520.0f ? 108.0f : 84.0f;
+    const float bottom_height = narrow_actions ? 108.0f : 84.0f;
     const float area_top = margin + top_height + 12.0f;
     const float area_bottom = height - margin - bottom_height - 12.0f;
     const float available_width = width - margin * 2.0f;

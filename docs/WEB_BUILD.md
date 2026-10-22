@@ -14,6 +14,9 @@
 | Node.js | 20+，仅浏览器测试需要 |
 | Chrome | 浏览器测试使用系统安装的 Chrome |
 
+`scripts/build-web.sh` 会校验 `emcc --version` 必须包含 **6.0.13**；需要
+使用其他版本时设置 `REVERSI_WEB_ALLOW_ANY_EMSDK=1`。
+
 安装 Emscripten（一次性）：
 
 ```bash
@@ -101,10 +104,15 @@ node tests/web/run-tests.js
 | `gameplay` | 真实鼠标落子、Hard AI 在 Worker 中搜索并完成 |
 | `persistence` | 自动存档写入、刷新、继续游戏恢复 |
 | `responsive` | 1920×1080、1366×768、768×1024、390×844、360×640 |
+| `difficulties` | Easy / Medium / Hard 各完成一次 AI 回应 |
+| `mobile-touch` | 390×844 触摸落子并写入自动存档 |
+| `pagehide` | `pagehide` 触发最终持久化 |
 | `cancel` | 搜索中取消、Worker 被终止、主循环不阻塞 |
 | `autoplay` | 完整对局到终局（需要 Debug 构建） |
 
 `--case <name>` 可只跑一项。截图输出到 `tests/web/screenshots/`（已忽略）。
+默认任何 SKIP 都会使套件失败；设置 `REVERSI_WEB_ALLOW_SKIP=1` 才接受
+不完整的运行。
 
 ## 5. 部署
 

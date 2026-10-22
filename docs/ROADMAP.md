@@ -293,7 +293,8 @@ Windows 图标的资源编译未在本机执行（无 MSVC），为 **NOT TESTED
 验证（本机 macOS arm64）：
 
 - 桌面 Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。
-- 浏览器套件 6/6 通过；完整对局 4.3 s；五种视口无页面滚动。
+- 浏览器套件 9/9 通过（含 Easy/Medium/Hard、触摸、`pagehide` 保存）；
+  完整对局数秒内完成；五种视口无页面滚动。
 - Release WASM 309 KB + Worker WASM 49 KB + 预加载资源 818 KB；
   堆约 16.2 MiB；AI 搜索期间约 29 FPS（SwiftShader 软件渲染）。
 

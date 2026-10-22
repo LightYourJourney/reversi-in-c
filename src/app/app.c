@@ -417,9 +417,15 @@ static bool app_start_ai(App *app)
         return true;
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Never run a blocking search on the browser main thread. */
+    app_notice(app, "Computer search unavailable; played a legal move.");
+    return app_apply_first_legal(app);
+#else
     Move move = {0, 0};
     const bool found = ai_choose_move(&match->state, &config, &move, NULL);
     return app_finish_ai_result(app, found, move);
+#endif
 }
 
 static bool app_poll_ai(App *app)
@@ -428,14 +434,20 @@ static bool app_poll_ai(App *app)
     if (match->phase != MATCH_PHASE_AI_THINKING) {
         return false;
     }
-    if (app->ai_worker != NULL
-        && ai_worker_status(app->ai_worker) == AI_WORKER_RUNNING) {
+    const AiWorkerStatus status = app->ai_worker != NULL
+        ? ai_worker_status(app->ai_worker) : AI_WORKER_IDLE;
+    if (status == AI_WORKER_RUNNING) {
         return false;
     }
 
     Move move = {0, 0};
     const bool found = app->ai_worker != NULL
         && ai_worker_take(app->ai_worker, &move, NULL);
+#ifdef __EMSCRIPTEN__
+    if (status == AI_WORKER_FAILED) {
+        app_notice(app, "Computer search failed; played a legal move.");
+    }
+#endif
     (void)app_finish_ai_result(app, found, move);
     return true;
 }
@@ -1532,7 +1544,7 @@ static bool app_boot(AppRun *run, int max_frames)
     return true;
 }
 
-static void app_frame(AppRun *run)
+static void app_run_update(AppRun *run)
 {
     App *app = &run->app;
     float dt = GetFrameTime();
@@ -1543,11 +1555,14 @@ static void app_frame(AppRun *run)
     UiInput input = read_input();
     input.reduce_motion = !app->settings.animations;
     app_update(app, &input, dt);
+}
 
+static void app_run_render(AppRun *run)
+{
     BeginDrawing();
     ui_draw_background();
-    app_draw(app);
-    app_draw_transition(app);
+    app_draw(&run->app);
+    app_draw_transition(&run->app);
     EndDrawing();
 
 #ifndef NDEBUG
@@ -1564,7 +1579,13 @@ static void app_frame(AppRun *run)
     ++run->rendered_frames;
 }
 
-static void app_release(AppRun *run)
+static void app_frame(AppRun *run)
+{
+    app_run_update(run);
+    app_run_render(run);
+}
+
+static void app_shutdown(AppRun *run)
 {
     if (!run->active) {
         return;
@@ -1606,9 +1627,11 @@ int reversi_web_game_over(void);
 int reversi_web_result(void);
 int reversi_web_screen_index(void);
 int reversi_web_ai_active(void);
+int reversi_web_match_mode(void);
 void reversi_web_cancel_ai_test(void);
 int reversi_web_heap_bytes(void);
 void reversi_web_resize(int width, int height);
+void reversi_web_persist(void);
 
 static AppRun g_web_run;
 
@@ -1617,7 +1640,7 @@ static void app_web_main_loop(void *arg)
     AppRun *run = arg;
     if (app_should_stop(run)) {
         emscripten_cancel_main_loop();
-        app_release(run);
+        app_shutdown(run);
         return;
     }
     app_frame(run);
@@ -1691,6 +1714,12 @@ int reversi_web_ai_active(void)
 }
 
 EMSCRIPTEN_KEEPALIVE
+int reversi_web_match_mode(void)
+{
+    return (int)g_web_run.app.match.config.mode;
+}
+
+EMSCRIPTEN_KEEPALIVE
 void reversi_web_cancel_ai_test(void)
 {
     app_cancel_ai(&g_web_run.app);
@@ -1705,13 +1734,21 @@ int reversi_web_heap_bytes(void)
 EMSCRIPTEN_KEEPALIVE
 void reversi_web_resize(int width, int height)
 {
-    if (width < 320) {
-        width = 320;
-    }
-    if (height < 480) {
-        height = 480;
-    }
     SetWindowSize(width, height);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void reversi_web_persist(void)
+{
+    if (!g_web_run.active) {
+        return;
+    }
+    App *app = &g_web_run.app;
+    if (app->screen == APP_SCREEN_GAME) {
+        app_autosave(app);
+    }
+    (void)settings_save(&app->settings);
+    (void)stats_save(&app->stats);
 }
 
 int app_run(int max_frames)
@@ -1732,7 +1769,7 @@ int app_run(int max_frames)
     while (!WindowShouldClose() && !app_should_stop(&run)) {
         app_frame(&run);
     }
-    app_release(&run);
+    app_shutdown(&run);
     return 0;
 }
 #endif

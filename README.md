@@ -504,7 +504,7 @@ ctest --test-dir build --output-on-failure
 | Release（无窗口） | 15/15 通过 |
 | ASan+UBSan（无窗口） | 15/15 通过，无 Sanitizer 报告 |
 | Debug + GUI | 本轮图形会话不可用，`app.smoke` / `app.autoplay` **NOT TESTED** |
-| 浏览器（Chrome） | 套件 6/6：冒烟、PvE Hard、取消、存档恢复、五种视口、完整对局 |
+| 浏览器（Chrome） | 套件 9/9：冒烟、AI 三档、触摸、取消、存档恢复、页面关闭保存、五种视口、完整对局 |
 | GitHub Actions | v1.0.1 发布时运行 `39633821096` 9/9 通过；v1.1.0 尚未推送 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中

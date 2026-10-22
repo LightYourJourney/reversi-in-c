@@ -520,5 +520,7 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 5. **诊断接口**：Web 构建导出 `reversi_web_*` 诊断函数（帧数、屏幕/鼠标、
    游戏状态、取消、堆大小），供 Playwright 测试使用；桌面构建不编译这些
    函数。
-6. **平台边界**：Web 专属代码只在 `src/platform/web/`、`web/` 与
-   `tests/web/`；`core/`、`ai/`、`storage/` 的序列化层未分叉。
+6. **平台边界**：存储与 AI Worker 适配在 `src/platform/web/`；浏览器主循环、
+   尺寸与诊断导出留在 `app.c` 的 `__EMSCRIPTEN__` 条件块中，因为它们直接
+   读写 `App` 内部状态；页面与测试代码在 `web/`、`tests/web/`。
+   `core/`、`ai/`、`storage/` 的序列化层未分叉。

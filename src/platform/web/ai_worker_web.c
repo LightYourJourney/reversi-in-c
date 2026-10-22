@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REVERSI_WEB_BOARD_CHARS 64
 #define REVERSI_WEB_REQUEST_CAP 192
 
 struct AiWorker {
@@ -129,14 +128,14 @@ bool ai_worker_start(AiWorker *worker, const GameState *state,
         return false;
     }
 
-    char board[REVERSI_WEB_BOARD_CHARS + 1];
+    char board[REVERSI_BOARD_CELL_COUNT + 1];
     for (int row = 0; row < REVERSI_BOARD_SIZE; ++row) {
         for (int col = 0; col < REVERSI_BOARD_SIZE; ++col) {
             board[row * REVERSI_BOARD_SIZE + col] =
                 (char)('0' + (int)state->board.cells[row][col]);
         }
     }
-    board[REVERSI_WEB_BOARD_CHARS] = '\0';
+    board[REVERSI_BOARD_CELL_COUNT] = '\0';
 
     char request[REVERSI_WEB_REQUEST_CAP];
     const int written = snprintf(

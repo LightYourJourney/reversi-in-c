@@ -12,8 +12,9 @@
  */
 const fs = require('fs');
 const {
-  VIEWPORTS, launch, openPage, geometry, press, startPveHard,
-  playOpeningMove, waitForAiActive, assert
+  VIEWPORTS, launch, openPage, geometry, toScreen, press, startLocal,
+  startLocalMobile, startPve, startPveHard, playOpeningMove,
+  waitForAiActive, waitForFrames, waitForMoves, autosaveMoves, assert
 } = require('./lib');
 const SCREENSHOT_DIR = 'tests/web/screenshots';
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -88,10 +89,8 @@ async function withPage(browser, fn, options) {
     await runCase('persistence', async () => {
       await withPage(browser, async ({ page, errors }) => {
         let geo = await geometry(page);
-        await press(page, geo, 640, 261); // New game
-        await press(page, geo, 640, 501); // Start game (local default)
-        await page.waitForTimeout(1200);
-        await press(page, geo, 616, 379); // legal d3
+        await startLocal(page, geo);
+        await playOpeningMove(page, geo);
         const keys = await page.evaluate(() => {
           const out = [];
           for (let i = 0; i < localStorage.length; i += 1) out.push(localStorage.key(i));
@@ -147,6 +146,79 @@ async function withPage(browser, fn, options) {
           await session.context.close();
         }
       }
+    });
+
+    await runCase('difficulties', async () => {
+      for (const level of ['easy', 'medium', 'hard']) {
+        const session = await openPage(browser, URL, {});
+        try {
+          const geo = await geometry(session.page);
+          await startPve(session.page, geo, level);
+          await playOpeningMove(session.page, geo);
+          const replied = await waitForMoves(session.page, 2, 20000);
+          const moves = await autosaveMoves(session.page);
+          assert(replied,
+                 `${level}: expected the AI reply to be recorded, got ${moves} moves`);
+          assert(session.errors.length === 0,
+                 `${level}: ${session.errors.join(' | ')}`);
+        } finally {
+          await session.context.close();
+        }
+      }
+    });
+
+    await runCase('mobile-touch', async () => {
+      const session = await openPage(browser, URL, {
+        context: {
+          viewport: { width: 390, height: 844 },
+          deviceScaleFactor: 3,
+          isMobile: true,
+          hasTouch: true
+        }
+      });
+      try {
+        const { page, context, errors } = session;
+        const geo = await geometry(page);
+        await startLocalMobile(page, geo);
+        const before = await autosaveMoves(page);
+        const client = await context.newCDPSession(page);
+        const point = toScreen(geo, 159, 372); // legal d3 at 390x653
+        let after = before;
+        for (let attempt = 0; attempt < 3 && after <= before; attempt += 1) {
+          await client.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x: point.x, y: point.y, radiusX: 4, radiusY: 4,
+                            force: 1, id: 1 }]
+          });
+          await waitForFrames(page, 2);
+          await page.waitForTimeout(150);
+          await client.send('Input.dispatchTouchEvent', {
+            type: 'touchEnd', touchPoints: []
+          });
+          await waitForFrames(page, 2);
+          await page.waitForTimeout(700);
+          after = await autosaveMoves(page);
+        }
+        assert(after > before,
+               `touch move not persisted (${before} -> ${after})`);
+        assert(errors.length === 0, 'errors: ' + errors.join(' | '));
+      } finally {
+        await session.context.close();
+      }
+    });
+
+    await runCase('pagehide', async () => {
+      await withPage(browser, async ({ page, errors }) => {
+        const geo = await geometry(page);
+        await startLocal(page, geo);
+        await playOpeningMove(page, geo);
+        await page.evaluate(() => localStorage.removeItem('reversi:autosave.rvs'));
+        await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+        await page.waitForTimeout(300);
+        const moves = await autosaveMoves(page);
+        assert(moves >= 1, 'pagehide did not persist the game');
+        assert(errors.length === 0, 'errors: ' + errors.join(' | '));
+      });
     });
 
     await runCase('cancel', async () => {
@@ -207,10 +279,16 @@ async function withPage(browser, fn, options) {
   }
 
   const failed = results.filter((entry) => entry.status === 'FAIL');
+  const skipped = results.filter((entry) => entry.status === 'SKIP');
   console.log('\nSummary:');
   for (const entry of results) {
     console.log(`  ${entry.status} ${entry.name} (${entry.ms} ms)`
       + (entry.error ? `\n    ${entry.error}` : ''));
+  }
+  if (skipped.length > 0 && process.env.REVERSI_WEB_ALLOW_SKIP !== '1') {
+    console.error('Skipped cases make the run incomplete; set '
+      + 'REVERSI_WEB_ALLOW_SKIP=1 to accept.');
+    process.exit(1);
   }
   process.exit(failed.length === 0 ? 0 : 1);
 })();

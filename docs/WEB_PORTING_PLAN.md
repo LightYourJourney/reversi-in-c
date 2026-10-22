@@ -126,9 +126,11 @@ macOS 的 `../Resources` 分支不会被 `emcc` 编译。
 
 ## 4. 必须新增的平台适配接口
 
-1. `src/platform/web/app_web.c`
-   - `app_platform_run(App *)`：`emscripten_set_main_loop_arg`
-   - `app_platform_request_quit()`：取消主循环并触发一次清理
+1. `src/app/app.c`（`__EMSCRIPTEN__` 条件块）
+   - `app_web_main_loop` 与 `app_boot` / `app_frame` / `app_shutdown`
+   - `reversi_web_*` 尺寸、持久化与诊断导出
+   - 说明：这些函数直接读写 `App`，因此不拆到独立文件；平台存储与 AI
+     适配仍在 `src/platform/web/`。这是对 §4 初稿的修正，见 §12。
 2. `src/platform/web/storage_web.c`
    - 实现 `storage.h` 的 7 个函数（§6）
 3. `src/platform/web/ai_worker_web.c`
@@ -155,9 +157,10 @@ macOS 的 `../Resources` 分支不会被 `emcc` 编译。
 
 - 新目标 `reversi_ai_worker`：只链接 `reversi_core` 与 `reversi_ai`，
   不链接 raylib。
-- 协议：主线程发送 `{moves, mode, difficulty, budget_ms, seed}`；
-  Worker 用 `game_init` + `game_apply_move` 重建局面（复用规则层校验），
-  调用 `ai_choose_move`，回传 `{ok, row, col, nodes, depth, cancelled}`。
+- 协议：主线程发送 `{difficulty, budget_ms, seed, player, result,
+  board[64]}`；Worker 校验棋盘后构造 `GameState`，调用 `ai_choose_move`，
+  回传 `{ok, row, col, nodes, depth, cancelled}`。棋盘快照避免重放整局；
+  合法性仍由 `ai_choose_move` 复核。
 - 取消：`worker.terminate()` 后按需重建。语义从“协作式停止”变为
   “立即丢弃”，但**不会阻塞页面**，且结果本来就不需要保留。
 - 结果回收：Worker 的 `message` 回调通过导出的 C 函数写入 `ai_worker`
@@ -285,3 +288,13 @@ localStorage 的 5 MB 限额。
   因此把 `game_view` 的窄屏底栏改为两行，并缩短设置页说明文字。
 - **取消验证**：UI 点击跨越 AI 完成时刻会被动画门控吞掉，自动化改用
   `app_cancel_ai` 边界做确定性验证；真实鼠标/触摸落子另有独立用例。
+- **平台边界**：主循环与诊断导出留在 `app.c`（需要 `App` 内部状态），
+  没有按 §4.1 初稿新建 `app_web.c`；存储与 AI 适配仍在
+  `src/platform/web/`。
+- **AI 协议**：实际发送棋盘快照而不是着法序列；见 §5.2 的修正。
+- **页面关闭保存**：已按 §2.9 增加 `pagehide` / `visibilitychange`
+  触发器，调用导出的 `reversi_web_persist`（重写自动存档、设置、统计）。
+- **测试接口**：`reversi_web_*` 与 `window.__reversiTest` 保留在 Web
+  构建中，用于浏览器自动化；它们只暴露本地游戏状态，未在部署构建中裁剪。
+- **SDK 校验**：`build-web.sh` 现在校验 Emscripten 6.0.13；可用
+  `REVERSI_WEB_ALLOW_ANY_EMSDK=1` 覆盖。

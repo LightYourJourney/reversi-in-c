@@ -28,12 +28,27 @@
   DPR 再除一次尺寸，而 GL viewport 保持除法后的值，导致 HiDPI 画布只
   绘制左上角。Web 以 CSS 分辨率渲染，浏览器负责放大。
 - `setup_view` 的说明文字缩短，避免窄屏裁切。
+- `app_run` 的帧体拆为 update / render；退出清理命名为 `app_shutdown`。
+
+### Fixed
+
+- 页面隐藏/关闭时没有最终保存：新增 `pagehide` 与 `visibilitychange`
+  触发器，调用 `reversi_web_persist` 重写自动存档、设置与统计。
+- Web 端 Worker 启动失败时会退回主线程同步搜索：现在直接落一个合法
+  着法并显示提示，不再阻塞页面。
+- Worker 返回错误时静默降级：现在显示“搜索失败”提示。
+- `build-web.sh` 未校验 Emscripten 版本：现在要求 6.0.13，可用
+  `REVERSI_WEB_ALLOW_ANY_EMSDK=1` 覆盖。
+- 删除未使用的 `reversi_web_storage_available` 探测。
+- `_headers` 对固定文件名的 JS/WASM/DATA 使用 `immutable` 缓存，导致
+  更新可能不生效；改为 `must-revalidate`。
 
 ### Verified
 
 - 桌面 Debug 无窗口 15/15、Release 15/15、ASan+UBSan 15/15。
-- 浏览器套件 6/6 通过；五种视口无页面滚动；完整对局（自动对局）4.3 s
-  完成；AI 搜索期间帧率约 29 FPS（SwiftShader 软件渲染）。
+- 浏览器套件 9/9 通过（含三档 AI、触摸、`pagehide` 保存）；五种视口
+  无页面滚动；完整对局数秒内完成；AI 搜索期间页面持续渲染（SwiftShader
+  软件渲染，帧率受机器负载影响）。
 - Release WASM 309 KB，AI Worker WASM 49 KB，预加载资源 818 KB；
   堆内存约 16.2 MiB，搜索前后无增长。
 

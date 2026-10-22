@@ -25,6 +25,17 @@ fi
 # shellcheck disable=SC1091
 source "${emsdk_dir}/emsdk_env.sh" >/dev/null
 
+expected_version="${EMSDK_EXPECTED_VERSION:-6.0.13}"
+actual_version="$(emcc --version | head -n 1)"
+if [[ "${actual_version}" != *" ${expected_version} "* ]]; then
+    if [ "${REVERSI_WEB_ALLOW_ANY_EMSDK:-0}" != "1" ]; then
+        echo "Expected Emscripten ${expected_version}, found:" >&2
+        echo "  ${actual_version}" >&2
+        echo "Set REVERSI_WEB_ALLOW_ANY_EMSDK=1 to override." >&2
+        exit 1
+    fi
+fi
+
 emcmake cmake -S "${root}" -B "${build_dir}" \
     -DCMAKE_BUILD_TYPE="${build_type}" \
     -DREVERSI_BUILD_TESTS=OFF \

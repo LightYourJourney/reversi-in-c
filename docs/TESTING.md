@@ -184,8 +184,14 @@ SwiftShader 软件渲染。
 | `gameplay` | 真实鼠标落子、Hard AI 在 Worker 中搜索并完成 | PASS |
 | `persistence` | 自动存档、刷新、继续游戏恢复 | PASS |
 | `responsive` | 1920×1080、1366×768、768×1024、390×844、360×640 | PASS（无页面滚动） |
+| `difficulties` | Easy / Medium / Hard 各自完成一次 AI 回应 | PASS |
+| `mobile-touch` | 390×844 触摸落子并写入自动存档 | PASS |
+| `pagehide` | `pagehide` 触发持久化（重写自动存档） | PASS |
 | `cancel` | 搜索中取消、Worker 终止、主循环不阻塞 | PASS |
-| `autoplay` | Debug 构建完整对局到终局（4.3 s） | PASS |
+| `autoplay` | Debug 构建完整对局到终局 | PASS |
+
+默认情况下，任何 SKIP 都会让套件以非零退出；只有显式设置
+`REVERSI_WEB_ALLOW_SKIP=1` 才接受不完整的运行。
 
 运行方式见 [WEB_BUILD.md](WEB_BUILD.md) §4。桌面回归在最终树上是
 Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。GUI 测试

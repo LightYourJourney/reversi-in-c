@@ -287,7 +287,7 @@ if(EMSCRIPTEN)
         "-sFORCE_FILESYSTEM=1"
         "-sMODULARIZE=1"
         "-sEXPORT_NAME=createReversi"
-        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes']"
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_match_mode','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes','_reversi_web_persist']"
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
         "SHELL:--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
         "SHELL:--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")

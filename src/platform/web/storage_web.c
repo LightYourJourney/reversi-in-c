@@ -67,18 +67,6 @@ EM_JS(int, reversi_web_storage_exists, (const char *name), {
     }
 })
 
-int reversi_web_storage_available(void);
-EM_JS(int, reversi_web_storage_available, (void), {
-    try {
-        var probe = '__reversi_probe__';
-        localStorage.setItem(probe, '1');
-        localStorage.removeItem(probe);
-        return 1;
-    } catch (e) {
-        return 0;
-    }
-})
-
 static bool valid_name(const char *name)
 {
     if (name == NULL || name[0] == '\0') {

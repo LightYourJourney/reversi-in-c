@@ -92,6 +92,19 @@
   window.addEventListener('resize', scheduleResize);
   window.addEventListener('orientationchange', scheduleResize);
 
+  function persistNow() {
+    if (module && module._reversi_web_persist) {
+      module._reversi_web_persist();
+    }
+  }
+
+  window.addEventListener('pagehide', persistNow);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') {
+      persistNow();
+    }
+  });
+
   ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Enter', 'Escape']
     .forEach(function (key) {
       canvas.addEventListener('keydown', function (event) {
@@ -172,6 +185,7 @@
     importSaves(event.target.files && event.target.files[0]);
   });
   document.getElementById('reload').addEventListener('click', function () {
+    persistNow();
     window.location.reload();
   });
   document.getElementById('fullscreen').addEventListener('click', function () {
@@ -252,6 +266,10 @@
     aiActive: function () {
       return !!(module && module._reversi_web_ai_active
         && module._reversi_web_ai_active());
+    },
+    mode: function () {
+      return module && module._reversi_web_match_mode
+        ? module._reversi_web_match_mode() : -1;
     },
     cancelAi: function () {
       if (module && module._reversi_web_cancel_ai_test) {

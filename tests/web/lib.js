@@ -63,7 +63,7 @@ function toScreen(geo, x, y) {
   };
 }
 
-async function press(page, geo, x, y, hold = 160, waitAfter = 650) {
+async function press(page, geo, x, y, hold = 250, waitAfter = 650) {
   const point = toScreen(geo, x, y);
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();
@@ -74,18 +74,142 @@ async function press(page, geo, x, y, hold = 160, waitAfter = 650) {
   }
 }
 
+const DIFFICULTY_BUTTONS = {
+  easy: [392, 385],
+  medium: [640, 385],
+  hard: [829, 385]
+};
+
+async function waitForScreen(page, index, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await page.evaluate(() => window.__reversiTest.screenIndex())
+        === index) {
+      return true;
+    }
+    await page.waitForTimeout(50);
+  }
+  return false;
+}
+
+/* Slow or contended machines can drop a press between frames; retry until the
+   expected screen appears. */
+async function pressUntilScreen(page, geo, x, y, index, attempts = 3) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await press(page, geo, x, y, 400, 200);
+    if (await waitForScreen(page, index, 8000)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function startLocal(page, geo) {
+  if (!(await pressUntilScreen(page, geo, 640, 261, 1))) {
+    throw new Error('setup screen did not appear');
+  }
+  if (!(await pressUntilScreen(page, geo, 640, 501, 2))) {
+    throw new Error('game screen did not appear');
+  }
+}
+
+async function startLocalMobile(page, geo) {
+  if (!(await pressUntilScreen(page, geo, 195, 264, 1))) {
+    throw new Error('setup screen did not appear');
+  }
+  if (!(await pressUntilScreen(page, geo, 195, 487, 2))) {
+    throw new Error('game screen did not appear');
+  }
+  await page.waitForTimeout(700); // let the page transition finish
+}
+
+async function startPve(page, geo, difficulty = 'hard') {
+  const button = DIFFICULTY_BUTTONS[difficulty];
+  if (!button) {
+    throw new Error('unknown difficulty: ' + difficulty);
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!(await pressUntilScreen(page, geo, 640, 261, 1))) {
+      throw new Error('setup screen did not appear');
+    }
+    await page.waitForTimeout(600); // let the setup transition finish
+    await press(page, geo, 780, 204, 400); // Computer
+    await press(page, geo, button[0], button[1], 400);
+    if (!(await pressUntilScreen(page, geo, 640, 501, 2))) {
+      throw new Error('game screen did not appear');
+    }
+    if (await page.evaluate(() => window.__reversiTest.mode()) === 1) {
+      return;
+    }
+    // The Computer press was dropped; restart cleanly and try again.
+    await page.reload();
+    await page.waitForFunction(
+      () => window.__reversiTest && window.__reversiTest.ready(),
+      null, { timeout: 120000 });
+    await page.waitForTimeout(500);
+  }
+  throw new Error('could not start a PvE game');
+}
+
 async function startPveHard(page, geo) {
-  await press(page, geo, 640, 261); // New game
-  await press(page, geo, 780, 204); // Computer
-  await press(page, geo, 829, 385); // Hard
-  await press(page, geo, 640, 501); // Start game
-  await page.waitForTimeout(1200);
+  await startPve(page, geo, 'hard');
+}
+
+async function waitForFrames(page, delta, timeoutMs = 10000) {
+  const start = await page.evaluate(() => window.__reversiTest.frames());
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const now = await page.evaluate(() => window.__reversiTest.frames());
+    if (now >= start + delta) {
+      return true;
+    }
+    await page.waitForTimeout(30);
+  }
+  return false;
+}
+
+async function waitForMoves(page, minimum, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await autosaveMoves(page) >= minimum) {
+      return true;
+    }
+    await page.waitForTimeout(50);
+  }
+  return false;
+}
+
+async function autosaveMoves(page) {
+  return page.evaluate(() => {
+    const raw = localStorage.getItem('reversi:autosave.rvs');
+    if (!raw) {
+      return -1;
+    }
+    const match = /moves (\d+)/.exec(raw);
+    return match ? parseInt(match[1], 10) : -1;
+  });
 }
 
 async function playOpeningMove(page, geo) {
-  // Return immediately: the caller polls for the AI search window, which is
-  // shorter than a normal settle wait.
-  await press(page, geo, 616, 379, 160, 0); // legal d3
+  // Cross-frame press: a short click can fall entirely between frames on a
+  // contended machine. Confirm the move through the autosave before returning
+  // so callers can poll for the (possibly very short) AI window.
+  const point = toScreen(geo, 616, 379); // legal d3
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    await waitForFrames(page, 2);
+    await page.waitForTimeout(80);
+    await page.mouse.up();
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      if (await autosaveMoves(page) >= 1) {
+        return;
+      }
+      await page.waitForTimeout(50);
+    }
+  }
+  throw new Error('opening move was not applied');
 }
 
 async function waitForAiActive(page, timeoutMs = 4000) {
@@ -112,8 +236,15 @@ module.exports = {
   geometry,
   toScreen,
   press,
+  waitForScreen,
+  startLocal,
+  startLocalMobile,
+  startPve,
   startPveHard,
   playOpeningMove,
   waitForAiActive,
+  waitForFrames,
+  waitForMoves,
+  autosaveMoves,
   assert
 };

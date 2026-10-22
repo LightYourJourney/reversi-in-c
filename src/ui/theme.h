@@ -37,6 +37,7 @@
 /* Window. */
 #define REVERSI_UI_MIN_WINDOW_WIDTH 760
 #define REVERSI_UI_MIN_WINDOW_HEIGHT 600
+#define REVERSI_UI_NARROW_ACTION_WIDTH 520.0f
 
 /* Runtime theme palette. All UI colors go through the active palette so the
    theme can change without restarting. */

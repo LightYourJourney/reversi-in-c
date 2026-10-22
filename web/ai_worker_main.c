@@ -21,7 +21,7 @@
 
 static char g_reply[128];
 
-const char *reversi_ai_worker_request(const char *request, unsigned generation);
+const char *reversi_ai_worker_request(const char *request);
 
 static const char *fail(void)
 {
@@ -30,10 +30,8 @@ static const char *fail(void)
 }
 
 EMSCRIPTEN_KEEPALIVE
-const char *reversi_ai_worker_request(const char *request, unsigned generation)
+const char *reversi_ai_worker_request(const char *request)
 {
-    (void)generation;
-
     int difficulty = -1;
     int budget_ms = 0;
     unsigned seed = 0;

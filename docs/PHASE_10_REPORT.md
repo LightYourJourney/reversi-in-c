@@ -117,8 +117,11 @@ Release 二进制也报同样错误。因此记为环境不可用，不记为代
 | `gameplay` | PASS（真实鼠标落子；Hard AI 在 Worker 中完成） |
 | `persistence` | PASS（自动存档写入、刷新、继续恢复） |
 | `responsive` | PASS（五种视口，无页面滚动） |
+| `difficulties` | PASS（Easy / Medium / Hard 各完成一次 AI 回应） |
+| `mobile-touch` | PASS（390×844 触摸落子并写入自动存档） |
+| `pagehide` | PASS（`pagehide` 重写自动存档） |
 | `cancel` | PASS（Worker 被终止；取消后帧数继续增长） |
-| `autoplay` | PASS（Debug 构建完整对局，4.3 s，黑胜 37:27） |
+| `autoplay` | PASS（Debug 构建完整对局到终局） |
 
 测试环境：headless Chrome + SwiftShader；不是 GPU 或真实手机。
 
@@ -145,12 +148,15 @@ Release 二进制也报同样错误。因此记为环境不可用，不记为代
 ### 5.2 加载与内存（Chrome headless，本地 HTTP）
 
 - 冷启（新浏览器进程）：3.31 s；同进程后续页面：0.38 / 0.54 / 0.55 / 0.91 s。
+- 复核时机器被另一个项目的 Playwright 进程占满（load average ~30），同一
+  构建的冷启为 4.3–6.2 s；该区间不代表空载性能。
 - 堆内存：16,973,824 B（约 16.2 MiB），Hard 搜索前后无增长。
 - 首帧前的资源请求全部 200；无 4xx/5xx。
 
 ### 5.3 帧率与 AI 响应
 
-- AI Hard 搜索期间（1 s 窗口）：约 28.8 FPS，帧计数连续增长，无卡顿。
+- AI Hard 搜索期间（1 s 窗口）：空载约 28.8 FPS；复核时机器负载 ~30，
+  同一窗口约 19 FPS。两次都帧计数连续增长，无卡顿。
 - 菜单/对局在 SwiftShader 软件渲染下约 30–48 FPS；真实 GPU 未测。
 - 取消后 500 ms 内帧数继续增长（22 帧），Worker 已终止。
 
@@ -172,11 +178,11 @@ Release 二进制也报同样错误。因此记为环境不可用，不记为代
    影响，但与桌面的协作式取消不完全相同。
 5. **CI 尚未构建 Web 目标**：`ci.yml` 仍只覆盖桌面；Web 构建依赖本机
    Emscripten 6.0.13。接入 CI 需要额外的 SDK 安装与缓存策略。
-6. **Worker 文件名固定**：`_headers` 对 JS/WASM 使用长期缓存；若未来
-   需要原地更新，应改为文件名哈希或重新验证缓存策略。
+6. **Worker 文件名固定**：`_headers` 已从 `immutable` 改为
+   `must-revalidate`；若未来需要长期缓存，应改为文件名哈希。
 7. **诊断接口常驻导出**：`reversi_web_*` 仅在 Web 构建中存在，暴露的是
-   本地游戏状态；没有安全影响，但属于测试用表面积，后续可考虑在部署
-   构建中裁剪。
+   本地游戏状态；没有安全影响。审查后决定保留（浏览器测试依赖），并在
+   `WEB_PORTING_PLAN.md` §12 记录为接受的偏差。
 8. **未推送、未打标签、未部署**：`phase-10-web` 分支只在本地；GitHub
    Actions 未验证 v1.1.0。
 
@@ -201,7 +207,30 @@ git revert 6b55d99
 
 Web 产物在 `build-web*/` 与 `web/dist/`，均为忽略目录，可直接删除。
 
-## 8. 下一阶段依赖
+## 8. 审查修正（`/code-review max --fix`）
+
+两轴审查（Standards / Spec）后的修正与复验：
+
+| 审查发现 | 修正 | 复验 |
+|---|---|---|
+| 页面关闭时没有最终保存 | `pagehide`/`visibilitychange` → `reversi_web_persist` | `pagehide` 用例 PASS |
+| Web 端 Worker 启动失败会退回主线程同步搜索 | Web 端改为落合法着法 + 提示，不阻塞 | 代码审查 + 三档 AI 用例 |
+| Worker 返回错误时静默降级 | 显示“搜索失败”提示 | 代码审查 |
+| 构建脚本不校验 Emscripten 版本 | 校验 6.0.13，可显式覆盖 | `build-web.sh` 运行 PASS |
+| 生命周期没有独立 update/render | 拆出 `app_run_update` / `app_run_render`，清理改名 `app_shutdown` | 桌面 + Web 回归 |
+| 仅测试 Hard | 新增 Easy/Medium/Hard 用例 | `difficulties` PASS |
+| 小屏只检查布局，不检查可操作性 | 新增 390×844 触摸落子用例 | `mobile-touch` PASS |
+| SKIP 可让套件静默通过 | 默认 SKIP 即失败 | 套件行为已改 |
+| 未使用的存储探测、重复常量、无用的 generation 参数 | 删除/改用核心常量 | 构建无警告 |
+| `_headers` 的 `immutable` 缓存 | 改为 `must-revalidate` | 文件审查 |
+| 文档声称 `app_web.c`、着法协议 | 在 `WEB_PORTING_PLAN.md` §12 与 `ARCHITECTURE.md` §19 记录实际边界与棋盘快照协议 | 文档同步 |
+
+审查后的最终验证：桌面 Debug / Release / ASan+UBSan 无窗口各 15/15；
+浏览器套件 9/9；桌面 GUI 仍为 NOT TESTED（无显示器）。审查期间机器被另
+一个项目的测试占用，用例改成基于 `screenIndex`、帧计数与自动存档的等待，
+不再依赖固定延时。
+
+## 9. 下一阶段依赖
 
 - 推送 `phase-10-web` 前决定是否合并到 `main`；合并后应观察 CI（当前
   CI 不构建 Web，建议新增一个独立的 Emscripten 作业）。

@@ -12,9 +12,7 @@ function handle(data) {
   var reply = 'err';
   try {
     reply = moduleReady.ccall('reversi_ai_worker_request', 'string',
-                              ['string', 'number'],
-                              [String(data.request || ''),
-                               Number(data.generation) >>> 0]);
+                              ['string'], [String(data.request || '')]);
   } catch (error) {
     reply = 'err';
   }
