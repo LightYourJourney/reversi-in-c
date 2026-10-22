@@ -1,0 +1,70 @@
+Phase 11 AI baseline (pre-bitboard)
+===================================
+
+Commit:        22486c1 (Phase 10 merged into main, AI code unchanged)
+Date:          2026-10-23
+Host:          macOS 26.6.2 (Darwin 25.6.0), Apple M3 / arm64
+Compiler:      Homebrew Clang 23.1.3
+CMake:         4.4.4, CMAKE_BUILD_TYPE=Release (-O3 -DNDEBUG)
+Bench:         build-release/bin/reversi_ai_bench --games 3
+Seed:          0x5EED1234
+Matchups:      Easy depth 1; Medium depth 4 (10 s cap); Hard depth 6 (10 s cap)
+Reproduce:     cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+               cmake --build build-release -j
+               ./build-release/bin/reversi_ai_bench --games 3
+
+Raw output
+----------
+
+Reversi AI benchmark
+compiler=Clang 23.1.3.0 ((https://github.com/llvm/llvm-project.git
+...)
+seed=0x5EED1234 games=3
+matchup configs: Easy depth 1; Medium depth 4 (10 s cap); Hard depth 6 (10 s cap)
+
+Hard     vs Medium    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=1280240 cutoffs=384180 (30.0%) tt_hits=42313 ai_moves=96 avg_ms=27.5 max_depth=12
+Easy     vs Greedy    games=3  W=1 D=0 L=2  illegal=0 failures=0 unfinished=0
+         nodes=727 cutoffs=0 (0.0%) tt_hits=0 ai_moves=89 avg_ms=0.0 max_depth=1
+Medium   vs Greedy    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=82871 cutoffs=17007 (20.5%) tt_hits=0 ai_moves=91 avg_ms=3.1 max_depth=4
+Hard     vs Greedy    games=3  W=3 D=0 L=0  illegal=0 failures=0 unfinished=0
+         nodes=1079111 cutoffs=321187 (29.8%) tt_hits=33221 ai_moves=92 avg_ms=23.9 max_depth=12
+Easy     vs Medium    games=3  W=0 D=0 L=3  illegal=0 failures=0 unfinished=0
+         nodes=73421 cutoffs=16876 (23.0%) tt_hits=0 ai_moves=180 avg_ms=1.2 max_depth=4
+Medium   vs Hard      games=3  W=0 D=0 L=3  illegal=0 failures=0 unfinished=0
+         nodes=639399 cutoffs=174742 (27.3%) tt_hits=17244 ai_moves=176 avg_ms=7.8 max_depth=12
+Easy     vs Hard      games=3  W=1 D=0 L=2  illegal=0 failures=0 unfinished=0
+         nodes=842663 cutoffs=231275 (27.4%) tt_hits=20555 ai_moves=179 avg_ms=15.0 max_depth=12
+
+[opening] current=Black empty=60
+  Easy   found=1 move=e6 depth=1 score=-81 nodes=4 cutoffs=0.0% tt_hits=0 time=0ms
+  Medium found=1 move=e6 depth=4 score=-12 nodes=167 cutoffs=23.4% tt_hits=0 time=0ms
+  Hard   found=1 move=e6 depth=10 score=24 nodes=63487 cutoffs=22.7% tt_hits=597 time=327ms
+
+[midgame] current=Black empty=40
+  Easy   found=1 move=c4 depth=1 score=-1060 nodes=5 cutoffs=0.0% tt_hits=0 time=0ms
+  Medium found=1 move=e3 depth=4 score=-1213 nodes=832 cutoffs=12.3% tt_hits=0 time=6ms
+  Hard   found=1 move=c4 depth=7 score=-1344 nodes=111616 cutoffs=13.0% tt_hits=1206 time=501ms
+
+[endgame (one move)] current=White empty=2
+  Easy   found=1 move=c8 depth=1 score=-529 nodes=1 cutoffs=0.0% tt_hits=0 time=0ms
+  Medium found=1 move=c8 depth=1 score=100013 nodes=1 cutoffs=0.0% tt_hits=0 time=0ms
+  Hard   found=1 move=c8 depth=1 score=100013 nodes=1 cutoffs=0.0% tt_hits=0 time=1ms
+
+TOTAL games=27 illegal=0 failures=0 unfinished=0
+
+Observations from the source audit (before any change)
+------------------------------------------------------
+- TT: 65,536 entries x 32 B = 2 MiB, calloc/free per Hard search.
+  Blind overwrite replacement; bounds stored from the tightened window.
+- Zobrist hash recomputed from scratch (64 cell reads) at every interior node.
+- Move generation and application are scalar (rules.c); GameState is copied
+  by value (~264 B) at every node.
+- Medium never allocates a TT; Hard only.
+- Leaf nodes generate all legal moves before the depth<=0 evaluation test.
+- Evaluation computes every component for every difficulty (2 legal-move
+  enumerations + 4 full-board passes per leaf).
+- Clock: timespec_get(TIME_UTC) (wall clock), checked every 1024 nodes.
+- Endgame: Hard extends max_depth to the number of empty squares when
+  empty <= 12; no separate exact solver.

@@ -184,6 +184,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(reversi_core STATIC
     src/core/board.c
+    src/core/bitboard.c
     src/core/rules.c
     src/core/game.c
     src/core/history.c
@@ -464,6 +465,8 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     enable_testing()
 
     reversi_add_core_test(reversi_tests tests/test_board.c core.board)
+    reversi_add_core_test(reversi_bitboard_tests tests/test_bitboard.c
+        core.bitboard)
     reversi_add_core_test(reversi_rules_tests tests/test_rules.c core.rules)
     reversi_add_core_test(reversi_game_tests tests/test_game.c core.game)
     reversi_add_core_test(reversi_random_tests tests/test_random_games.c
