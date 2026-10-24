@@ -12,11 +12,19 @@
 #include <pthread.h>
 #endif
 
+typedef enum AiWorkerKind {
+    AI_WORKER_JOB_MOVE = 0,
+    AI_WORKER_JOB_ANALYSIS
+} AiWorkerKind;
+
 typedef struct AiWorkerJob {
+    AiWorkerKind kind;
     GameState state;
     AiConfig config;
+    int max_lines;
     Move move;
     AiStats stats;
+    AiAnalysis analysis;
     bool found;
     atomic_bool cancel;
     atomic_bool done;
@@ -44,8 +52,13 @@ static void *worker_main(void *argument)
 #endif
 {
     AiWorkerJob *job = argument;
-    job->found = ai_choose_move(&job->state, &job->config,
-                                &job->move, &job->stats);
+    if (job->kind == AI_WORKER_JOB_ANALYSIS) {
+        job->found = ai_analyze_position(&job->state, &job->config,
+                                         job->max_lines, &job->analysis);
+    } else {
+        job->found = ai_choose_move(&job->state, &job->config,
+                                    &job->move, &job->stats);
+    }
     atomic_store_explicit(&job->done, true, memory_order_release);
 #if defined(_WIN32)
     return 0;
@@ -104,6 +117,7 @@ bool ai_worker_start(AiWorker *worker, const GameState *state,
         return false;
     }
 
+    job->kind = AI_WORKER_JOB_MOVE;
     job->state = *state;
     job->config = *config;
     job->config.should_cancel = job_should_cancel;
@@ -135,12 +149,46 @@ AiWorkerStatus ai_worker_status(AiWorker *worker)
     return job->found ? AI_WORKER_READY : AI_WORKER_FAILED;
 }
 
+bool ai_worker_start_analysis(AiWorker *worker, const GameState *state,
+                              const AiConfig *config, int max_lines)
+{
+    if (worker == NULL || state == NULL || config == NULL
+        || worker->job != NULL) {
+        return false;
+    }
+
+    AiWorkerJob *job = calloc(1, sizeof(AiWorkerJob));
+    if (job == NULL) {
+        return false;
+    }
+
+    job->kind = AI_WORKER_JOB_ANALYSIS;
+    job->state = *state;
+    job->config = *config;
+    job->config.should_cancel = job_should_cancel;
+    job->config.cancel_context = job;
+    job->max_lines = max_lines;
+    atomic_init(&job->cancel, false);
+    atomic_init(&job->done, false);
+
+    if (!start_thread(job)) {
+        free(job);
+        return false;
+    }
+
+    worker->job = job;
+    return true;
+}
+
 bool ai_worker_take(AiWorker *worker, Move *out_move, AiStats *out_stats)
 {
     if (worker == NULL || worker->job == NULL || out_move == NULL) {
         return false;
     }
     AiWorkerJob *job = worker->job;
+    if (job->kind != AI_WORKER_JOB_MOVE) {
+        return false;
+    }
     const bool cancelled = atomic_load_explicit(
         &job->cancel, memory_order_acquire);
     if (!cancelled
@@ -156,6 +204,33 @@ bool ai_worker_take(AiWorker *worker, Move *out_move, AiStats *out_stats)
     }
     if (out_stats != NULL) {
         *out_stats = job->stats;
+    }
+    free(job);
+    worker->job = NULL;
+    return found;
+}
+
+bool ai_worker_take_analysis(AiWorker *worker, AiAnalysis *out_analysis)
+{
+    if (worker == NULL || worker->job == NULL || out_analysis == NULL) {
+        return false;
+    }
+    AiWorkerJob *job = worker->job;
+    if (job->kind != AI_WORKER_JOB_ANALYSIS) {
+        return false;
+    }
+    const bool cancelled = atomic_load_explicit(
+        &job->cancel, memory_order_acquire);
+    if (!cancelled
+        && !atomic_load_explicit(&job->done, memory_order_acquire)) {
+        return false;
+    }
+
+    atomic_store_explicit(&job->cancel, true, memory_order_release);
+    join_thread(job);
+    const bool found = job->found && !cancelled;
+    if (found) {
+        *out_analysis = job->analysis;
     }
     free(job);
     worker->job = NULL;

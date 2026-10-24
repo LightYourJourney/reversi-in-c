@@ -9,14 +9,16 @@ var moduleReady = null;
 var queue = [];
 
 function handle(data) {
+  var request = String(data.request || '');
+  var kind = request.charAt(0) === 'A' ? 'analysis' : 'move';
   var reply = 'err';
   try {
     reply = moduleReady.ccall('reversi_ai_worker_request', 'string',
-                              ['string'], [String(data.request || '')]);
+                              ['string'], [request]);
   } catch (error) {
     reply = 'err';
   }
-  self.postMessage({ generation: data.generation, raw: reply });
+  self.postMessage({ generation: data.generation, raw: reply, kind: kind });
 }
 
 self.onmessage = function (event) {
@@ -34,5 +36,5 @@ createAiWorker().then(function (instance) {
   }
 }).catch(function () {
   moduleReady = null;
-  self.postMessage({ generation: 0, raw: 'err' });
+  self.postMessage({ generation: 0, raw: 'err', kind: 'move' });
 });

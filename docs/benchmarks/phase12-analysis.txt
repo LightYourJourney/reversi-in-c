@@ -1,0 +1,35 @@
+Phase 12 analysis benchmark
+Host: macOS 26.6.2 (Darwin 25.6.0), Apple M3 / arm64, Homebrew Clang 21.0.0
+Build: cmake -DCMAKE_BUILD_TYPE=Release; ./build-release/bin/reversi_analysis_bench
+Method: MultiPV=3, Hard evaluation, max_depth 4/6/8, 10 s cap
+
+Reversi analysis benchmark
+lines=3, Hard evaluation, 10 s cap
+opening          depth=4  lines=3  ms=1      nodes=190       reported=4
+  1. e6 score=+8 pv=4
+  2. f5 score=+8 pv=4
+  3. c4 score=+8 pv=4
+opening          depth=6  lines=3  ms=8      nodes=1704      reported=6
+  1. e6 score=+14 pv=6
+  2. f5 score=+14 pv=6
+  3. c4 score=+14 pv=6
+opening          depth=8  lines=3  ms=61     nodes=13931     reported=8
+  1. e6 score=+36 pv=8
+  2. f5 score=+36 pv=8
+  3. c4 score=+36 pv=8
+midgame-30       depth=4  lines=3  ms=14     nodes=3884      reported=4
+  1. h3 score=+145 pv=4
+  2. c6 score=+39 pv=4
+  3. c2 score=+30 pv=4
+midgame-30       depth=6  lines=3  ms=149    nodes=44588     reported=6
+  1. h3 score=+56 pv=6
+  2. c2 score=-30 pv=6
+  3. c6 score=-63 pv=6
+midgame-30       depth=8  lines=3  ms=2314   nodes=683318    reported=8
+  1. h3 score=+55 pv=8
+  2. c6 score=-45 pv=4
+  3. c2 score=-59 pv=3
+endgame-8        depth=8  lines=3  ms=11     nodes=12754     reported=8 exact
+  1. h3 score=+100014 pv=8
+  2. a4 score=+100014 pv=8
+  3. f8 score=+100012 pv=8

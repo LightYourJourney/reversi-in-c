@@ -8,6 +8,7 @@
 enum {
     MENU_INDEX_CONTINUE = 0,
     MENU_INDEX_PLAY,
+    MENU_INDEX_LAB,
     MENU_INDEX_LOAD,
     MENU_INDEX_HELP,
     MENU_INDEX_STATS,
@@ -23,6 +24,7 @@ typedef struct MenuEntry {
 static const MenuEntry MENU_ENTRIES[REVERSI_MENU_BUTTON_COUNT] = {
     {"Continue", MENU_ACTION_CONTINUE},
     {"New game", MENU_ACTION_PLAY},
+    {"Analysis lab", MENU_ACTION_LAB},
     {"Load game", MENU_ACTION_LOAD},
     {"How to play", MENU_ACTION_HELP},
     {"Statistics", MENU_ACTION_STATS},

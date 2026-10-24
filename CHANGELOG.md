@@ -4,6 +4,37 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-24
+
+### Added
+
+- Reversi Lab：独立于正式对局的棋局分析页面（菜单 → Analysis lab）。
+  `AnalysisSession` 持有独立局面树，支持历史跳转、分支、自由摆盘与主线返回，
+  不修改 `Match`。
+- `analysis/analysis`：局面树、合法着法导航、Pass 节点、自定义局面、
+  从 `History` 导入、`VALID/CUSTOM` 分类。
+- `analysis/record`：版本化纯文本棋谱格式（v1），支持主线、Pass 与一层分支；
+  导入严格验证并保持会话原子性。格式见 `docs/RECORD_FORMAT.md`。
+- `ai/ai_analyze`：只读 `ai_analyze_position()`，返回最多 3 个候选、
+  同深度全窗口分数、TT 重建的 PV、完成/精确状态与搜索统计。
+- `ai_worker` 新增分析任务；Web 端通过同一 AI Worker 异步执行，
+  取消即终止 Worker。
+- Lab UI：棋盘与候选高亮、MultiPV、评估分量（黑方视角）、搜索状态、
+  棋谱时间轴、评分曲线、自动播放与速度、重要落点标记、批次分析。
+- `docs/ANALYSIS_ARCHITECTURE.md`、`docs/RECORD_FORMAT.md`。
+
+### Changed
+
+- 主菜单增加 Analysis lab 入口（8 项）。
+- `reversi_ui` 保持不依赖 AI；Lab 视图编译进 `reversi_app`。
+
+### Verified
+
+- 桌面 Debug / Release / ASan+UBSan 无窗口各 19/19。
+- Debug + GUI 22/22（含新增 `app.lab` 渲染冒烟）。
+- Emscripten Release 构建通过；浏览器套件在 1.3.0 上 **NOT TESTED**。
+- 分析性能见 `docs/benchmarks/phase12-analysis.txt`。
+
 ## [1.2.0] - 2026-10-23
 
 ### Added

@@ -332,10 +332,34 @@ Safari/Firefox 与真实移动设备未验证；`localStorage` 可能被清理�
 Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 [PHASE_11_REPORT.md](PHASE_11_REPORT.md)。
 
+## Phase 12：Reversi Lab（v1.3.0，源码）
+
+- `analysis/`：独立 `AnalysisSession` 局面树、主线与一层分支、Pass 节点、
+  自由摆盘（`VALID/CUSTOM`）、从 `History` 导入、版本化棋谱格式。
+- `ai/ai_analyze`：只读 MultiPV（最多 3 个候选），同深度全窗口分数、
+  TT 重建并验证的 PV、完成/精确状态；不改变正式对局选着路径。
+- `ai_worker`：桌面线程与 Web Worker 均支持分析任务；generation 绑定，
+  旧结果不能覆盖新局面。
+- Lab UI：棋盘与候选高亮、MultiPV、评估分量（黑方为正）、时间轴、
+  评分曲线、自动播放、重要落点、批次分析；宽/窄布局。
+- 测试：`analysis.session`、`ai.analyze`、`ai.worker` 分析用例、
+  `app.lab` 渲染冒烟。
+
+验证（本机 macOS arm64）：
+
+- Debug / Release / ASan+UBSan 无窗口各 19/19；Debug + GUI 22/22。
+- Emscripten Release 构建通过（主 wasm 346 KB，Worker 58 KB）。
+- MultiPV 基准：开局 d8 约 70 ms，中局 30 空 d8 约 2.3 s，
+  8 空精确约 11 ms。
+
+已知限制：浏览器套件未在 1.3.0 复验；Windows/Linux 未推送；Lab 交互
+没有自动化点击测试；PV 可能因 TT 未命中而短于报告深度。详见
+[PHASE_12_REPORT.md](PHASE_12_REPORT.md)。
+
 ## 非目标（当前）
 
 - 在线对战、账号系统、网络协议
-- 移动端与 Web 构建
+- 移动端原生包（Web 构建已在 Phase 10 完成）
 - 第三方 UI 框架或资源商店素材
 
 这些方向如需加入，应先更新架构文档并评估对模块边界的影响。

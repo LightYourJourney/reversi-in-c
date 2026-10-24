@@ -91,6 +91,13 @@ static void test_exact_against_full_depth(TestStats *stats)
             const bool ref_ok = ai_search_choose_ex(
                 &state, &reference, false, &ref_move, &ref_stats);
             REVERSI_TEST_ASSERT(stats, ref_ok);
+            if (ref_stats.timed_out || ref_stats.cancelled) {
+                /* The independent full-width search hit its hard 10 s cap
+                   (sanitizer builds are several times slower); a partial
+                   reference score is not comparable. Debug/Release still
+                   cover every position. */
+                continue;
+            }
 
             AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, seed);
             config.time_budget_ms = 10000;

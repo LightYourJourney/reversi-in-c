@@ -14,9 +14,9 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 19 个测试（Debug）：17 个
-无窗口测试、`app.smoke` 与 `app.autoplay`。不开启时注册 17 个。CTest 名称、
-可执行文件和源码一一对应。
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 22 个测试（Debug）：19 个
+无窗口测试、`app.smoke`、`app.lab` 与 `app.autoplay`。不开启时注册 19 个。
+CTest 名称、可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
 与 CPack；`scripts/verify-package.sh` 校验归档 `.sha256`，从任意工作目录
@@ -43,7 +43,9 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | core.history | reversi_history_tests | 124 | 快照、撤销/重做、分支截断、Pass/终局 | PASS |
 | core.match | reversi_match_tests | 980 | 状态机、暂停、重开、AI 回合、撤销/重做、恢复 | PASS |
 | ai.core | reversi_ai_tests | 2,977 | 评估、搜索合法性、TT 一致性、取消、确定性、自动对局 | PASS |
-| ai.endgame | reversi_endgame_tests | 63 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
+| ai.endgame | reversi_endgame_tests | 67 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
+| ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
+| analysis.session | reversi_analysis_tests | 78 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
 | storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |
@@ -55,12 +57,12 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 
 实际运行结果：
 
-- Debug：17/17 无窗口测试通过（v1.2.0）。
-- Debug + GUI：v1.1.0 为 19/19；v1.2.0 本机图形会话不可用，但 CI
-  Linux Xvfb 下 `app.smoke` / `app.autoplay` 2/2 通过；Windows/macOS
-  GUI 仍 **NOT TESTED**。
-- Release：17/17 通过（v1.2.0）。
-- ASan+UBSan：v1.2.0 无窗口 17/17 通过，无 Sanitizer 报告；此前
+- Debug：19/19 无窗口测试通过（v1.3.0）。
+- Debug + GUI：v1.3.0 本机 22/22，包含 `app.lab`（Lab 页面 20 帧渲染），
+  `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程
+  仍 **NOT TESTED**。
+- Release：19/19 通过（v1.3.0）。
+- ASan+UBSan：v1.3.0 无窗口 19/19 通过，无 Sanitizer 报告；此前
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
 - 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
   并通过 `scripts/verify-package.sh` 独立启动验收。
@@ -238,3 +240,19 @@ RSS）。A/B 方法：把同一 `tests/bench_corpus.c` 编译到基线提交的�
 节点数一致说明搜索树未变。原始输出在 `docs/benchmarks/`，结论见
 [PHASE_11_REPORT.md](PHASE_11_REPORT.md) §5。测量期间机器有外部负载，
 绝对毫秒数不代表空载性能。
+
+
+## 10. Reversi Lab 测试（Phase 12）
+
+```bash
+./build-release/bin/reversi_analysis_bench
+```
+
+- `analysis.session`：标准开局、导航、主线/分支、Pass、自定义编辑、
+  History 导入、棋谱 v1 往返与损坏输入拒绝。
+- `ai.analyze`：三个候选的排序与合法性、PV 重放、4 空精确解与
+  `ai_endgame_solve` 分数一致、取消后无结果、黑方视角转换。
+- `app.lab`（Debug + GUI）：在 Lab 页面渲染 20 帧并正常退出。
+- 基准输出见 `docs/benchmarks/phase12-analysis.txt`；绝对时间受机器负载
+  影响。
+- 未覆盖：浏览器内 Lab 交互、自动化点击/键盘、分钟级连续分析。

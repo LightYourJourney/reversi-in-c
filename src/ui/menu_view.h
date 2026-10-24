@@ -3,12 +3,13 @@
 
 #include "ui/draw.h"
 
-#define REVERSI_MENU_BUTTON_COUNT 7
+#define REVERSI_MENU_BUTTON_COUNT 8
 
 typedef enum MenuAction {
     MENU_ACTION_NONE = 0,
     MENU_ACTION_CONTINUE,
     MENU_ACTION_PLAY,
+    MENU_ACTION_LAB,
     MENU_ACTION_LOAD,
     MENU_ACTION_HELP,
     MENU_ACTION_STATS,

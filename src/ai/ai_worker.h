@@ -2,6 +2,7 @@
 #define REVERSI_AI_WORKER_H
 
 #include "ai/ai.h"
+#include "ai/ai_analyze.h"
 
 typedef struct AiWorker AiWorker;
 
@@ -31,6 +32,20 @@ AiWorkerStatus ai_worker_status(AiWorker *worker);
  * becomes idle afterwards.
  */
 bool ai_worker_take(AiWorker *worker, Move *out_move, AiStats *out_stats);
+
+/*
+ * MultiPV analysis job. Same lifecycle and cancellation as ai_worker_start(),
+ * but the result is taken with ai_worker_take_analysis(). A worker runs one
+ * job at a time; starting a job while another is active fails.
+ */
+bool ai_worker_start_analysis(AiWorker *worker, const GameState *state,
+                              const AiConfig *config, int max_lines);
+
+/*
+ * Joins a finished analysis job and copies its result. Returns false when the
+ * job failed or was cancelled; the worker becomes idle afterwards.
+ */
+bool ai_worker_take_analysis(AiWorker *worker, AiAnalysis *out_analysis);
 
 bool ai_worker_is_active(const AiWorker *worker);
 

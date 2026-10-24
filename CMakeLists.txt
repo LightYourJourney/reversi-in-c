@@ -198,6 +198,15 @@ add_library(reversi_core STATIC
 target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
+add_library(reversi_analysis STATIC
+    src/analysis/analysis.c
+    src/analysis/record.c)
+target_include_directories(reversi_analysis PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(reversi_analysis
+    PUBLIC reversi_core
+    PRIVATE reversi_warnings)
+
 set(REVERSI_AI_WORKER_SOURCE src/ai/ai_worker.c)
 if(EMSCRIPTEN)
     set(REVERSI_AI_WORKER_SOURCE src/platform/web/ai_worker_web.c)
@@ -271,13 +280,14 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
 endif()
 
 add_library(reversi_app STATIC
-    src/app/app.c)
+    src/app/app.c
+    src/ui/lab_view.c)
 target_include_directories(reversi_app PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(reversi_app
-    PUBLIC reversi_core reversi_ui reversi_ai reversi_persistence
-           reversi_audio
+    PUBLIC reversi_analysis reversi_ui reversi_ai
+           reversi_persistence reversi_audio
     PRIVATE reversi_warnings)
 
 add_executable(reversi src/main.c)
@@ -295,7 +305,7 @@ if(EMSCRIPTEN)
         "-sFORCE_FILESYSTEM=1"
         "-sMODULARIZE=1"
         "-sEXPORT_NAME=createReversi"
-        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_match_mode','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes','_reversi_web_persist']"
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_ai_worker_analysis_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_match_mode','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes','_reversi_web_persist']"
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
         "SHELL:--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
         "SHELL:--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
@@ -482,8 +492,19 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
         core.history)
     reversi_add_core_test(reversi_match_tests tests/test_match.c
         core.match)
+    add_executable(reversi_analysis_tests tests/test_analysis.c)
+    target_include_directories(reversi_analysis_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_analysis_tests PRIVATE
+        reversi_analysis reversi_warnings)
+    add_test(NAME analysis.session COMMAND reversi_analysis_tests)
+    set_tests_properties(analysis.session PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+
     reversi_add_ai_test(reversi_ai_tests tests/test_ai.c ai.core)
     reversi_add_ai_test(reversi_endgame_tests tests/test_endgame.c ai.endgame)
+    reversi_add_ai_test(reversi_analyze_tests tests/test_analyze.c ai.analyze)
     reversi_add_ai_test(reversi_ai_worker_tests tests/test_ai_worker.c
         ai.worker)
     reversi_add_persistence_test(reversi_save_tests tests/test_save.c
@@ -522,6 +543,15 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     set_target_properties(reversi_ai_corpus PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
+    add_executable(reversi_analysis_bench tests/bench_analysis.c)
+    target_include_directories(reversi_analysis_bench PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_analysis_bench PRIVATE
+        reversi_ai reversi_warnings)
+    set_target_properties(reversi_analysis_bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
     if(REVERSI_ENABLE_GUI_TESTS)
         add_test(NAME app.smoke COMMAND reversi --frames 2)
         set_tests_properties(app.smoke PROPERTIES
@@ -534,6 +564,14 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
         # Debug-only autoplay hook: one completed game, one stats record,
         # terminal autosave removed. Requires a display like app.smoke.
         if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            add_test(NAME app.lab COMMAND reversi --frames 20)
+            set_tests_properties(app.lab PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                ENVIRONMENT
+                    "REVERSI_LAB_SMOKE=1;HOME=${CMAKE_BINARY_DIR}/test-home;XDG_DATA_HOME=${CMAKE_BINARY_DIR}/test-home;APPDATA=${CMAKE_BINARY_DIR}/test-home"
+                LABELS "gui"
+                TIMEOUT 30)
+
             add_test(NAME app.autoplay
                 COMMAND "${CMAKE_COMMAND}"
                     "-DREVERSI=$<TARGET_FILE:reversi>"

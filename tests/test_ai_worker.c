@@ -94,17 +94,92 @@ static void test_cancel(TestStats *stats)
     ai_worker_destroy(worker);
 }
 
+static void test_analysis(TestStats *stats)
+{
+    AiWorker *worker = ai_worker_create();
+    REVERSI_TEST_ASSERT(stats, worker != NULL);
+    if (worker == NULL) {
+        return;
+    }
+
+    GameState state;
+    game_init(&state);
+    const GameState snapshot = state;
+    AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, 7);
+    config.max_depth = 4;
+    config.time_budget_ms = 5000;
+
+    REVERSI_TEST_ASSERT(stats, ai_worker_start_analysis(worker, &state,
+                                                        &config, 3));
+    REVERSI_TEST_ASSERT(stats, ai_worker_is_active(worker));
+    REVERSI_TEST_ASSERT(stats, !ai_worker_start_analysis(worker, &state,
+                                                         &config, 3));
+    /* A move job must not consume an analysis result. */
+    Move move = {0, 0};
+    REVERSI_TEST_ASSERT(stats, !ai_worker_take(worker, &move, NULL));
+
+    state.current_player = STONE_WHITE;
+    REVERSI_TEST_ASSERT(stats, wait_finished(worker, 5000));
+    REVERSI_TEST_ASSERT(stats,
+        ai_worker_status(worker) == AI_WORKER_READY);
+
+    AiAnalysis analysis;
+    REVERSI_TEST_ASSERT(stats, ai_worker_take_analysis(worker, &analysis));
+    REVERSI_TEST_ASSERT(stats, analysis.line_count >= 2);
+    REVERSI_TEST_ASSERT(stats, analysis.depth >= 1);
+    for (int i = 0; i < analysis.line_count; ++i) {
+        REVERSI_TEST_ASSERT(stats, rules_is_legal_move(
+            &snapshot.board, snapshot.current_player,
+            analysis.lines[i].move));
+    }
+    REVERSI_TEST_ASSERT(stats, !ai_worker_is_active(worker));
+    REVERSI_TEST_ASSERT(stats, !ai_worker_take_analysis(worker, &analysis));
+
+    ai_worker_destroy(worker);
+}
+
+static void test_analysis_cancel(TestStats *stats)
+{
+    AiWorker *worker = ai_worker_create();
+    REVERSI_TEST_ASSERT(stats, worker != NULL);
+    if (worker == NULL) {
+        return;
+    }
+
+    GameState state;
+    game_init(&state);
+    AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, 0);
+    config.max_depth = 20;
+    config.time_budget_ms = 10000;
+    REVERSI_TEST_ASSERT(stats, ai_worker_start_analysis(worker, &state,
+                                                        &config, 3));
+    ai_worker_cancel(worker);
+    REVERSI_TEST_ASSERT(stats,
+        ai_worker_status(worker) == AI_WORKER_FAILED);
+
+    AiAnalysis analysis;
+    REVERSI_TEST_ASSERT(stats, !ai_worker_take_analysis(worker, &analysis));
+    REVERSI_TEST_ASSERT(stats, !ai_worker_is_active(worker));
+
+    ai_worker_join(worker);
+    ai_worker_destroy(worker);
+}
+
 static void test_null_safety(TestStats *stats)
 {
     GameState state;
     game_init(&state);
     AiConfig config = ai_default_config(AI_DIFFICULTY_EASY, 0);
     Move move = {0, 0};
+    AiAnalysis analysis;
 
     AiWorker *worker = ai_worker_create();
     REVERSI_TEST_ASSERT(stats, worker != NULL);
     ai_worker_destroy(worker);
     REVERSI_TEST_ASSERT(stats, !ai_worker_start(NULL, &state, &config));
+    REVERSI_TEST_ASSERT(stats, !ai_worker_start_analysis(NULL, &state,
+                                                         &config, 3));
+    REVERSI_TEST_ASSERT(stats, !ai_worker_take_analysis(NULL, &analysis));
     REVERSI_TEST_ASSERT(stats,
         ai_worker_status(NULL) == AI_WORKER_IDLE);
     REVERSI_TEST_ASSERT(stats, !ai_worker_take(NULL, &move, NULL));
@@ -120,6 +195,8 @@ int main(void)
 
     REVERSI_RUN_TEST(&stats, test_start_and_take);
     REVERSI_RUN_TEST(&stats, test_cancel);
+    REVERSI_RUN_TEST(&stats, test_analysis);
+    REVERSI_RUN_TEST(&stats, test_analysis_cancel);
     REVERSI_RUN_TEST(&stats, test_null_safety);
 
     return reversi_test_summary(&stats, "ai.worker");

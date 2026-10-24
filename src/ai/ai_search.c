@@ -4,6 +4,7 @@
 
 #include "ai/ai_search.h"
 
+#include "ai/ai_analyze.h"
 #include "ai/ai_endgame.h"
 #include "ai/ai_internal.h"
 #include "core/bitboard.h"
@@ -47,6 +48,10 @@ typedef struct AiSearch {
     uint64_t start_ms;
     uint64_t session_start_ms;
     int budget_ms;
+    /* Analysis scores every root move with a full window; TT score cutoffs
+       would turn some of them into bounds, so analysis keeps the TT for move
+       ordering only. */
+    bool no_tt_cutoffs;
     bool stopped;
     bool cancelled;
     bool timed_out;
@@ -308,7 +313,7 @@ static int negamax(AiSearch *search, const GameState *state,
         if (entry->depth > 0 && entry->key == key) {
             tt_best = entry->best;
             has_tt_best = true;
-            if (entry->depth >= depth) {
+            if (!search->no_tt_cutoffs && entry->depth >= depth) {
                 ++search->stats.tt_hits;
                 if (entry->flag == AI_TT_EXACT) {
                     return entry->score;
@@ -636,4 +641,239 @@ bool ai_easy_choose(const GameState *state, const AiConfig *config,
     }
     *out_move = best;
     return true;
+}
+
+/* -------------------------------------------------------------------------
+ * Read-only MultiPV analysis
+ * ---------------------------------------------------------------------- */
+
+typedef struct AnalysisRootScore {
+    Move move;
+    int score;
+    int pv_length;
+    Move pv[AI_ANALYSIS_MAX_PV];
+} AnalysisRootScore;
+
+static void sort_root_scores(AnalysisRootScore *scores, int count)
+{
+    /* Stable insertion sort: equal scores keep the previous ordering so the
+       reported ranking is deterministic. */
+    for (int i = 1; i < count; ++i) {
+        const AnalysisRootScore key = scores[i];
+        int j = i - 1;
+        while (j >= 0 && scores[j].score < key.score) {
+            scores[j + 1] = scores[j];
+            --j;
+        }
+        scores[j + 1] = key;
+    }
+}
+
+static int extract_pv(AiSearch *search, const GameState *root, Move first,
+                      Move *pv, int max_length)
+{
+    if (max_length <= 0) {
+        return 0;
+    }
+    pv[0] = first;
+    int length = 1;
+    if (search->tt == NULL || max_length == 1) {
+        return length;
+    }
+
+    Bitboard bb;
+    bitboard_from_board(&root->board, &bb);
+    const uint64_t hash = state_hash(search, root);
+    GameState state = *root;
+    Bitboard child_bb;
+    GameState child;
+    uint64_t child_hash = 0;
+    if (!apply_search_move(search, &child, &child_bb, &child_hash, &state,
+                           &bb, hash, first)) {
+        return 1;
+    }
+    state = child;
+    bb = child_bb;
+    uint64_t state_hash_value = child_hash;
+
+    while (length < max_length) {
+        if (bitboard_legal_moves(&bb, state.current_player) == 0) {
+            break;
+        }
+        const AiTtEntry *entry =
+            &search->tt[state_hash_value & search->tt_mask];
+        if (entry->depth <= 0 || entry->key != state_hash_value) {
+            break;
+        }
+        const Move move = entry->best;
+        if (!rules_is_legal_move(&state.board, state.current_player, move)) {
+            break;
+        }
+        GameState next;
+        Bitboard next_bb;
+        uint64_t next_hash = 0;
+        if (!apply_search_move(search, &next, &next_bb, &next_hash, &state,
+                               &bb, state_hash_value, move)) {
+            break;
+        }
+        pv[length++] = move;
+        state = next;
+        bb = next_bb;
+        state_hash_value = next_hash;
+    }
+    return length;
+}
+
+bool ai_analyze_position(const GameState *state, const AiConfig *config,
+                         int max_lines, AiAnalysis *out)
+{
+    if (state == NULL || config == NULL || out == NULL
+        || !ai_config_is_valid(config)) {
+        return false;
+    }
+    if (max_lines < 1) {
+        max_lines = 1;
+    }
+    if (max_lines > AI_ANALYSIS_MAX_LINES) {
+        max_lines = AI_ANALYSIS_MAX_LINES;
+    }
+    memset(out, 0, sizeof(*out));
+
+    AiSearch search;
+    memset(&search, 0, sizeof(search));
+    search.config = config;
+    search.start_ms = ai_now_ms();
+    search.session_start_ms = search.start_ms;
+    search.budget_ms = config->time_budget_ms;
+    search.no_tt_cutoffs = true;
+    init_zobrist(&search);
+    const uint64_t root_hash = state_hash(&search, state);
+
+    if (config->difficulty == AI_DIFFICULTY_HARD) {
+        search.tt = calloc(REVERSI_AI_TT_SIZE, sizeof(AiTtEntry));
+        search.tt_mask = REVERSI_AI_TT_SIZE - 1u;
+    }
+
+    Bitboard bb;
+    bitboard_from_board(&state->board, &bb);
+    const uint64_t legal = bitboard_legal_moves(&bb, state->current_player);
+    Move root_moves[REVERSI_BOARD_CELL_COUNT];
+    const int root_count = moves_from_bits(legal, root_moves);
+    if (root_count == 0) {
+        finish_stats(&search, 0, 0, &out->stats);
+        free(search.tt);
+        return false;
+    }
+
+    const int black = board_count(&state->board, STONE_BLACK);
+    const int white = board_count(&state->board, STONE_WHITE);
+    const int empty = REVERSI_BOARD_CELL_COUNT - black - white;
+    int max_depth = config->max_depth;
+    if (max_depth < 1) {
+        max_depth = 1;
+    }
+    if (config->difficulty == AI_DIFFICULTY_HARD
+        && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES && max_depth < empty) {
+        max_depth = empty;
+    }
+
+    AnalysisRootScore current[REVERSI_BOARD_CELL_COUNT];
+    AnalysisRootScore best[REVERSI_BOARD_CELL_COUNT];
+    int best_count = 0;
+    int completed_depth = 0;
+
+    for (int depth = 1; depth <= max_depth; ++depth) {
+        if (should_stop_now(&search)) {
+            break;
+        }
+
+        Move moves[REVERSI_BOARD_CELL_COUNT];
+        const int count = moves_from_bits(legal, moves);
+        order_moves(moves, count, best_count > 0 ? best[0].move : (Move){0, 0},
+                    best_count > 0);
+
+        bool depth_ok = true;
+        int filled = 0;
+        for (int i = 0; i < count; ++i) {
+            if (should_stop_now(&search)) {
+                depth_ok = false;
+                break;
+            }
+            GameState child;
+            Bitboard child_bb;
+            uint64_t child_hash = 0;
+            if (!apply_search_move(&search, &child, &child_bb, &child_hash,
+                                   state, &bb, root_hash, moves[i])) {
+                depth_ok = false;
+                break;
+            }
+            const int score = -negamax(&search, &child, &child_bb,
+                                       child_hash, depth - 1,
+                                       -REVERSI_AI_INF, REVERSI_AI_INF);
+            if (search.stopped) {
+                depth_ok = false;
+                break;
+            }
+            current[filled].move = moves[i];
+            current[filled].score = score;
+            /* Collect the PV while this subtree's TT entries are fresh;
+               later root moves overwrite them. */
+            current[filled].pv_length = extract_pv(
+                &search, state, moves[i], current[filled].pv,
+                AI_ANALYSIS_MAX_PV);
+            ++filled;
+        }
+
+        if (!depth_ok) {
+            break;
+        }
+        sort_root_scores(current, filled);
+        memcpy(best, current, (size_t)filled * sizeof(best[0]));
+        best_count = filled;
+        completed_depth = depth;
+    }
+
+    out->depth = completed_depth;
+    out->complete = completed_depth == max_depth;
+    out->exact = empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES
+        && completed_depth >= empty;
+    out->line_count = best_count < max_lines ? best_count : max_lines;
+
+    for (int i = 0; i < out->line_count; ++i) {
+        AiAnalysisLine *line = &out->lines[i];
+        line->move = best[i].move;
+        line->score = best[i].score;
+        line->depth = completed_depth;
+        line->complete = out->complete;
+        line->exact = out->exact;
+        line->pv_length = best[i].pv_length;
+        memcpy(line->pv, best[i].pv,
+               (size_t)best[i].pv_length * sizeof(line->pv[0]));
+    }
+
+    finish_stats(&search, completed_depth,
+                 out->line_count > 0 ? out->lines[0].score : 0, &out->stats);
+    free(search.tt);
+    return completed_depth > 0;
+}
+
+void ai_evaluation_to_black(const AiEvaluation *side_to_move,
+                            Stone current_player, AiEvaluation *out_black)
+{
+    if (side_to_move == NULL || out_black == NULL) {
+        return;
+    }
+    *out_black = *side_to_move;
+    if (current_player != STONE_WHITE) {
+        return;
+    }
+    out_black->corners = -out_black->corners;
+    out_black->mobility = -out_black->mobility;
+    out_black->potential_mobility = -out_black->potential_mobility;
+    out_black->positional = -out_black->positional;
+    out_black->stability = -out_black->stability;
+    out_black->frontier = -out_black->frontier;
+    out_black->discs = -out_black->discs;
+    out_black->parity = -out_black->parity;
+    out_black->total = -out_black->total;
 }

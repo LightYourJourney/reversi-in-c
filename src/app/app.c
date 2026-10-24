@@ -17,6 +17,7 @@
 #include "ui/game_view.h"
 #include "ui/help_view.h"
 #include "ui/history_view.h"
+#include "ui/lab_view.h"
 #include "ui/menu_view.h"
 #include "ui/modal.h"
 #include "ui/pause_view.h"
@@ -55,7 +56,8 @@ typedef enum AppScreen {
     APP_SCREEN_RESULT,
     APP_SCREEN_HELP,
     APP_SCREEN_STATS,
-    APP_SCREEN_SAVES
+    APP_SCREEN_SAVES,
+    APP_SCREEN_LAB
 } AppScreen;
 
 typedef enum PendingGameAction {
@@ -88,6 +90,7 @@ typedef struct App {
     HelpView help_view;
     StatsView stats_view;
     SavesView saves_view;
+    LabView lab;
     SaveSlotInfo save_slots[REVERSI_SAVES_ROW_COUNT];
     bool saves_saving;
     AppScreen saves_return;
@@ -312,6 +315,7 @@ static void app_init(App *app)
     help_view_init(&app->help_view);
     stats_view_init(&app->stats_view);
     saves_view_init(&app->saves_view);
+    lab_view_init(&app->lab);
     modal_init(&app->modal);
     ui_animation_reset(&app->animation);
 
@@ -323,6 +327,16 @@ static void app_init(App *app)
         .ai = NULL
     };
     (void)match_start(&app->match, &default_config);
+
+#ifndef NDEBUG
+    /* Debug-only render smoke for the analysis screen. */
+    const char *lab_smoke = getenv("REVERSI_LAB_SMOKE");
+    if (lab_smoke != NULL && lab_smoke[0] != '\0'
+        && strcmp(lab_smoke, "0") != 0) {
+        lab_view_enter(&app->lab, &app->match, false);
+        app->screen = APP_SCREEN_LAB;
+    }
+#endif
 
     app_refresh_slots(app);
 
@@ -825,6 +839,11 @@ static void app_update_passive(App *app, float dt)
             &app->saves_view, &input, false, dt, app->saves_saving,
             app->save_slots);
         break;
+    case APP_SCREEN_LAB:
+        (void)lab_view_update(
+            &app->lab, &input, dt, app->ai_worker, &app->match,
+            app->match.history.count > 1);
+        break;
     }
 }
 
@@ -927,6 +946,11 @@ static void app_handle_menu_action(App *app, MenuAction action)
         (void)app_restore_saved(app, path);
         break;
     }
+    case MENU_ACTION_LAB:
+        lab_view_enter(&app->lab, &app->match,
+                       app->match.history.count > 1);
+        app_request_screen(app, APP_SCREEN_LAB);
+        break;
     case MENU_ACTION_PLAY:
         setup_view_set_difficulty(
             &app->setup_view,
@@ -1443,6 +1467,17 @@ static void app_update(App *app, const UiInput *input, float dt)
         app_handle_saves_action(app, action);
         break;
     }
+    case APP_SCREEN_LAB: {
+        const LabAction action = lab_view_update(
+            &app->lab, input, dt, app->ai_worker, &app->match,
+            app->match.history.count > 1);
+        if (action == LAB_ACTION_BACK) {
+            audio_play(AUDIO_CUE_BUTTON);
+            lab_view_leave(&app->lab, app->ai_worker);
+            app_request_screen(app, APP_SCREEN_MENU);
+        }
+        break;
+    }
     }
 }
 
@@ -1484,6 +1519,9 @@ static void app_draw(const App *app)
     case APP_SCREEN_SAVES:
         saves_view_draw(&app->saves_view, &app->fonts, app->saves_saving,
                         app->save_slots);
+        break;
+    case APP_SCREEN_LAB:
+        lab_view_draw(&app->lab, &app->fonts);
         break;
     }
 

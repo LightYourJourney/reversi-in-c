@@ -56,10 +56,11 @@
 | Game | `src/core/game.[ch]` | Phase 1 已实现 | 当前玩家、落子应用、自动跳过、主动跳过限制、终局、结果、一致性检查 | Board、Rules |
 | History | `src/core/history.[ch]` | Phase 3 已实现 | 局面快照栈、撤销/重做游标、重做分支截断、跳过事件记录 | Game |
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
-| AI | `src/ai/` | Phase 4/11 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
+| AI | `src/ai/` | Phase 4/11/12 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、只读 MultiPV 分析、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
 | Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
-| UI | `src/ui/` | Phase 2/3/4/5 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构 |
-| App | `src/app/` | Phase 2/3/4/5 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时、AI 回合生命周期、存档与统计编排 | 所有下层模块 |
+| Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Game、History、Rules、C 标准库 |
+| UI | `src/ui/` | Phase 2/3/4/5/12 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档/分析视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构；Lab 视图编译进 App |
+| App | `src/app/` | Phase 2/3/4/5/12 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时、AI 回合生命周期、存档与统计编排、Lab 页面与视图 | 所有下层模块 |
 | Storage | `src/storage/` | Phase 5 已实现 | 用户数据目录、原子文件读写、版本化存档、严格回放校验、统计持久化 | Game、History、Match、C 标准库、平台文件 API |
 | Settings | `src/settings/` | Phase 5 已实现 | 用户偏好默认值、严格解析、原子保存 | C 标准库 / Storage |
 | Audio | `src/audio/` | Phase 5 已实现 | 程序化音效合成、设备初始化、音量/开关、无设备降级 | raylib、C 标准库 |
@@ -549,3 +550,19 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    为标量，中局未获明显提升，PVS/Aspiration 等未实现。
 6. **单调时钟**：Windows / Emscripten / POSIX 分支，其他环境回退
    `timespec_get`；预算仍按节点节奏检查。
+
+
+## 21. Phase 12 关键决策：Reversi Lab
+
+1. **独立会话**：`AnalysisSession` 持有自己的局面池与当前节点，正式
+   `Match` 只作为只读来源；分析页面没有写回对局的路径。
+2. **编辑即自定义根**：手工摆盘后无法保证存在合法历史，第一次编辑会把
+   当前局面变成新的 `CUSTOM` 根并丢弃旧树，避免暗示一段不存在的记录。
+3. **MultiPV 同深度整层**：每层对所有根着法全窗口搜索；被中断的整层丢弃，
+   只报告上一层，因此同一结果内的候选分数可比。
+4. **分析路径独立**：`ai_analyze_position()` 不复用正式选着入口，关闭 TT
+   分数截断（仅用于排序），PV 在子树新鲜时重建并逐着法验证。
+5. **generation 绑定**：导航、编辑、导入都会递增局面代数并取消旧任务；
+   后台结果只有代数匹配时才被接受，线程不直接写 UI。
+6. **视图归属**：Lab 视图在 `src/ui/lab_view.c`，但编译进 `reversi_app`，
+   使 `reversi_ui` 不依赖 AI，保持 `ui.*` 测试边界。
