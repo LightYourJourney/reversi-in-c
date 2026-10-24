@@ -106,7 +106,7 @@ AppleClang 21，CMake 4.4.4
 | `experiment.regression` | 78 次断言：配置拒绝、颜色配对、确定性/节点 oracle、节点上限分类、输出文件与异常列表 |
 | `ai.core` | 2,988 次断言（含节点上限、flags 入口与共享基线） |
 | Emscripten Release | 构建通过（实验模块不进入 Web 构建） |
-| GitHub Actions `40114358469` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
+| GitHub Actions `40118354934` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
 
 ## 6. 已知限制
 
@@ -151,7 +151,7 @@ git revert <phase-13-commit>
 | 宏前缀、死分支、const cast、缺头文件、CMake 缩进 | 全部修正 | 构建无警告 |
 | 基线引擎无直接测试 | `ai.core` 增加确定性/合法性断言 | `ai.core` |
 
-保留：旧搜索/旧评估需两次构建；Elo 仅双引擎；崩溃不保留部分数据。
+保留：旧搜索/旧评估需两次构建；Elo 仅双引擎；崩溃不保留部分数据；`experiment.c` 约 850 行（配置/清单/对局/统计集中），清单字段仍分散在 `ExperimentResult` 中；墙钟性能退化只提供同机对照脚本，不进入 CI。
 
 ## 9. 下一阶段依赖
 
