@@ -1,7 +1,7 @@
 # Phase 13 报告：Reversi AI Benchmark 与实验平台
 
 日期：2026-10-25  
-版本：**1.4.0**（源码；提交后确认）  
+版本：**1.4.0**（提交 `102226c`）  
 本机平台：macOS 26.6.2（Darwin 25.6.0），Apple M3 / arm64，
 AppleClang 21，CMake 4.4.4  
 状态标记：PASS / FAIL / NOT TESTED / NOT APPLICABLE
@@ -95,6 +95,7 @@ AppleClang 21，CMake 4.4.4
 | `experiment.regression` | 63 次断言：配置拒绝、颜色配对、确定性 oracle、搜索 oracle、输出文件 |
 | `ai.core` | 2,991 次断言（含节点上限与 flags 入口） |
 | Emscripten Release | 构建通过（实验模块不进入 Web 构建） |
+| GitHub Actions `40114358469` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
 
 ## 6. 已知限制
 
