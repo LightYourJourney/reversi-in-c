@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reversi experiments</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid #444; padding: .35rem .7rem; text-align: left; }
+th { background: #222; }
+a { color: #7dd3fc; }
+small { color: #aaa; }
+</style>
+</head>
+<body>
+<h1>Reversi experiments</h1>
+<p><small>Generated from each experiment's <code>summary.json</code>.
+W/D/L is engine A's record. CI is a Wilson 95% interval; Elo is a
+two-engine logistic estimate with draws counted as 0.5. Raw data links are
+per experiment.</small></p>
+<table>
+<tr><th>Experiment</th><th>Engines</th><th>Games</th><th>Completed</th>
+<th>A W/D/L</th><th>A score (95% CI)</th><th>Elo (95% CI)</th>
+<th>Illegal/timeout/aborted</th><th>Raw</th></tr>
+<tr><td><a href="depth-4-vs-6/report.html">depth-4-vs-6</a></td><td>Depth4 vs Depth6</td><td>8</td><td>8</td><td>2/0/6</td><td>0.250 (0.071..0.591)</td><td>-191 (-445..+64)</td><td>0/0/0</td><td><a href="depth-4-vs-6/games.csv">csv</a></td></tr><tr><td><a href="easy-vs-hard/report.html">easy-vs-hard</a></td><td>Easy vs Hard</td><td>8</td><td>8</td><td>1/0/7</td><td>0.125 (0.022..0.471)</td><td>-338 (-656..-20)</td><td>0/0/0</td><td><a href="easy-vs-hard/games.csv">csv</a></td></tr><tr><td><a href="eval-full-vs-basic/report.html">eval-full-vs-basic</a></td><td>FullEval vs BasicEval</td><td>8</td><td>8</td><td>4/0/4</td><td>0.500 (0.215..0.785)</td><td>+0 (-225..+225)</td><td>0/0/0</td><td><a href="eval-full-vs-basic/games.csv">csv</a></td></tr><tr><td><a href="fixed-time-150ms/report.html">fixed-time-150ms</a></td><td>FixedTimeA vs FixedTimeB</td><td>8</td><td>8</td><td>5/0/3</td><td>0.625 (0.306..0.863)</td><td>+89 (-142..+320)</td><td>0/0/0</td><td><a href="fixed-time-150ms/games.csv">csv</a></td></tr><tr><td><a href="node-budget-20k/report.html">node-budget-20k</a></td><td>Node20kA vs Node20kB</td><td>4</td><td>4</td><td>2/0/2</td><td>0.500 (0.150..0.850)</td><td>+0 (-301..+301)</td><td>0/0/0</td><td><a href="node-budget-20k/games.csv">csv</a></td></tr><tr><td><a href="random-100/report.html">random-100</a></td><td>RandomA vs RandomB</td><td>100</td><td>100</td><td>45/6/49</td><td>0.480 (0.385..0.577)</td><td>-14 (-82..+54)</td><td>0/0/0</td><td><a href="random-100/games.csv">csv</a></td></tr><tr><td><a href="tt-vs-nott/report.html">tt-vs-nott</a></td><td>TT vs NoTT</td><td>8</td><td>8</td><td>4/0/4</td><td>0.500 (0.215..0.785)</td><td>+0 (-225..+225)</td><td>0/0/0</td><td><a href="tt-vs-nott/games.csv">csv</a></td></tr>
+</table>
+<p><small>Non-match evidence: <a href="rules-throughput/corpus.txt">rules
+throughput</a>, <a href="endgame-verify/verify.txt">exact endgame
+verification</a>.</small></p>
+</body>
+</html>

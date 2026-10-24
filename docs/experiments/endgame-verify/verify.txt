@@ -1,0 +1,7 @@
+Command: build-release/reversi_endgame_tests
+Date: 2026-10-24T16:51:02Z
+
+RUN  test_exact_against_full_depth
+RUN  test_incomplete_classification
+RUN  test_limits
+PASS ai.endgame (67 checks)

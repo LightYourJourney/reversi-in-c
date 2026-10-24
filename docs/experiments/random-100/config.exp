@@ -1,0 +1,9 @@
+version 1
+name random-100
+seed 20261025
+games 100
+openings 4
+opening-ply 0
+max-plies 100
+engine-a kind=random difficulty=hard depth=8 time=500 nodes=0 tt=on endgame=on label=RandomA
+engine-b kind=random difficulty=hard depth=8 time=500 nodes=0 tt=on endgame=on label=RandomB

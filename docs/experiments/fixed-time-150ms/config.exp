@@ -1,0 +1,9 @@
+version 1
+name fixed-time-150ms
+seed 20261025
+games 8
+openings 2
+opening-ply 4
+max-plies 100
+engine-a kind=search difficulty=hard depth=32 time=150 nodes=0 tt=on endgame=on label=FixedTimeA
+engine-b kind=search difficulty=hard depth=32 time=150 nodes=0 tt=on endgame=on label=FixedTimeB

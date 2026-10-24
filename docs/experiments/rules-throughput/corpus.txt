@@ -1,0 +1,40 @@
+Command: build-release/bin/reversi_ai_corpus
+Date: 2026-10-24T16:51:02Z
+
+Reversi AI corpus benchmark
+micro iterations per position: 10000
+fixed search: Medium depth 6, no TT; practical: Hard default (500 ms budget)
+
+position           empty scalar-gen scalar-play     bb-gen    bb-play
+opening               60     1300.4       28.6        3.2        6.3
+midgame-40            40      831.2       34.3        7.3        5.5
+midgame-30            30      728.2       29.8        7.8        7.3
+corner-contest        52     1208.7       37.5        4.6        6.1
+mobility-<=3          59     1311.4       35.6        3.1        5.5
+must-pass             12      295.3        0.0       13.1       -1.0
+terminal               0       22.6        0.0       14.3       -1.0
+endgame-20            20      549.9       33.8       12.1        6.1
+endgame-12            12      309.2       30.4       16.4        5.5
+endgame-10            10      236.4       28.2       12.2        7.3
+endgame-8              8      192.7       33.5       13.8        5.2
+endgame-6              6      212.9       31.3       14.7        4.9
+endgame-4              4      122.4       34.1       14.5        6.4
+endgame-2              2       60.2       33.2       13.7        6.7
+
+search (ns/op above; times below)
+opening            fixed6=ok nodes=1820      ms=5.632 nps=323153 | hard=ok depth=10 nodes=63487     ms=206.9 cut=22.7% tt=597
+midgame-40         fixed6=ok nodes=39686     ms=107.189 nps=370243 | hard=ok depth=8 nodes=190464    ms=501.5 cut=17.1% tt=4274
+midgame-30         fixed6=ok nodes=89997     ms=224.498 nps=400881 | hard=ok depth=7 nodes=234496    ms=501.2 cut=12.3% tt=3804
+corner-contest     fixed6=ok nodes=15200     ms=63.272 nps=240233 | hard=ok depth=8 nodes=166912    ms=503.0 cut=19.7% tt=2887
+mobility-<=3       fixed6=ok nodes=1752      ms=5.880 nps=297959 | hard=ok depth=10 nodes=53160     ms=166.3 cut=21.8% tt=361
+must-pass          search=skip
+terminal           search=skip
+endgame-20         fixed6=ok nodes=33844     ms=63.829 nps=530229 | hard=ok depth=8 nodes=271360    ms=501.1 cut=18.9% tt=10344
+endgame-12         fixed6=ok nodes=4076      ms=6.380 nps=638871 | hard=ok depth=12 nodes=99753     ms=17.2 cut=37.0% tt=9323
+endgame-10         fixed6=ok nodes=1086      ms=1.291 nps=841208 | hard=ok depth=10 nodes=7452      ms=1.1 cut=31.0% tt=711
+endgame-8          fixed6=ok nodes=1899      ms=2.514 nps=755370 | hard=ok depth=8 nodes=868       ms=0.2 cut=39.4% tt=69
+endgame-6          fixed6=ok nodes=543       ms=0.334 nps=1625749 | hard=ok depth=6 nodes=183       ms=0.0 cut=32.2% tt=0
+endgame-4          fixed6=ok nodes=36        ms=0.024 nps=1500000 | hard=ok depth=4 nodes=12        ms=0.0 cut=25.0% tt=0
+endgame-2          fixed6=ok nodes=10        ms=0.007 nps=1428571 | hard=ok depth=2 nodes=6         ms=0.0 cut=0.0% tt=0
+
+peak_rss_kb=5488
