@@ -2,11 +2,12 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **源码版本：1.3.0（Reversi Lab 棋局分析，尚未发布）。最新发行版为
+> **源码版本：1.4.0（AI 实验平台，尚未发布）。最新发行版为
 > [v1.0.1](https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.1)。**
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
-> Reversi Lab 提供独立于正式对局的复盘、MultiPV 分析与分支研究。
+> Reversi Lab 提供独立于正式对局的复盘、MultiPV 分析与分支研究；
+> 实验平台可复现地比较引擎配置并导出 CSV/JSON/Markdown/HTML 报告。
 > 存档/自动保存、继续上次对局、设置持久化、统计、规则帮助、程序化音效与
 > 运行时明暗主题均已接入。存档使用带版本号、校验和与原子写入的文本格式，
 > 损坏或不兼容文件会被安全拒绝。
@@ -28,6 +29,8 @@
 - 后台 AI 搜索、取消与快照隔离，思考期间界面保持响应。
 - Reversi Lab：局面树、历史跳转、分支、自由摆盘、MultiPV、PV、
   评估分量、评分曲线、分支比较、批次分析与版本化棋谱导入/导出。
+- 可复现实验平台：配对开局与换色、固定种子、固定深度/节点/时间、
+  Wilson 置信区间与 Elo、确定性回归、静态实验报告。
 - 撤销/重做、暂停、重开、历史、帮助、统计与结算页。
 - 自动存档、3 个手动存档槽、严格校验与原子写入。
 - 设置持久化、明暗主题、动画速度、合法提示与最后一步高亮。
@@ -39,9 +42,9 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 20/20、Release 20/20、ASan+UBSan 20/20（无窗口）；GUI 23/23 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 20/20，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
-| Linux x86_64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 20/20、ASan+UBSan、Xvfb GUI 3/3 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| macOS 11+ arm64 | 本机 Debug 21/21、Release 21/21、ASan+UBSan 21/21（无窗口）；GUI 24/24 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
+| Windows x64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 21/21，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 21/21、ASan+UBSan、Xvfb GUI 3/3 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 | Web（Chrome） | Emscripten 6.0.13；构建通过（v1.3.0），浏览器套件 9/9（v1.1.0），v1.2.0/v1.3.0 复验 NOT TESTED | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
@@ -504,10 +507,10 @@ ctest --test-dir build --output-on-failure
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug（无窗口） | 20/20 通过 |
-| Release（无窗口） | 20/20 通过 |
-| ASan+UBSan（无窗口） | 20/20 通过，无 Sanitizer 报告 |
-| Debug + GUI | 23/23 通过；含 `app.lab` 分析页 20 帧渲染冒烟 |
+| Debug（无窗口） | 21/21 通过 |
+| Release（无窗口） | 21/21 通过 |
+| ASan+UBSan（无窗口） | 21/21 通过，无 Sanitizer 报告 |
+| Debug + GUI | 24/24 通过；含 `app.lab` 分析页 20 帧渲染冒烟 |
 | 浏览器（Chrome） | v1.1.0 套件 9/9；v1.2.0/v1.3.0 浏览器复验 **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 346 KB，Worker 58 KB） |
 | GitHub Actions | v1.3.0 运行 `40111155790` 9/9 通过；v1.2.0 为 `40073769484` |
@@ -517,6 +520,10 @@ AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局
 对 Medium 20:0、对 Easy 17:3；Medium 对 Easy 20:0 且对 Random 17:2:1；
 Easy 对 Random 13:1:6、对 Greedy 11:9。完整数据见
 [docs/PHASE_4_REPORT.md](docs/PHASE_4_REPORT.md)。
+
+Phase 13 的实验平台见 [docs/BENCHMARK_METHODOLOGY.md](docs/BENCHMARK_METHODOLOGY.md)
+与 [docs/experiments/index.html](docs/experiments/index.html)；7 组配对实验
+与 100 局随机稳定性实验均无非法着法、超时或中止。
 
 Phase 12 的分析基准（Release，MultiPV=3）：开局深度 8 约 61 ms，
 中局 30 空深度 8 约 2.3 s，8 空残局精确求解约 11 ms。数据见

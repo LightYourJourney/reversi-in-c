@@ -44,6 +44,9 @@ typedef struct AiConfig {
     AiDifficulty difficulty;
     int max_depth;
     int time_budget_ms;
+    /* 0 means no node cap. A capped search may stop mid-depth exactly like a
+       time budget, so results expose node_limit alongside timed_out. */
+    uint64_t max_nodes;
     int randomness;
     unsigned seed;
     AiCancelFn should_cancel;
@@ -59,6 +62,7 @@ typedef struct AiStats {
     int elapsed_ms;
     bool cancelled;
     bool timed_out;
+    bool node_limit;
 } AiStats;
 
 /*

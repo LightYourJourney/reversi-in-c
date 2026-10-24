@@ -1,4 +1,5 @@
 #include "ai/ai.h"
+#include "ai/ai_baselines.h"
 #include "core/game.h"
 #include "core/rules.h"
 
@@ -57,56 +58,10 @@ typedef enum BenchOutcome {
     BENCH_LOSS
 } BenchOutcome;
 
-static uint64_t next_random(uint64_t *state)
-{
-    uint64_t x = *state;
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    *state = x;
-    return x * 0x2545F4914F6CDD1DULL;
-}
-
 static int legal_moves(const GameState *state, Move *moves)
 {
     return rules_generate_legal_moves(&state->board, state->current_player,
                                       moves, REVERSI_BOARD_CELL_COUNT);
-}
-
-static Move random_move(const GameState *state, uint64_t *rng)
-{
-    Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = legal_moves(state, moves);
-    return count > 0 ? moves[next_random(rng) % (uint64_t)count] : (Move){0, 0};
-}
-
-static Move greedy_move(const GameState *state)
-{
-    Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = legal_moves(state, moves);
-    if (count <= 0) {
-        return (Move){0, 0};
-    }
-
-    Move best = moves[0];
-    int best_score = -1000000;
-    for (int i = 0; i < count; ++i) {
-        GameState child = *state;
-        if (rules_apply_move(&child.board, state->current_player,
-                             moves[i]) < 0) {
-            continue;
-        }
-        child.current_player = stone_opponent(state->current_player);
-        child.result = GAME_RESULT_ONGOING;
-        AiEvaluation evaluation;
-        ai_evaluate(&child, &evaluation);
-        const int score = -evaluation.total;
-        if (score > best_score) {
-            best_score = score;
-            best = moves[i];
-        }
-    }
-    return best;
 }
 
 static bool ai_move(const GameState *state, BenchPlayer *player,
@@ -140,10 +95,10 @@ static bool choose_move(const GameState *state, BenchPlayer *player,
 {
     switch (player->kind) {
     case BENCH_RANDOM:
-        *out_move = random_move(state, &player->rng);
+        *out_move = ai_baseline_random_move(state, &player->rng);
         return true;
     case BENCH_GREEDY:
-        *out_move = greedy_move(state);
+        *out_move = ai_baseline_greedy_move(state);
         return true;
     case BENCH_AI:
     default:
@@ -307,7 +262,7 @@ static GameState midgame_position(void)
             (void)game_pass(&state);
             continue;
         }
-        (void)game_apply_move(&state, random_move(&state, &rng));
+        (void)game_apply_move(&state, ai_baseline_random_move(&state, &rng));
     }
     return state;
 }

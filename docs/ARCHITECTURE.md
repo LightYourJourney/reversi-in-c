@@ -58,6 +58,7 @@
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4/11/12 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、只读 MultiPV 分析、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
 | Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
+| Experiment | `src/experiment/` | Phase 13 已实现 | 版本化实验配置、配对对局、强度/性能统计、CSV/JSON/Markdown/HTML 报告 | AI、core、C 标准库、平台进程/文件 API |
 | Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Board、Game、History、Rules、C 标准库 |
 | UI | `src/ui/` | Phase 2/3/4/5/12 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档/分析视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构；Lab 视图编译进 App |
 | App | `src/app/` | Phase 2/3/4/5/12 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时、AI 回合生命周期、存档与统计编排、Lab 页面与视图 | 所有下层模块 |
@@ -566,3 +567,19 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    后台结果只有代数匹配时才被接受，线程不直接写 UI。
 6. **视图归属**：Lab 视图在 `src/ui/lab_view.c`，但编译进 `reversi_app`，
    使 `reversi_ui` 不依赖 AI，保持 `ui.*` 测试边界。
+
+
+## 22. Phase 13 关键决策：实验平台
+
+1. **同一 AI 内核**：实验只通过 `ai_choose_move` / `ai_search_choose_flags`
+   调用正式搜索，Random/Greedy 提取为共享基线；不复制搜索或评估。
+2. **可复现清单**：运行时读取 Git SHA（脏工作区标记），记录 OS/CPU/
+   编译器/构建类型/配置与数据版本；每个输出目录保存规范化 `config.exp`。
+3. **配对公平**：每两局共享一个合法随机开局并交换颜色；引擎 RNG 由
+   种子/局号/引擎派生；异常对局单独计数、不计入胜率。
+4. **两类评测**：固定深度/节点用于逻辑对照，固定时间用于真实性能；
+   时间结果明确标注为非跨机器确定性。
+5. **统计谨慎**：Wilson 区间与双引擎 Elo 模型；小样本不输出无区间的
+   精确强度结论。
+6. **回归分层**：确定性 oracle 进入 CTest；完整实验由脚本手动运行，
+   不把不同 CI 机器的原始耗时当算法优劣。

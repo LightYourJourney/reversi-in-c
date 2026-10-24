@@ -55,6 +55,7 @@ typedef struct AiSearch {
     bool stopped;
     bool cancelled;
     bool timed_out;
+    bool node_limit;
     uint64_t zobrist[REVERSI_BOARD_CELL_COUNT][2];
     uint64_t turn_key[2];
     AiTtEntry *tt;
@@ -142,6 +143,12 @@ static bool check_stop(AiSearch *search, bool force)
     if (search->config->should_cancel != NULL
         && search->config->should_cancel(search->config->cancel_context)) {
         search->cancelled = true;
+        search->stopped = true;
+        return true;
+    }
+    if (search->config->max_nodes > 0
+        && search->stats.nodes >= search->config->max_nodes) {
+        search->node_limit = true;
         search->stopped = true;
         return true;
     }
@@ -447,6 +454,7 @@ static void finish_stats(AiSearch *search, int completed_depth, int score,
         (int)(ai_now_ms() - search->session_start_ms);
     out_stats->cancelled = search->cancelled;
     out_stats->timed_out = search->timed_out;
+    out_stats->node_limit = search->node_limit;
 }
 
 static bool search_choose(const GameState *state, const AiConfig *config,
@@ -520,7 +528,7 @@ static bool search_choose(const GameState *state, const AiConfig *config,
         search.start_ms = ai_now_ms();
     }
 
-    if (config->difficulty == AI_DIFFICULTY_HARD
+    if (use_endgame && config->difficulty == AI_DIFFICULTY_HARD
         && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES && max_depth < empty) {
         max_depth = empty;
     }
@@ -579,6 +587,14 @@ bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
     return search_choose(state, config, use_tt, false, out_move, out_stats);
 }
 
+bool ai_search_choose_flags(const GameState *state, const AiConfig *config,
+                            bool use_tt, bool use_endgame,
+                            Move *out_move, AiStats *out_stats)
+{
+    return search_choose(state, config, use_tt, use_endgame, out_move,
+                         out_stats);
+}
+
 bool ai_easy_choose(const GameState *state, const AiConfig *config,
                     Move *out_move, AiStats *out_stats)
 {
@@ -632,7 +648,8 @@ bool ai_easy_choose(const GameState *state, const AiConfig *config,
             .score = best_score,
             .elapsed_ms = (int)(ai_now_ms() - start),
             .cancelled = false,
-            .timed_out = false
+            .timed_out = false,
+            .node_limit = false
         };
     }
 

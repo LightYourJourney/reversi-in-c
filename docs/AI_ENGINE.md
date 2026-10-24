@@ -114,7 +114,8 @@ Hard 在剩余空格 ≤ 12 时先尝试求解；EXACT 直接返回，否则回�
 返回首个有序合法着法并标记 INCOMPLETE。
 
 `ai_search_choose_ex()` 同时禁用 TT 与残局求解器，作为测试用的独立
-plain alpha-beta 参照。
+plain alpha-beta 参照。实验平台使用 `ai_search_choose_flags()` 独立控制
+TT 与残局；关闭残局时 Hard 不再把深度提升到剩余空位。
 
 ## 6. 计时
 
@@ -126,7 +127,8 @@ plain alpha-beta 参照。
 | 其他 | `timespec_get(TIME_UTC)` 回退 |
 
 预算按 1024 节点检查；根节点每步检查。单调时钟避免了系统时间回拨导致的
-超时误判。Linux 的严格 C11 构建默认不暴露 `clock_gettime`，相关编译单元
+超时误判。`AiConfig.max_nodes > 0` 时同样在节点检查点停止，结果通过
+`AiStats.node_limit` 区分；正式对局默认不设节点上限。Linux 的严格 C11 构建默认不暴露 `clock_gettime`，相关编译单元
 在包含 `<time.h>` 之前定义 `_POSIX_C_SOURCE=200809L`。
 
 ## 7. 验证

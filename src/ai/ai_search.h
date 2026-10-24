@@ -18,4 +18,14 @@ bool ai_search_choose(const GameState *state, const AiConfig *config,
 bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
                          bool use_tt, Move *out_move, AiStats *out_stats);
 
+/*
+ * Experiment variant: choose the table and endgame solver independently.
+ * Normal games keep using ai_search_choose(); this entry point exists so the
+ * benchmark platform can isolate TT and solver effects without duplicating
+ * the search.
+ */
+bool ai_search_choose_flags(const GameState *state, const AiConfig *config,
+                            bool use_tt, bool use_endgame,
+                            Move *out_move, AiStats *out_stats);
+
 #endif

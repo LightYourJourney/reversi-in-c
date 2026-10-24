@@ -214,6 +214,7 @@ endif()
 
 add_library(reversi_ai STATIC
     src/ai/ai.c
+    src/ai/ai_baselines.c
     src/ai/ai_eval.c
     src/ai/ai_endgame.c
     src/ai/ai_search.c
@@ -224,6 +225,24 @@ target_link_libraries(reversi_ai
     PRIVATE reversi_warnings)
 if(NOT EMSCRIPTEN)
     target_link_libraries(reversi_ai PRIVATE Threads::Threads)
+endif()
+
+if(NOT EMSCRIPTEN)
+add_library(reversi_experiment STATIC
+    src/experiment/experiment.c
+    src/experiment/experiment_report.c)
+target_include_directories(reversi_experiment PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_BINARY_DIR}/generated")
+target_link_libraries(reversi_experiment
+    PUBLIC reversi_ai
+    PRIVATE reversi_warnings)
+target_compile_definitions(reversi_experiment PRIVATE
+    "REVERSI_EXPERIMENT_COMPILER=\"${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}\""
+    "REVERSI_EXPERIMENT_BUILD_TYPE=\"$<CONFIG>\"")
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+    target_link_libraries(reversi_experiment PUBLIC m)
+endif()
 endif()
 
 set(REVERSI_STORAGE_SOURCE src/storage/storage.c)
@@ -543,6 +562,27 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
         reversi_ai reversi_warnings)
     set_target_properties(reversi_ai_bench PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+    add_executable(reversi_experiment_tool tests/run_experiment.c)
+    target_include_directories(reversi_experiment_tool PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_BINARY_DIR}/generated")
+    target_link_libraries(reversi_experiment_tool PRIVATE
+        reversi_experiment reversi_warnings)
+    set_target_properties(reversi_experiment_tool PROPERTIES
+        OUTPUT_NAME "reversi_experiment"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+    add_executable(reversi_experiment_tests tests/test_experiment.c)
+    target_include_directories(reversi_experiment_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+        "${CMAKE_BINARY_DIR}/generated")
+    target_link_libraries(reversi_experiment_tests PRIVATE
+        reversi_experiment reversi_warnings)
+    add_test(NAME experiment.regression COMMAND reversi_experiment_tests)
+    set_tests_properties(experiment.regression PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     add_executable(reversi_ai_corpus tests/bench_corpus.c)
     target_include_directories(reversi_ai_corpus PRIVATE

@@ -34,3 +34,5 @@ _deps/
 .idea/
 *.xcodeproj/
 xcuserdata/
+
+experiment-test/

@@ -14,8 +14,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 23 个测试（Debug）：20 个
-无窗口测试、`app.smoke`、`app.lab` 与 `app.autoplay`。不开启时注册 20 个。
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 24 个测试（Debug）：21 个
+无窗口测试、`app.smoke`、`app.lab` 与 `app.autoplay`。不开启时注册 21 个。
 CTest 名称、可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
@@ -47,6 +47,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
 | analysis.session | reversi_analysis_tests | 108 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝、访问器、ply 上限、VALID 根 | PASS |
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
+| experiment.regression | reversi_experiment_tests | 63 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
 | storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |
@@ -58,12 +59,12 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 
 实际运行结果：
 
-- Debug：20/20 无窗口测试通过（v1.3.0）。
-- Debug + GUI：v1.3.0 本机 23/23，包含 `app.lab`（Lab 页面 20 帧渲染），
+- Debug：21/21 无窗口测试通过（v1.4.0）。
+- Debug + GUI：v1.4.0 本机 24/24，包含 `app.lab`（Lab 页面 20 帧渲染），
   `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程
   仍 **NOT TESTED**。
-- Release：20/20 通过（v1.3.0）。
-- ASan+UBSan：v1.3.0 无窗口 20/20 通过，无 Sanitizer 报告；此前
+- Release：21/21 通过（v1.4.0）。
+- ASan+UBSan：v1.4.0 无窗口 21/21 通过，无 Sanitizer 报告；此前
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
 - 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
   并通过 `scripts/verify-package.sh` 独立启动验收。
@@ -79,9 +80,10 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   各 17/17（Windows 含 `--version` 断言）；Linux ASan+UBSan 无窗口 17/17、
   Xvfb GUI 2/2；Linux 发行包在 Xvfb 下验收。首跑 `40073029646` 暴露
   Linux 严格 C11 下 `CLOCK_MONOTONIC` 未声明，已在提交 `438a510` 修正。
-- GitHub Actions 运行 `40111155790`（2026-10-24，Phase 12 审查修正后）9 个
-  作业全部 `success`：三平台 Debug/Release 各 20/20；Linux ASan+UBSan
-  无窗口 20/20；Linux Xvfb GUI 3/3（含 `app.lab`）；Linux 发行包验收。首跑
+- GitHub Actions 运行 `40111155790`（2026-10-24，Phase 12）9 个作业全部
+  `success`：三平台 Debug/Release 各 20/20；Linux ASan+UBSan 无窗口
+  20/20；Linux Xvfb GUI 3/3；Linux 发行包验收。Phase 13 的 CI 结果在
+  推送后补记。首跑
   `40106930342` 仅 ASan 作业把 `app.lab` 排进无窗口步骤，已在 `1cc9147`
   修正工作流。
 
@@ -263,3 +265,20 @@ RSS）。A/B 方法：把同一 `tests/bench_corpus.c` 编译到基线提交的�
 - 基准输出见 `docs/benchmarks/phase12-analysis.txt`；绝对时间受机器负载
   影响。
 - 未覆盖：浏览器内 Lab 交互、自动化点击/键盘、分钟级连续分析。
+
+
+## 11. 实验平台测试（Phase 13）
+
+```bash
+ctest --test-dir build -R '^experiment\.'
+scripts/run-experiments.sh      # 手动，完整实验
+```
+
+- `experiment.regression`：拒绝错误配置；4 局 Random vs Greedy 的结果/
+  ply/换色与固定 oracle 一致；4 局 depth 3 的 TT/no-TT 结果与子数一致；
+  两次运行逻辑结果相同；CSV/JSON/Markdown/HTML 均非空且 JSON 含种子。
+- 完整实验不进入 CI；由 `scripts/run-experiments.sh` 生成
+  `docs/experiments/`，索引由 `scripts/make-experiment-index.py` 从
+  `summary.json` 生成。
+- 性能阈值不在 CI 判定：不同机器/负载的耗时不可比；回归只判断非法、
+  超时、中止与确定性结果。

@@ -4,6 +4,37 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-25
+
+### Added
+
+- `src/experiment/`：统一实验运行器，支持版本化配置、固定种子、成对开局与
+  颜色交换、Random/Greedy/AI/Search 引擎、固定深度/节点/时间预算。
+- 可复现清单：Git SHA（运行时读取，脏工作区标记）、OS、CPU、编译器、
+  构建类型、配置与数据版本。
+- 强度统计：Wilson 95% 置信区间与双引擎 Elo（平局计 0.5，区间由置信区间
+  变换）；明确小样本与全胜不能外推。
+- 导出 `games.csv`、`moves.csv`、`summary.json`、`report.md` 与由真实数据
+  生成的静态 `report.html`；`docs/experiments/index.html` 汇总历史实验。
+- `ai_baselines`：Random/Greedy 与旧基准共用。
+- `ai_search_choose_flags()`、`AiConfig.max_nodes`、`AiStats.node_limit`：
+  实验可独立控制 TT、残局与节点预算；正式对局默认不设节点上限。
+- `experiment.regression`：确定性结果 oracle、异常为 0、重复运行一致。
+- `docs/BENCHMARK_METHODOLOGY.md`、`docs/PHASE_13_REPORT.md`、
+  `experiments/` 配置与 `docs/experiments/` 实际结果。
+
+### Changed
+
+- Hard 的“深度提升到剩余空位”只在启用残局求解时生效；关闭残局的对照保持
+  配置深度。
+- `bench_ai` 的 Random/Greedy 改为调用共享基线，算法与随机序列不变。
+
+### Verified
+
+- Debug / Release / ASan+UBSan 无窗口各 21/21；Debug + GUI 24/24。
+- 7 组配对实验与随机稳定性实验，全部 `illegal=0 timeouts=0 aborted=0`。
+- 规则吞吐、精确残局与实验报告见 `docs/experiments/`。
+
 ## [1.3.0] - 2026-10-24
 
 ### Added

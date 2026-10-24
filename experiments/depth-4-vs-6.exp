@@ -1,0 +1,9 @@
+version 1
+name depth-4-vs-6
+seed 20261025
+games 8
+openings 2
+opening-ply 4
+max-plies 100
+engine-a kind=search difficulty=hard depth=4 time=5000 tt=on endgame=off label=Depth4
+engine-b kind=search difficulty=hard depth=6 time=5000 tt=on endgame=off label=Depth6

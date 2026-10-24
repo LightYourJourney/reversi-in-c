@@ -1,0 +1,9 @@
+version 1
+name eval-full-vs-basic
+seed 20261025
+games 8
+openings 2
+opening-ply 4
+max-plies 100
+engine-a kind=search difficulty=hard depth=5 time=2000 tt=on endgame=off label=FullEval
+engine-b kind=search difficulty=medium depth=5 time=2000 tt=on endgame=off label=BasicEval

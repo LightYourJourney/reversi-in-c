@@ -11,6 +11,7 @@ AiConfig ai_default_config(AiDifficulty difficulty, unsigned seed)
         .difficulty = difficulty,
         .max_depth = 4,
         .time_budget_ms = 200,
+        .max_nodes = 0,
         .randomness = 0,
         .seed = seed,
         .should_cancel = NULL,
@@ -48,6 +49,9 @@ bool ai_config_is_valid(const AiConfig *config)
         return false;
     }
     if (config->time_budget_ms < 1 || config->time_budget_ms > 10000) {
+        return false;
+    }
+    if (config->max_nodes > 1000000000000ULL) {
         return false;
     }
     if (config->randomness < 0 || config->randomness > 1000) {

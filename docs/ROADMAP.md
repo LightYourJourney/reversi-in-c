@@ -356,6 +356,27 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 没有自动化点击测试；PV 可能因 TT 未命中而短于报告深度。详见
 [PHASE_12_REPORT.md](PHASE_12_REPORT.md)。
 
+## Phase 13：AI 实验平台（v1.4.0，源码）
+
+- `src/experiment/`：版本化配置、固定种子、成对开局与换色、Random/Greedy/
+  AI/Search 引擎、固定深度/节点/时间、异常分类。
+- 可复现清单（运行时 Git SHA、OS/CPU/编译器/构建类型）、CSV/JSON/MD/HTML
+  报告、静态索引。
+- Wilson 区间与双引擎 Elo；小样本与全胜不外推。
+- `experiment.regression` 确定性 oracle 进入 CTest；完整实验手动运行。
+- 验收实验：TT、深度、评估、难度、固定时间、节点预算、100 局随机稳定性，
+  以及规则吞吐与精确残局验证。
+
+验证（本机 macOS arm64）：
+
+- Debug / Release / ASan+UBSan 无窗口各 21/21；Debug + GUI 24/24。
+- 7 组配对实验全部 `illegal=0 timeouts=0 aborted=0`；样本与区间见
+  `docs/experiments/` 与 [PHASE_13_REPORT.md](PHASE_13_REPORT.md)。
+- 固定深度/节点结果可复现；固定时间结果只描述当次运行。
+
+已知限制：跨代码版本对照需两次构建；崩溃不保留部分原始数据；Elo 只覆盖
+双引擎。方法与 CI 策略见 [BENCHMARK_METHODOLOGY.md](BENCHMARK_METHODOLOGY.md)。
+
 ## 非目标（当前）
 
 - 在线对战、账号系统、网络协议

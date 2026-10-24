@@ -558,6 +558,37 @@ static void test_pve_undo_during_thinking(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match.state.current_player == STONE_BLACK);
 }
 
+static void test_search_flags_and_node_cap(TestStats *stats)
+{
+    GameState state;
+    game_init(&state);
+    AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, 11);
+    config.max_depth = 3;
+    config.time_budget_ms = 5000;
+
+    for (int use_tt = 0; use_tt < 2; ++use_tt) {
+        Move move = {-1, -1};
+        AiStats search;
+        REVERSI_TEST_ASSERT(stats, ai_search_choose_flags(
+            &state, &config, use_tt != 0, false, &move, &search));
+        REVERSI_TEST_ASSERT(stats, rules_is_legal_move(
+            &state.board, state.current_player, move));
+        REVERSI_TEST_ASSERT(stats, search.depth >= 1);
+        REVERSI_TEST_ASSERT(stats, !search.node_limit);
+    }
+
+    AiConfig capped = config;
+    capped.max_nodes = 1;
+    Move move = {-1, -1};
+    AiStats search;
+    const bool ok = ai_search_choose_flags(&state, &capped, true, false,
+                                           &move, &search);
+    REVERSI_TEST_ASSERT(stats, !ok);
+    REVERSI_TEST_ASSERT(stats, search.node_limit);
+    REVERSI_TEST_ASSERT(stats, search.nodes >= 1);
+    REVERSI_TEST_ASSERT(stats, !search.timed_out);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -573,6 +604,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_cancel_and_determinism);
     REVERSI_RUN_TEST(&stats, test_pve_full_games);
     REVERSI_RUN_TEST(&stats, test_pve_undo_during_thinking);
+    REVERSI_RUN_TEST(&stats, test_search_flags_and_node_cap);
 
     return reversi_test_summary(&stats, "ai.core");
 }

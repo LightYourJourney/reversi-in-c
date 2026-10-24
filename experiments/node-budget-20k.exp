@@ -1,0 +1,9 @@
+version 1
+name node-budget-20k
+seed 20261025
+games 4
+openings 2
+opening-ply 2
+max-plies 100
+engine-a kind=search difficulty=hard depth=32 time=10000 nodes=20000 tt=on endgame=off label=Node20kA
+engine-b kind=search difficulty=hard depth=32 time=10000 nodes=20000 tt=on endgame=off label=Node20kB
