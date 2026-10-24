@@ -1,6 +1,6 @@
 # Experiment: depth-4-vs-6
 
-- Commit: `babbb23`
+- Commit: `423aba2`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -32,9 +32,10 @@
 | A wins as White | 2 |
 | Illegal games | 0 |
 | Timeouts | 0 |
+| Node-limit games | 0 |
 | Aborted | 0 |
-| A score (draw=0.5) | 0.250 (95% CI 0.071..0.591) |
-| Elo difference | -191 (95% CI -445..+64) |
+| A score (draw=0.5) | 0.250 (95% CI 0.046..0.699) |
+| Elo difference | -191 (95% CI -528..+147) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -44,13 +45,18 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 222 | 226 |
 | Nodes | 130038 | 1485830 |
-| NPS | 135881 | 151863 |
-| P50 | 2 ms | 24 ms |
-| P95 | 12 ms | 155 ms |
+| NPS | 411513 | 489726 |
+| Average | 1 ms | 13 ms |
+| P50 | 1 ms | 11 ms |
+| P95 | 4 ms | 35 ms |
+| Average depth | 3 | 5 |
 | Max depth | 4 | 6 |
 | Cut rate | 18.3% | 26.1% |
 | TT hit rate | 0.4% | 1.8% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
+## Anomalies
+
+None.
 
 Raw data: `games.csv`, `moves.csv`, `summary.json`. The HTML report renders the same JSON.

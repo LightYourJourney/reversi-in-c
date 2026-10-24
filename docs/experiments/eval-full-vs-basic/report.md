@@ -1,6 +1,6 @@
 # Experiment: eval-full-vs-basic
 
-- Commit: `babbb23`
+- Commit: `423aba2`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -32,9 +32,10 @@
 | A wins as White | 2 |
 | Illegal games | 0 |
 | Timeouts | 0 |
+| Node-limit games | 0 |
 | Aborted | 0 |
-| A score (draw=0.5) | 0.500 (95% CI 0.215..0.785) |
-| Elo difference | +0 (95% CI -225..+225) |
+| A score (draw=0.5) | 0.500 (95% CI 0.150..0.850) |
+| Elo difference | +0 (95% CI -301..+301) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -43,14 +44,19 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 | Metric | A | B |
 |---|---|---|
 | Moves | 224 | 224 |
-| Nodes | 522872 | 848564 |
-| NPS | 176170 | 177933 |
-| P50 | 10 ms | 12 ms |
-| P95 | 36 ms | 67 ms |
+| Nodes | 522872 | 460234 |
+| NPS | 437550 | 440415 |
+| Average | 5 ms | 4 ms |
+| P50 | 5 ms | 4 ms |
+| P95 | 12 ms | 12 ms |
+| Average depth | 4 | 4 |
 | Max depth | 5 | 5 |
-| Cut rate | 16.8% | 15.7% |
-| TT hit rate | 0.7% | 0.0% |
+| Cut rate | 16.8% | 18.8% |
+| TT hit rate | 0.7% | 0.7% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
+## Anomalies
+
+None.
 
 Raw data: `games.csv`, `moves.csv`, `summary.json`. The HTML report renders the same JSON.

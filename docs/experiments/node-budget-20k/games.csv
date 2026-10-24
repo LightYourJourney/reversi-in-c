@@ -1,5 +1,5 @@
-game,opening,a_color,plies,passes,result,black_discs,white_discs,illegal,timed_out,aborted
-0,0,B,57,0,W,9,54,0,0,0
-1,0,W,57,0,W,9,54,0,0,0
-2,1,B,58,0,W,21,43,0,0,0
-3,1,W,58,0,W,21,43,0,0,0
+game,opening,a_color,plies,passes,result,black_discs,white_discs,illegal,timed_out,node_limit,aborted
+0,0,B,57,0,W,9,54,0,0,0,0
+1,0,W,57,0,W,9,54,0,0,0,0
+2,1,B,58,0,W,21,43,0,0,0,0
+3,1,W,58,0,W,21,43,0,0,0,0

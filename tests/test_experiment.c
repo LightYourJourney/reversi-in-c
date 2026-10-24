@@ -185,6 +185,34 @@ static void test_invalid_run_config(TestStats *stats)
                                               sizeof(error)));
 }
 
+static void test_node_limit_classification(TestStats *stats)
+{
+    const char *config_text =
+        "version 1\n"
+        "name node-cap-smoke\n"
+        "seed 5\n"
+        "games 2\n"
+        "openings 1\n"
+        "opening-ply 0\n"
+        "max-plies 10\n"
+        "engine-a kind=search difficulty=hard depth=5 time=1000 "
+        "nodes=1 tt=on endgame=off\n"
+        "engine-b kind=search difficulty=hard depth=5 time=1000 "
+        "nodes=1 tt=on endgame=off\n";
+    ExperimentConfig config;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, experiment_config_parse(
+        &config, config_text, error, sizeof(error)));
+    ExperimentResult result;
+    REVERSI_TEST_ASSERT(stats, experiment_run(&config, &result, error,
+                                              sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, result.summary.node_limited == 2);
+    REVERSI_TEST_ASSERT(stats, result.summary.timeouts == 0);
+    REVERSI_TEST_ASSERT(stats, result.games[0].node_limit);
+    REVERSI_TEST_ASSERT(stats, !result.games[0].timed_out);
+    experiment_result_free(&result);
+}
+
 static void test_search_engine(TestStats *stats)
 {
     const char *config_text =
@@ -219,6 +247,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_run_and_reports);
     REVERSI_RUN_TEST(&stats, test_search_regression);
     REVERSI_RUN_TEST(&stats, test_invalid_run_config);
+    REVERSI_RUN_TEST(&stats, test_node_limit_classification);
     REVERSI_RUN_TEST(&stats, test_search_engine);
     return reversi_test_summary(&stats, "experiment.regression");
 }

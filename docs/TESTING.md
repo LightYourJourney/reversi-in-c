@@ -42,12 +42,12 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | core.random | reversi_random_tests | 557,924 | 500 局随机对局 + 独立合法性 oracle、不变量 | PASS |
 | core.history | reversi_history_tests | 124 | 快照、撤销/重做、分支截断、Pass/终局 | PASS |
 | core.match | reversi_match_tests | 980 | 状态机、暂停、重开、AI 回合、撤销/重做、恢复 | PASS |
-| ai.core | reversi_ai_tests | 2,991 | 评估、搜索合法性、TT 一致性、取消、确定性、自动对局 | PASS |
+| ai.core | reversi_ai_tests | 2,988 | 评估、搜索合法性、TT 一致性、取消、确定性、自动对局 | PASS |
 | ai.endgame | reversi_endgame_tests | 67 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
 | analysis.session | reversi_analysis_tests | 108 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝、访问器、ply 上限、VALID 根 | PASS |
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
-| experiment.regression | reversi_experiment_tests | 63 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
+| experiment.regression | reversi_experiment_tests | 78 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
 | storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |

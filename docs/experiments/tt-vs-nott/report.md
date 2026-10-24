@@ -1,6 +1,6 @@
 # Experiment: tt-vs-nott
 
-- Commit: `babbb23`
+- Commit: `423aba2`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -32,9 +32,10 @@
 | A wins as White | 0 |
 | Illegal games | 0 |
 | Timeouts | 0 |
+| Node-limit games | 0 |
 | Aborted | 0 |
-| A score (draw=0.5) | 0.500 (95% CI 0.215..0.785) |
-| Elo difference | +0 (95% CI -225..+225) |
+| A score (draw=0.5) | 0.500 (95% CI 0.150..0.850) |
+| Elo difference | +0 (95% CI -301..+301) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -44,13 +45,18 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 224 | 224 |
 | Nodes | 1383640 | 3109902 |
-| NPS | 211501 | 204936 |
-| P50 | 19 ms | 52 ms |
-| P95 | 80 ms | 190 ms |
+| NPS | 447057 | 428302 |
+| Average | 13 ms | 32 ms |
+| P50 | 10 ms | 25 ms |
+| P95 | 35 ms | 86 ms |
+| Average depth | 5 | 5 |
 | Max depth | 6 | 6 |
 | Cut rate | 23.1% | 20.0% |
 | TT hit rate | 1.3% | 0.0% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
+## Anomalies
+
+None.
 
 Raw data: `games.csv`, `moves.csv`, `summary.json`. The HTML report renders the same JSON.
