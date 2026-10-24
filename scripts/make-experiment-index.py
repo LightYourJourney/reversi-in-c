@@ -30,6 +30,8 @@ for directory in sorted(ROOT.iterdir()):
         if s["elo_defined"]
         else "n/a"
     )
+    a = data["a_stats"]
+    b = data["b_stats"]
     rows.append(
         "<tr>"
         f"<td><a href=\"{esc(directory.name)}/report.html\">{esc(data['name'])}</a></td>"
@@ -39,8 +41,12 @@ for directory in sorted(ROOT.iterdir()):
         f"<td>{s['a_wins']}/{s['draws']}/{s['b_wins']}</td>"
         f"<td>{score}</td>"
         f"<td>{elo}</td>"
-        f"<td>{s['illegal']}/{s['timeouts']}/{s['aborted']}</td>"
-        f"<td><a href=\"{esc(directory.name)}/games.csv\">csv</a></td>"
+        f"<td>{a['p50_ms']}/{b['p50_ms']}</td>"
+        f"<td>{a['nodes']}/{b['nodes']}</td>"
+        f"<td>{s['illegal']}/{s['timeouts']}/{s.get('node_limited', 0)}/{s['aborted']}</td>"
+        f"<td><a href=\"{esc(directory.name)}/games.csv\">games</a> "
+        f"<a href=\"{esc(directory.name)}/moves.csv\">moves</a> "
+        f"<a href=\"{esc(directory.name)}/summary.json\">json</a></td>"
         "</tr>"
     )
 
@@ -62,13 +68,13 @@ small {{ color: #aaa; }}
 <body>
 <h1>Reversi experiments</h1>
 <p><small>Generated from each experiment's <code>summary.json</code>.
-W/D/L is engine A's record. CI is a Wilson 95% interval; Elo is a
-two-engine logistic estimate with draws counted as 0.5. Raw data links are
-per experiment.</small></p>
+W/D/L is engine A's record. CI is a Wilson 95% interval over paired
+openings (the independent unit); Elo is a two-engine logistic estimate with
+draws counted as 0.5. Raw data links are per experiment.</small></p>
 <table>
 <tr><th>Experiment</th><th>Engines</th><th>Games</th><th>Completed</th>
-<th>A W/D/L</th><th>A score (95% CI)</th><th>Elo (95% CI)</th>
-<th>Illegal/timeout/aborted</th><th>Raw</th></tr>
+<th>A W/D/L</th><th>A score (95% CI)</th><th>Elo (95% CI)</th><th>P50 ms A/B</th>
+<th>Nodes A/B</th><th>Illegal/timeout/node-cap/aborted</th><th>Raw</th></tr>
 {''.join(rows)}
 </table>
 <p><small>Non-match evidence: <a href="rules-throughput/corpus.txt">rules

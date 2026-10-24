@@ -459,6 +459,7 @@ static void finish_stats(AiSearch *search, int completed_depth, int score,
 
 static bool search_choose(const GameState *state, const AiConfig *config,
                           bool use_tt, bool use_endgame,
+                          bool tt_any_difficulty,
                           Move *out_move, AiStats *out_stats)
 {
     if (state == NULL || config == NULL || out_move == NULL
@@ -475,7 +476,8 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     init_zobrist(&search);
     const uint64_t root_hash = state_hash(&search, state);
 
-    if (config->difficulty == AI_DIFFICULTY_HARD && use_tt) {
+    if (use_tt && (tt_any_difficulty
+                   || config->difficulty == AI_DIFFICULTY_HARD)) {
         search.tt = calloc(REVERSI_AI_TT_SIZE, sizeof(AiTtEntry));
         search.tt_mask = REVERSI_AI_TT_SIZE - 1u;
     }
@@ -578,20 +580,22 @@ static bool search_choose(const GameState *state, const AiConfig *config,
 bool ai_search_choose(const GameState *state, const AiConfig *config,
                       Move *out_move, AiStats *out_stats)
 {
-    return search_choose(state, config, true, true, out_move, out_stats);
+    return search_choose(state, config, true, true, false, out_move,
+                         out_stats);
 }
 
 bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
                          bool use_tt, Move *out_move, AiStats *out_stats)
 {
-    return search_choose(state, config, use_tt, false, out_move, out_stats);
+    return search_choose(state, config, use_tt, false, false, out_move,
+                         out_stats);
 }
 
 bool ai_search_choose_flags(const GameState *state, const AiConfig *config,
                             bool use_tt, bool use_endgame,
                             Move *out_move, AiStats *out_stats)
 {
-    return search_choose(state, config, use_tt, use_endgame, out_move,
+    return search_choose(state, config, use_tt, use_endgame, true, out_move,
                          out_stats);
 }
 

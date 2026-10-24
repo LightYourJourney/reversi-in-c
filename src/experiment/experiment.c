@@ -6,6 +6,7 @@
 
 #include "ai/ai_baselines.h"
 #include "ai/ai_search.h"
+#include "core/board.h"
 #include "core/rules.h"
 #include "reversi/version.h"
 
@@ -28,8 +29,8 @@
 #include <sys/sysctl.h>
 #endif
 
-#define EXPERIMENT_CONFIG_MAX_BYTES 16384
-#define EXPERIMENT_Z95 1.96
+#define REVERSI_EXPERIMENT_CONFIG_MAX_BYTES 16384
+#define REVERSI_EXPERIMENT_Z95 1.96
 
 #ifndef REVERSI_EXPERIMENT_COMPILER
 #define REVERSI_EXPERIMENT_COMPILER "unknown compiler"
@@ -106,7 +107,6 @@ static bool parse_engine(ExperimentEngine *engine, char *tokens,
     engine->use_tt = true;
     engine->use_endgame = true;
     engine->seed = 1;
-    snprintf(engine->name, sizeof(engine->name), "engine");
 
     char *cursor = tokens;
     while (*cursor != '\0') {
@@ -130,7 +130,7 @@ static bool parse_engine(ExperimentEngine *engine, char *tokens,
         }
         *equals = '\0';
         const char *key = token;
-        const char *value = equals + 1;
+        char *value = equals + 1;
 
         if (strcmp(key, "kind") == 0) {
             if (strcmp(value, "random") == 0) {
@@ -167,7 +167,7 @@ static bool parse_engine(ExperimentEngine *engine, char *tokens,
                 return false;
             }
         } else if (strcmp(key, "nodes") == 0) {
-            if (!parse_u64(value, 1000000000000ULL, &engine->max_nodes)) {
+            if (!parse_u64(value, REVERSI_AI_MAX_NODES, &engine->max_nodes)) {
                 set_error(error, error_size, "invalid node budget");
                 return false;
             }
@@ -216,7 +216,7 @@ bool experiment_config_parse(ExperimentConfig *config, const char *text,
     config->opening_plies = 4;
     config->max_plies = 100;
 
-    char work[EXPERIMENT_CONFIG_MAX_BYTES];
+    char work[REVERSI_EXPERIMENT_CONFIG_MAX_BYTES];
     const size_t length = strlen(text);
     if (length >= sizeof(work)) {
         set_error(error, error_size, "config is too large");
@@ -250,7 +250,7 @@ bool experiment_config_parse(ExperimentConfig *config, const char *text,
         }
         trim(space);
         const char *key = line;
-        const char *value = space;
+        char *value = space;
 
         if (strcmp(key, "version") == 0) {
             int version = 0;
@@ -298,13 +298,13 @@ bool experiment_config_parse(ExperimentConfig *config, const char *text,
                 return false;
             }
         } else if (strcmp(key, "engine-a") == 0) {
-            if (!parse_engine(&config->engines[0], (char *)value, error,
+            if (!parse_engine(&config->engines[0], value, error,
                               error_size)) {
                 return false;
             }
             have_a = true;
         } else if (strcmp(key, "engine-b") == 0) {
-            if (!parse_engine(&config->engines[1], (char *)value, error,
+            if (!parse_engine(&config->engines[1], value, error,
                               error_size)) {
                 return false;
             }
@@ -336,7 +336,7 @@ bool experiment_config_load(ExperimentConfig *config, const char *path,
         set_error(error, error_size, "cannot open config");
         return false;
     }
-    char text[EXPERIMENT_CONFIG_MAX_BYTES];
+    char text[REVERSI_EXPERIMENT_CONFIG_MAX_BYTES];
     const size_t read = fread(text, 1, sizeof(text) - 1, file);
     fclose(file);
     text[read] = '\0';
@@ -501,6 +501,7 @@ static void finalize_engine_stats(ExperimentEngineStats *stats,
 {
     int *samples = malloc((size_t)(count > 0 ? count : 1) * sizeof(int));
     int used = 0;
+    uint64_t depth_sum = 0;
     for (int i = 0; i < count; ++i) {
         if (moves[i].engine != engine) {
             continue;
@@ -510,6 +511,7 @@ static void finalize_engine_stats(ExperimentEngineStats *stats,
         stats->cutoffs += moves[i].cutoffs;
         stats->tt_hits += moves[i].tt_hits;
         stats->elapsed_ms += (uint64_t)moves[i].elapsed_ms;
+        depth_sum += (uint64_t)moves[i].depth;
         if (moves[i].depth > stats->max_depth) {
             stats->max_depth = moves[i].depth;
         }
@@ -532,6 +534,11 @@ static void finalize_engine_stats(ExperimentEngineStats *stats,
         stats->p95_ms = samples[(used - 1) * 95 / 100];
         stats->max_ms = samples[used - 1];
     }
+    if (stats->moves > 0) {
+        stats->avg_ms = (int)(stats->elapsed_ms
+                              / (uint64_t)stats->moves);
+        stats->avg_depth = (int)(depth_sum / (uint64_t)stats->moves);
+    }
     if (stats->elapsed_ms > 0) {
         stats->nps = (double)stats->nodes * 1000.0
             / (double)stats->elapsed_ms;
@@ -539,20 +546,18 @@ static void finalize_engine_stats(ExperimentEngineStats *stats,
     free(samples);
 }
 
-static void wilson_interval(int wins_half, int total, double *low,
-                            double *high)
+static void wilson_mean(double p, int units, double *low, double *high)
 {
-    if (total <= 0) {
+    if (units <= 0) {
         *low = 0.0;
         *high = 1.0;
         return;
     }
-    const double n = (double)total;
-    const double p = (double)wins_half / (2.0 * n);
-    const double z2 = EXPERIMENT_Z95 * EXPERIMENT_Z95;
+    const double n = (double)units;
+    const double z2 = REVERSI_EXPERIMENT_Z95 * REVERSI_EXPERIMENT_Z95;
     const double denom = 1.0 + z2 / n;
     const double center = (p + z2 / (2.0 * n)) / denom;
-    const double half = EXPERIMENT_Z95
+    const double half = REVERSI_EXPERIMENT_Z95
         * sqrt((p * (1.0 - p) + z2 / (4.0 * n)) / n) / denom;
     *low = center - half;
     *high = center + half;
@@ -584,11 +589,38 @@ void experiment_result_free(ExperimentResult *result)
     result->move_count = 0;
 }
 
+static bool experiment_config_valid(const ExperimentConfig *config)
+{
+    if (config == NULL || config->name[0] == '\0'
+        || config->games < 2
+        || config->games > REVERSI_EXPERIMENT_MAX_GAMES
+        || (config->games % 2) != 0
+        || config->openings < 1
+        || config->openings > REVERSI_EXPERIMENT_MAX_OPENINGS
+        || config->opening_plies < 0 || config->opening_plies > 32
+        || config->max_plies < 1
+        || config->max_plies > REVERSI_EXPERIMENT_MAX_PLIES) {
+        return false;
+    }
+    for (int i = 0; i < REVERSI_EXPERIMENT_MAX_ENGINES; ++i) {
+        const ExperimentEngine *engine = &config->engines[i];
+        if (engine->name[0] == '\0'
+            || engine->kind > EXPERIMENT_ENGINE_SEARCH
+            || engine->difficulty > AI_DIFFICULTY_HARD
+            || engine->max_depth < 1 || engine->max_depth > 32
+            || engine->time_budget_ms < 1
+            || engine->time_budget_ms > 10000
+            || engine->max_nodes > REVERSI_AI_MAX_NODES) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
                     char *error, size_t error_size)
 {
-    if (config == NULL || result == NULL || config->games < 2
-        || (config->games % 2) != 0) {
+    if (!experiment_config_valid(config) || result == NULL) {
         set_error(error, error_size, "invalid experiment config");
         return false;
     }
@@ -674,8 +706,9 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
             }
 
             if (!ok) {
-                if (stats.timed_out || stats.node_limit
-                    || stats.cancelled) {
+                if (stats.node_limit) {
+                    record->node_limit = true;
+                } else if (stats.timed_out || stats.cancelled) {
                     record->timed_out = true;
                 } else {
                     record->illegal = true;
@@ -720,6 +753,7 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
         record->black_discs = board_count(&state.board, STONE_BLACK);
         record->white_discs = board_count(&state.board, STONE_WHITE);
         if (!record->illegal && !record->timed_out
+            && !record->node_limit
             && state.result == GAME_RESULT_ONGOING) {
             record->aborted = true;
         }
@@ -735,6 +769,10 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
         }
         if (game->timed_out) {
             ++summary->timeouts;
+            continue;
+        }
+        if (game->node_limit) {
+            ++summary->node_limited;
             continue;
         }
         if (game->aborted) {
@@ -770,9 +808,11 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
         summary->a_score = ((double)summary->a_wins
                             + 0.5 * (double)summary->draws)
             / (double)summary->completed;
-        wilson_interval(summary->a_wins * 2 + summary->draws,
-                        summary->completed, &summary->score_low,
-                        &summary->score_high);
+        /* Games are paired by opening with colors swapped, so the
+           independent unit is a pair, not a single game. */
+        const int pairs = (summary->completed + 1) / 2;
+        wilson_mean(summary->a_score, pairs, &summary->score_low,
+                    &summary->score_high);
         summary->elo = elo_from_score(summary->a_score);
         summary->elo_low = elo_from_score(summary->score_low);
         summary->elo_high = elo_from_score(summary->score_high);

@@ -51,7 +51,7 @@ bool ai_config_is_valid(const AiConfig *config)
     if (config->time_budget_ms < 1 || config->time_budget_ms > 10000) {
         return false;
     }
-    if (config->max_nodes > 1000000000000ULL) {
+    if (config->max_nodes > REVERSI_AI_MAX_NODES) {
         return false;
     }
     if (config->randomness < 0 || config->randomness > 1000) {

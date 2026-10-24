@@ -72,8 +72,9 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 - 两个引擎使用相同的开局、相同的 `time`/`nodes` 配置（由配置决定）与
   独立的确定性 RNG 流。
 - 非法着法、无法在预算内给出着法（`timed_out`/`node_limit`/`cancelled`）
-  与达到 `max-plies` 的对局分别记为 `illegal`、`timeout`、`aborted`，
-  不计入胜率，并在报告中单独列出。
+  与达到 `max-plies` 的对局分别记为 `illegal`、`timeout`、`node_limit`、
+  `aborted`，不计入胜率，并在 `games.csv`、摘要与报告异常列表中单独列出。
+  节点上限失败不再并入超时。
 - 进程崩溃不在进程内捕获；运行器以非零退出，不生成摘要。此时没有完整
   原始数据，属于显式失败而非静默忽略。
 
@@ -83,8 +84,8 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 引擎汇总：
 
 - 总节点、NPS（节点 × 1000 / 总耗时）。
-- P50 / P95 / 最大搜索耗时（最近秩）。
-- 最大深度、超时数、节点上限命中数、取消数。
+- 平均耗时、P50 / P95 / 最大搜索耗时（最近秩）。
+- 平均深度、最大深度、超时数、节点上限命中数、取消数、总耗时。
 - 进程峰值 RSS（`getrusage`，平台口径不同）。
 
 这些指标是**单机观测**；CI 虚拟机上的绝对耗时不能与开发机直接比较。
@@ -92,9 +93,10 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 ## 6. 强度统计
 
 - A 分数：`(A 胜 + 0.5 × 平) / 完成局数`。
-- 95% 置信区间：Wilson 区间（二项比例）。
+- 95% 置信区间：Wilson 区间，以**配对的同一开局**为独立单位（n = 对数），
+  而不是把同一开局的换色两局当作完全独立样本。
 - Elo 差：双引擎 logistic 模型 `score = 1 / (1 + 10^(-Δ/400))`，
-  平局按 0.5；区间由 Wilson 上下界变换得到，分数夹在 0.001..0.999。
+  平局按 0.5；区间由配对 Wilson 上下界变换得到，分数夹在 0.001..0.999。
 - 样本很小时区间很宽；全胜/全负也不能推出真实胜率 100%/0%。
 - 报告不输出没有区间的“精确 Elo”；是否显著由区间是否跨过 0.5 判断。
 
@@ -118,9 +120,18 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
    与算法工作量的 oracle。节点数是跨机器的确定性指标；墙钟时间不进入
    CI 判定。
 
-同时要求 `illegal=timeouts=aborted=0`，并在同一次测试中重复运行以比对
-逻辑结果。性能回归不进入 CI 判定：不同机器与负载下的原始耗时不可比；
-需要时在同一台机器上重跑并对照 P50/P95，使用报告中的实测波动设置阈值。
+同时要求 `illegal=timeouts=node_limit=aborted=0`，并在同一次测试中
+重复运行以比对逻辑结果。节点数是跨机器的确定性工作量指标；墙钟时间不
+进入 CI 判定。
+
+同机性能对照使用：
+
+```bash
+python3 scripts/compare-experiments.py baseline/summary.json new/summary.json
+```
+
+默认阈值：P50 ≤ 1.5×基线 + 5 ms，P95 ≤ 2.0×基线 + 10 ms，节点数
+≤ 1.10×。阈值是提示线而非 CI 门槛，需结合实测波动调整。
 
 ## 9. 输出与可视化
 
@@ -136,7 +147,12 @@ report.html    静态页面；图表由内嵌的 summary.json 生成
 ```
 
 `docs/experiments/index.html` 由 `scripts/make-experiment-index.py` 扫描
-各 `summary.json` 生成。所有图表读取实际数据文件，不存在手工趋势线。
+各 `summary.json` 生成，列出胜率、区间、P50、节点数与原始数据链接；
+每个 `report.html` 还列出异常对局。所有图表读取实际数据文件，不存在
+手工趋势线。
+
+这两个脚本只使用 Python 3 标准库；项目已有 `scripts/serve-web.sh` 使用
+Python，未为实验平台引入新的运行时依赖。
 
 ## 10. CI 策略
 
@@ -152,3 +168,5 @@ report.html    静态页面；图表由内嵌的 summary.json 生成
 - 固定时间结果受机器负载影响；报告的深度与耗时只描述该次运行。
 - 进程崩溃不会留下部分原始数据。
 - Elo 只适用于双引擎对局；不构建多引擎对手池。
+- 性能回归需要手动运行 `compare-experiments.py`；不同机器的耗时不可比。
+- 区间以配对开局为单位；8 局实验只有 4 个独立单位，区间很宽。

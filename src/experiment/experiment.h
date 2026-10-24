@@ -71,6 +71,7 @@ typedef struct ExperimentGame {
     int white_discs;
     bool illegal;
     bool timed_out;
+    bool node_limit;
     bool aborted;
 } ExperimentGame;
 
@@ -80,6 +81,8 @@ typedef struct ExperimentEngineStats {
     uint64_t cutoffs;
     uint64_t tt_hits;
     uint64_t elapsed_ms;
+    int avg_ms;
+    int avg_depth;
     int max_depth;
     int p50_ms;
     int p95_ms;
@@ -98,6 +101,7 @@ typedef struct ExperimentSummary {
     int draws;
     int illegal;
     int timeouts;
+    int node_limited;
     int aborted;
     int a_black_wins;
     int a_white_wins;

@@ -1,4 +1,5 @@
 #include "ai/ai.h"
+#include "ai/ai_baselines.h"
 #include "ai/ai_search.h"
 #include "core/rules.h"
 #include "test_harness.h"
@@ -558,6 +559,36 @@ static void test_pve_undo_during_thinking(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match.state.current_player == STONE_BLACK);
 }
 
+static void test_baselines(TestStats *stats)
+{
+    GameState state;
+    game_init(&state);
+
+    uint64_t first = 1;
+    uint64_t second = 1;
+    const uint64_t a = ai_baseline_next_random(&first);
+    const uint64_t b = ai_baseline_next_random(&second);
+    REVERSI_TEST_ASSERT(stats, a == b);
+    REVERSI_TEST_ASSERT(stats, first == second);
+    REVERSI_TEST_ASSERT(stats, a != 1);
+
+    uint64_t rng_a = 9;
+    uint64_t rng_b = 9;
+    const Move random_a = ai_baseline_random_move(&state, &rng_a);
+    const Move random_b = ai_baseline_random_move(&state, &rng_b);
+    REVERSI_TEST_ASSERT(stats, random_a.row == random_b.row
+                        && random_a.col == random_b.col);
+    REVERSI_TEST_ASSERT(stats, rules_is_legal_move(
+        &state.board, state.current_player, random_a));
+
+    const Move greedy_a = ai_baseline_greedy_move(&state);
+    const Move greedy_b = ai_baseline_greedy_move(&state);
+    REVERSI_TEST_ASSERT(stats, greedy_a.row == greedy_b.row
+                        && greedy_a.col == greedy_b.col);
+    REVERSI_TEST_ASSERT(stats, rules_is_legal_move(
+        &state.board, state.current_player, greedy_a));
+}
+
 static void test_search_flags_and_node_cap(TestStats *stats)
 {
     GameState state;
@@ -605,6 +636,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_pve_full_games);
     REVERSI_RUN_TEST(&stats, test_pve_undo_during_thinking);
     REVERSI_RUN_TEST(&stats, test_search_flags_and_node_cap);
+    REVERSI_RUN_TEST(&stats, test_baselines);
 
     return reversi_test_summary(&stats, "ai.core");
 }

@@ -20,6 +20,8 @@ bool ai_search_choose_ex(const GameState *state, const AiConfig *config,
 
 /*
  * Experiment variant: choose the table and endgame solver independently.
+ * Unlike ai_search_choose(), use_tt also enables the TT for non-Hard configs,
+ * so evaluation or depth comparisons are not confounded by the table.
  * Normal games keep using ai_search_choose(); this entry point exists so the
  * benchmark platform can isolate TT and solver effects without duplicating
  * the search.

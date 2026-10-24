@@ -228,21 +228,21 @@ if(NOT EMSCRIPTEN)
 endif()
 
 if(NOT EMSCRIPTEN)
-add_library(reversi_experiment STATIC
-    src/experiment/experiment.c
-    src/experiment/experiment_report.c)
-target_include_directories(reversi_experiment PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    "${CMAKE_BINARY_DIR}/generated")
-target_link_libraries(reversi_experiment
-    PUBLIC reversi_ai
-    PRIVATE reversi_warnings)
-target_compile_definitions(reversi_experiment PRIVATE
-    "REVERSI_EXPERIMENT_COMPILER=\"${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}\""
-    "REVERSI_EXPERIMENT_BUILD_TYPE=\"$<CONFIG>\"")
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
-    target_link_libraries(reversi_experiment PUBLIC m)
-endif()
+    add_library(reversi_experiment STATIC
+        src/experiment/experiment.c
+        src/experiment/experiment_report.c)
+    target_include_directories(reversi_experiment PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_BINARY_DIR}/generated")
+    target_link_libraries(reversi_experiment
+        PUBLIC reversi_ai
+        PRIVATE reversi_warnings)
+    target_compile_definitions(reversi_experiment PRIVATE
+        "REVERSI_EXPERIMENT_COMPILER=\"${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}\""
+        "REVERSI_EXPERIMENT_BUILD_TYPE=\"$<CONFIG>\"")
+    if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+        target_link_libraries(reversi_experiment PUBLIC m)
+    endif()
 endif()
 
 set(REVERSI_STORAGE_SOURCE src/storage/storage.c)

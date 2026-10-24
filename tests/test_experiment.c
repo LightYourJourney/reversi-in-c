@@ -161,6 +161,30 @@ static void test_search_regression(TestStats *stats)
     experiment_result_free(&result);
 }
 
+static void test_invalid_run_config(TestStats *stats)
+{
+    ExperimentConfig config;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, experiment_config_parse(
+        &config, REGRESSION_CONFIG, error, sizeof(error)));
+
+    ExperimentResult result;
+    config.openings = 0;
+    REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
+                                              sizeof(error)));
+    config.openings = REVERSI_EXPERIMENT_MAX_OPENINGS + 1;
+    REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
+                                              sizeof(error)));
+    config.openings = 2;
+    config.max_plies = 0;
+    REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
+                                              sizeof(error)));
+    config.max_plies = 100;
+    config.engines[0].max_depth = 0;
+    REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
+                                              sizeof(error)));
+}
+
 static void test_search_engine(TestStats *stats)
 {
     const char *config_text =
@@ -194,6 +218,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_config_parse);
     REVERSI_RUN_TEST(&stats, test_run_and_reports);
     REVERSI_RUN_TEST(&stats, test_search_regression);
+    REVERSI_RUN_TEST(&stats, test_invalid_run_config);
     REVERSI_RUN_TEST(&stats, test_search_engine);
     return reversi_test_summary(&stats, "experiment.regression");
 }

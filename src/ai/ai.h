@@ -7,6 +7,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Upper bound accepted by ai_config_is_valid(). */
+#define REVERSI_AI_MAX_NODES 1000000000000ULL
+
 typedef enum AiDifficulty {
     AI_DIFFICULTY_EASY = 0,
     AI_DIFFICULTY_MEDIUM,

@@ -11,9 +11,9 @@
 
 #if defined(_WIN32)
 #include <direct.h>
-#define experiment_mkdir(path) _mkdir(path)
+#define REVERSI_EXPERIMENT_MKDIR(path) _mkdir(path)
 #else
-#define experiment_mkdir(path) mkdir((path), 0755)
+#define REVERSI_EXPERIMENT_MKDIR(path) mkdir((path), 0755)
 #endif
 
 static void report_error(char *error, size_t error_size, const char *text)
@@ -186,14 +186,18 @@ static void json_stats(TextBuffer *buffer,
 {
     buffer_printf(buffer,
                   "{\"moves\":%d,\"nodes\":%" PRIu64
-                  ",\"nps\":%.1f,\"p50_ms\":%d,\"p95_ms\":%d"
-                  ",\"max_ms\":%d,\"max_depth\":%d,\"cutoffs\":%" PRIu64
+                  ",\"nps\":%.1f,\"elapsed_ms\":%" PRIu64
+                  ",\"avg_ms\":%d,\"p50_ms\":%d,\"p95_ms\":%d"
+                  ",\"max_ms\":%d,\"avg_depth\":%d,\"max_depth\":%d"
+                  ",\"cutoffs\":%" PRIu64
                   ",\"tt_hits\":%" PRIu64 ",\"timeouts\":%d"
                   ",\"node_limits\":%d,\"cancellations\":%d}",
-                  stats->moves, stats->nodes, stats->nps, stats->p50_ms,
-                  stats->p95_ms, stats->max_ms, stats->max_depth,
-                  stats->cutoffs, stats->tt_hits, stats->timeouts,
-                  stats->node_limits, stats->cancellations);
+                  stats->moves, stats->nodes, stats->nps,
+                  stats->elapsed_ms, stats->avg_ms, stats->p50_ms,
+                  stats->p95_ms, stats->max_ms, stats->avg_depth,
+                  stats->max_depth, stats->cutoffs, stats->tt_hits,
+                  stats->timeouts, stats->node_limits,
+                  stats->cancellations);
 }
 
 static void build_json(const ExperimentResult *result, TextBuffer *buffer)
@@ -230,7 +234,7 @@ static void build_json(const ExperimentResult *result, TextBuffer *buffer)
     buffer_printf(buffer,
                   ",\"summary\":{\"games\":%d,\"completed\":%d,\"a_wins\":%d"
                   ",\"b_wins\":%d,\"draws\":%d,\"illegal\":%d"
-                  ",\"timeouts\":%d,\"aborted\":%d"
+                  ",\"timeouts\":%d,\"node_limited\":%d,\"aborted\":%d"
                   ",\"a_black_wins\":%d,\"a_white_wins\":%d"
                   ",\"b_black_wins\":%d,\"b_white_wins\":%d"
                   ",\"a_score\":%.6f,\"score_low\":%.6f"
@@ -238,7 +242,8 @@ static void build_json(const ExperimentResult *result, TextBuffer *buffer)
                   ",\"elo_high\":%.2f,\"elo_defined\":%s"
                   ",\"peak_rss_kb\":%" PRIu64 "}",
                   s->games, s->completed, s->a_wins, s->b_wins, s->draws,
-                  s->illegal, s->timeouts, s->aborted, s->a_black_wins,
+                  s->illegal, s->timeouts, s->node_limited, s->aborted,
+                  s->a_black_wins,
                   s->a_white_wins, s->b_black_wins, s->b_white_wins,
                   s->a_score, s->score_low, s->score_high, s->elo,
                   s->elo_low, s->elo_high,
@@ -247,7 +252,27 @@ static void build_json(const ExperimentResult *result, TextBuffer *buffer)
     json_stats(buffer, &s->a_stats);
     buffer_append(buffer, ",\"b_stats\":");
     json_stats(buffer, &s->b_stats);
-    buffer_append(buffer, "}");
+    buffer_append(buffer, ",\"anomalies\":[");
+    bool first_anomaly = true;
+    for (int i = 0; i < result->game_count; ++i) {
+        const ExperimentGame *game = &result->games[i];
+        if (!game->illegal && !game->timed_out && !game->node_limit
+            && !game->aborted) {
+            continue;
+        }
+        if (!first_anomaly) {
+            buffer_append(buffer, ",");
+        }
+        first_anomaly = false;
+        buffer_printf(buffer,
+                      "{\"game\":%d,\"illegal\":%s,\"timeout\":%s,"
+                      "\"node_limit\":%s,\"aborted\":%s}",
+                      game->index, game->illegal ? "true" : "false",
+                      game->timed_out ? "true" : "false",
+                      game->node_limit ? "true" : "false",
+                      game->aborted ? "true" : "false");
+    }
+    buffer_append(buffer, "]}");
 }
 
 static bool write_text_file(const char *dir, const char *name,
@@ -320,16 +345,18 @@ static bool write_games_csv(const ExperimentResult *result, const char *dir,
     buffer_init(&buffer);
     buffer_append(&buffer,
         "game,opening,a_color,plies,passes,result,black_discs,white_discs,"
-        "illegal,timed_out,aborted\n");
+        "illegal,timed_out,node_limit,aborted\n");
     for (int i = 0; i < result->game_count; ++i) {
         const ExperimentGame *game = &result->games[i];
-        buffer_printf(&buffer, "%d,%d,%c,%d,%d,%s,%d,%d,%d,%d,%d\n",
+        buffer_printf(&buffer,
+                      "%d,%d,%c,%d,%d,%s,%d,%d,%d,%d,%d,%d\n",
                       game->index, game->opening,
                       game->a_color == STONE_BLACK ? 'B' : 'W',
                       game->plies, game->passes,
                       result_name(game->result), game->black_discs,
                       game->white_discs, game->illegal ? 1 : 0,
-                      game->timed_out ? 1 : 0, game->aborted ? 1 : 0);
+                      game->timed_out ? 1 : 0, game->node_limit ? 1 : 0,
+                      game->aborted ? 1 : 0);
     }
     const bool ok = !buffer.failed
         && write_text_file(dir, "games.csv", buffer.data, buffer.length,
@@ -417,6 +444,7 @@ static void build_markdown(const ExperimentResult *result, TextBuffer *buffer)
     buffer_printf(buffer, "| A wins as White | %d |\n", s->a_white_wins);
     buffer_printf(buffer, "| Illegal games | %d |\n", s->illegal);
     buffer_printf(buffer, "| Timeouts | %d |\n", s->timeouts);
+    buffer_printf(buffer, "| Node-limit games | %d |\n", s->node_limited);
     buffer_printf(buffer, "| Aborted | %d |\n", s->aborted);
     if (s->elo_defined) {
         buffer_printf(buffer,
@@ -440,10 +468,14 @@ static void build_markdown(const ExperimentResult *result, TextBuffer *buffer)
                   s->a_stats.nodes, s->b_stats.nodes);
     buffer_printf(buffer, "| NPS | %.0f | %.0f |\n", s->a_stats.nps,
                   s->b_stats.nps);
+    buffer_printf(buffer, "| Average | %d ms | %d ms |\n",
+                  s->a_stats.avg_ms, s->b_stats.avg_ms);
     buffer_printf(buffer, "| P50 | %d ms | %d ms |\n", s->a_stats.p50_ms,
                   s->b_stats.p50_ms);
     buffer_printf(buffer, "| P95 | %d ms | %d ms |\n", s->a_stats.p95_ms,
                   s->b_stats.p95_ms);
+    buffer_printf(buffer, "| Average depth | %d | %d |\n",
+                  s->a_stats.avg_depth, s->b_stats.avg_depth);
     buffer_printf(buffer, "| Max depth | %d | %d |\n",
                   s->a_stats.max_depth, s->b_stats.max_depth);
     buffer_printf(buffer, "| Cut rate | %.1f%% | %.1f%% |\n",
@@ -464,6 +496,25 @@ static void build_markdown(const ExperimentResult *result, TextBuffer *buffer)
                   s->a_stats.timeouts, s->b_stats.timeouts);
     buffer_printf(buffer, "| Node cap hits | %d | %d |\n",
                   s->a_stats.node_limits, s->b_stats.node_limits);
+    buffer_printf(buffer, "## Anomalies\n\n");
+    bool any = false;
+    for (int i = 0; i < result->game_count; ++i) {
+        const ExperimentGame *game = &result->games[i];
+        if (!game->illegal && !game->timed_out && !game->node_limit
+            && !game->aborted) {
+            continue;
+        }
+        any = true;
+        buffer_printf(buffer, "- Game %d: illegal=%s timeout=%s "
+                      "node_limit=%s aborted=%s\n", game->index,
+                      game->illegal ? "yes" : "no",
+                      game->timed_out ? "yes" : "no",
+                      game->node_limit ? "yes" : "no",
+                      game->aborted ? "yes" : "no");
+    }
+    if (!any) {
+        buffer_printf(buffer, "None.\n");
+    }
     buffer_printf(buffer, "\nRaw data: `games.csv`, `moves.csv`, "
                   "`summary.json`. The HTML report renders the same JSON.\n");
 }
@@ -523,14 +574,16 @@ static void build_html(const TextBuffer *json, TextBuffer *buffer)
         "s.score_high.toFixed(3)+')'],['Elo',s.elo_defined?"
         "(s.elo>=0?'+':'')+s.elo.toFixed(0)+' ['+s.elo_low.toFixed(0)+"
         "'..'+s.elo_high.toFixed(0)+']':'n/a'],['Illegal',s.illegal],"
-        "['Timeouts',s.timeouts],['Aborted',s.aborted]]));"
+        "['Timeouts',s.timeouts],['Node-limit',s.node_limited],"
+        "['Aborted',s.aborted]]));"
         "app.appendChild(el('h2',null,'Search performance'));"
         "const perf=[['Metric',a.name,b.name],['Moves',s.a_stats.moves,"
         "s.b_stats.moves],['Nodes',s.a_stats.nodes,s.b_stats.nodes],"
         "['NPS',s.a_stats.nps.toFixed(0),s.b_stats.nps.toFixed(0)],"
-        "['P50 ms',s.a_stats.p50_ms,s.b_stats.p50_ms],['P95 ms',"
+        "['Avg ms',s.a_stats.avg_ms,s.b_stats.avg_ms],['P50 ms',s.a_stats.p50_ms,s.b_stats.p50_ms],['P95 ms',"
         "s.a_stats.p95_ms,s.b_stats.p95_ms],['Max depth',"
-        "s.a_stats.max_depth,s.b_stats.max_depth],['Cut rate %',"
+        "s.a_stats.max_depth,s.b_stats.max_depth],['Avg depth',s.a_stats.avg_depth,"
+        "s.b_stats.avg_depth],['Cut rate %',"
         "(s.a_stats.nodes?100*s.a_stats.cutoffs/s.a_stats.nodes:0).toFixed(1),"
         "(s.b_stats.nodes?100*s.b_stats.cutoffs/s.b_stats.nodes:0).toFixed(1)],"
         "['TT hit %',(s.a_stats.nodes?100*s.a_stats.tt_hits/"
@@ -540,7 +593,13 @@ static void build_html(const TextBuffer *json, TextBuffer *buffer)
         "s.a_stats.node_limits,s.b_stats.node_limits]];"
         "app.appendChild(table(perf));"
         "app.appendChild(el('p',null,'Elo is a two-engine logistic estimate; "
-        "draws count as 0.5. Small samples are uncertain.'));"
+        "draws count as 0.5. Confidence intervals use paired openings as the "
+        "independent unit; small samples are uncertain.'));"
+        "app.appendChild(el('h2',null,'Anomalies'));"
+        "if(!d.anomalies.length){app.appendChild(el('p',null,'None.'))}"
+        "else{const rows=[['Game','illegal','timeout','node_limit','aborted']];"
+        "for(const g of d.anomalies){rows.push([g.game,g.illegal,g.timeout,"
+        "g.node_limit,g.aborted])}app.appendChild(table(rows))}"
         "</script></body></html>");
 }
 
@@ -551,7 +610,7 @@ bool experiment_write_all(const ExperimentResult *result, const char *dir,
         report_error(error, error_size, "invalid output directory");
         return false;
     }
-    (void)experiment_mkdir(dir);
+    (void)REVERSI_EXPERIMENT_MKDIR(dir);
 
     if (!write_config_file(result, dir, error, error_size)
         || !write_games_csv(result, dir, error, error_size)
@@ -571,8 +630,6 @@ bool experiment_write_all(const ExperimentResult *result, const char *dir,
         }
         return false;
     }
-    buffer_free(&json);
-
     TextBuffer markdown;
     buffer_init(&markdown);
     build_markdown(result, &markdown);
@@ -585,13 +642,10 @@ bool experiment_write_all(const ExperimentResult *result, const char *dir,
         return false;
     }
 
-    TextBuffer json_again;
-    buffer_init(&json_again);
-    build_json(result, &json_again);
     TextBuffer html;
     buffer_init(&html);
-    build_html(&json_again, &html);
-    buffer_free(&json_again);
+    build_html(&json, &html);
+    buffer_free(&json);
     const bool html_ok = !html.failed
         && write_text_file(dir, "report.html", html.data, html.length,
                            error, error_size);
