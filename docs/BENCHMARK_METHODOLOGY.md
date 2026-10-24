@@ -114,7 +114,9 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 
 1. Random vs Greedy：校验每局结果、ply 数与颜色配对，作为规则/贪心评估
    的确定性 oracle。
-2. TT vs no-TT 固定深度 3：校验每局结果与子数，作为搜索路径的 oracle。
+2. TT vs no-TT 固定深度 3：校验每局结果、子数与总节点数，作为搜索路径
+   与算法工作量的 oracle。节点数是跨机器的确定性指标；墙钟时间不进入
+   CI 判定。
 
 同时要求 `illegal=timeouts=aborted=0`，并在同一次测试中重复运行以比对
 逻辑结果。性能回归不进入 CI 判定：不同机器与负载下的原始耗时不可比；

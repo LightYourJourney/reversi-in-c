@@ -143,6 +143,13 @@ static void test_search_regression(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, result.summary.illegal == 0);
     REVERSI_TEST_ASSERT(stats, result.summary.timeouts == 0);
     REVERSI_TEST_ASSERT(stats, result.summary.aborted == 0);
+    /* Node counts are a deterministic work metric across machines, unlike
+       wall-clock time. A 10%+ change means the search path changed. */
+    REVERSI_TEST_ASSERT(stats, result.summary.a_stats.nodes == 21447);
+    REVERSI_TEST_ASSERT(stats, result.summary.b_stats.nodes == 25601);
+    REVERSI_TEST_ASSERT(stats, result.summary.a_stats.max_depth == 3);
+    REVERSI_TEST_ASSERT(stats, result.summary.b_stats.max_depth == 3);
+
     static const int expected_black[4] = {42, 42, 52, 52};
     for (int i = 0; i < 4; ++i) {
         REVERSI_TEST_ASSERT(stats, result.games[i].result
