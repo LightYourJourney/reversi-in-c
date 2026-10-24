@@ -446,6 +446,20 @@ static void build_markdown(const ExperimentResult *result, TextBuffer *buffer)
                   s->b_stats.p95_ms);
     buffer_printf(buffer, "| Max depth | %d | %d |\n",
                   s->a_stats.max_depth, s->b_stats.max_depth);
+    buffer_printf(buffer, "| Cut rate | %.1f%% | %.1f%% |\n",
+                  s->a_stats.nodes > 0
+                      ? 100.0 * (double)s->a_stats.cutoffs
+                          / (double)s->a_stats.nodes : 0.0,
+                  s->b_stats.nodes > 0
+                      ? 100.0 * (double)s->b_stats.cutoffs
+                          / (double)s->b_stats.nodes : 0.0);
+    buffer_printf(buffer, "| TT hit rate | %.1f%% | %.1f%% |\n",
+                  s->a_stats.nodes > 0
+                      ? 100.0 * (double)s->a_stats.tt_hits
+                          / (double)s->a_stats.nodes : 0.0,
+                  s->b_stats.nodes > 0
+                      ? 100.0 * (double)s->b_stats.tt_hits
+                          / (double)s->b_stats.nodes : 0.0);
     buffer_printf(buffer, "| Timeouts | %d | %d |\n",
                   s->a_stats.timeouts, s->b_stats.timeouts);
     buffer_printf(buffer, "| Node cap hits | %d | %d |\n",
@@ -516,7 +530,12 @@ static void build_html(const TextBuffer *json, TextBuffer *buffer)
         "['NPS',s.a_stats.nps.toFixed(0),s.b_stats.nps.toFixed(0)],"
         "['P50 ms',s.a_stats.p50_ms,s.b_stats.p50_ms],['P95 ms',"
         "s.a_stats.p95_ms,s.b_stats.p95_ms],['Max depth',"
-        "s.a_stats.max_depth,s.b_stats.max_depth],['Timeouts',"
+        "s.a_stats.max_depth,s.b_stats.max_depth],['Cut rate %',"
+        "(s.a_stats.nodes?100*s.a_stats.cutoffs/s.a_stats.nodes:0).toFixed(1),"
+        "(s.b_stats.nodes?100*s.b_stats.cutoffs/s.b_stats.nodes:0).toFixed(1)],"
+        "['TT hit %',(s.a_stats.nodes?100*s.a_stats.tt_hits/"
+        "s.a_stats.nodes:0).toFixed(1),(s.b_stats.nodes?100*s.b_stats.tt_hits/"
+        "s.b_stats.nodes:0).toFixed(1)],['Timeouts',"
         "s.a_stats.timeouts,s.b_stats.timeouts],['Node cap',"
         "s.a_stats.node_limits,s.b_stats.node_limits]];"
         "app.appendChild(table(perf));"
