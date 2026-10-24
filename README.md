@@ -37,8 +37,8 @@
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
 | macOS 11+ arm64 | 本机 Debug 17/17、Release 17/17、ASan+UBSan 17/17（无窗口） | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM（v1.0.1）：Debug/Release 15/15，发行包 `--version` 冒烟；v1.2.0 未推送 | 物理桌面 GUI NOT TESTED |
-| Linux x86_64 | GitHub Actions 托管 VM（v1.0.1）：Debug/Release 15/15，Xvfb GUI 与发行包验收；v1.2.0 未推送 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| Windows x64 | GitHub Actions 托管 VM（v1.2.0）：Debug/Release 各 17/17，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM（v1.2.0）：Debug/Release 各 17/17、ASan+UBSan、Xvfb GUI 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 | Web（Chrome） | Emscripten 6.0.13；浏览器套件 9/9（v1.1.0），v1.2.0 复验 NOT TESTED | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
@@ -504,10 +504,10 @@ ctest --test-dir build --output-on-failure
 | Debug（无窗口） | 17/17 通过 |
 | Release（无窗口） | 17/17 通过 |
 | ASan+UBSan（无窗口） | 17/17 通过，无 Sanitizer 报告 |
-| Debug + GUI | 本轮图形会话不可用，`app.smoke` / `app.autoplay` **NOT TESTED** |
+| Debug + GUI | 本机图形会话不可用；CI Linux Xvfb 下 `app.smoke` / `app.autoplay` 2/2 通过 |
 | 浏览器（Chrome） | v1.1.0 套件 9/9；v1.2.0 浏览器复验 **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（wasm 316 KB） |
-| GitHub Actions | v1.0.1 发布时运行 `39633821096` 9/9 通过；v1.1.0/v1.2.0 尚未推送 |
+| GitHub Actions | v1.2.0 运行 `40073769484` 9/9 通过；v1.0.1 发布运行 `39633821096` 9/9 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、

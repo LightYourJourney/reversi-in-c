@@ -126,7 +126,8 @@ plain alpha-beta 参照。
 | 其他 | `timespec_get(TIME_UTC)` 回退 |
 
 预算按 1024 节点检查；根节点每步检查。单调时钟避免了系统时间回拨导致的
-超时误判。
+超时误判。Linux 的严格 C11 构建默认不暴露 `clock_gettime`，相关编译单元
+在包含 `<time.h>` 之前定义 `_POSIX_C_SOURCE=200809L`。
 
 ## 7. 验证
 

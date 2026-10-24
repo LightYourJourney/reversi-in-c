@@ -56,8 +56,9 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 实际运行结果：
 
 - Debug：17/17 无窗口测试通过（v1.2.0）。
-- Debug + GUI：v1.1.0 为 19/19；v1.2.0 本轮图形会话不可用，
-  `app.smoke` / `app.autoplay` **NOT TESTED**。
+- Debug + GUI：v1.1.0 为 19/19；v1.2.0 本机图形会话不可用，但 CI
+  Linux Xvfb 下 `app.smoke` / `app.autoplay` 2/2 通过；Windows/macOS
+  GUI 仍 **NOT TESTED**。
 - Release：17/17 通过（v1.2.0）。
 - ASan+UBSan：v1.2.0 无窗口 17/17 通过，无 Sanitizer 报告；此前
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
@@ -70,6 +71,11 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   `scripts/verify-package.sh`。该运行同时验证了 Phase 8 提取的
   `.github/workflows/package.yml` 可复用工作流。运行器是托管 VM，
   不是物理机；Windows/macOS GUI 未在 CI 中运行。
+- GitHub Actions 运行 `40073769484`（2026-10-24，v1.2.0）9 个作业全部
+  `success`：Linux/Windows（MSVC）/macOS Debug 各 17/17；三平台 Release
+  各 17/17（Windows 含 `--version` 断言）；Linux ASan+UBSan 无窗口 17/17、
+  Xvfb GUI 2/2；Linux 发行包在 Xvfb 下验收。首跑 `40073029646` 暴露
+  Linux 严格 C11 下 `CLOCK_MONOTONIC` 未声明，已在提交 `438a510` 修正。
 
 ## 3. 需求到测试的映射
 
@@ -89,7 +95,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | GUI 键盘导航 | 未单独走查；无自动化点击/键盘回归测试 | NOT TESTED |
 | Debug/Release | 两套构建与测试 | PASS |
 | Sanitizer | ASan+UBSan 测试与 GUI 冒烟 | PASS |
-| 跨平台构建/测试 | GitHub Actions 托管 VM：Linux/Windows/macOS 均 15/15（v1.0.1）；v1.2.0 未推送 | PASS（v1.0.1）；v1.2.0 NOT TESTED |
+| 跨平台构建/测试 | GitHub Actions 托管 VM：v1.2.0 三平台 Debug/Release 各 17/17 | PASS |
 | Linux GUI（Xvfb） | `app.smoke`、`app.autoplay`（软件渲染） | PASS |
 | Windows/macOS GUI | 未运行 | NOT TESTED |
 | 跨平台物理机 | 仅 macOS arm64 为本机 | Windows/Linux 物理机 NOT TESTED |
@@ -198,10 +204,10 @@ SwiftShader 软件渲染。
 默认情况下，任何 SKIP 都会让套件以非零退出；只有显式设置
 `REVERSI_WEB_ALLOW_SKIP=1` 才接受不完整的运行。
 
-运行方式见 [WEB_BUILD.md](WEB_BUILD.md) §4。桌面回归在最终树上是
-Debug 15/15、Release 15/15、ASan+UBSan 15/15（均无窗口）。GUI 测试
-在本轮 **NOT TESTED**：当前会话没有可用显示器，`InitWindow` 报
-`GLFW: Failed to get primary monitor`。
+运行方式见 [WEB_BUILD.md](WEB_BUILD.md) §4。Phase 10 时桌面回归为
+Debug/Release/ASan+UBSan 各 15/15（均无窗口）；v1.2.0 的 17/17 见 §2。
+Phase 10 的 GUI 测试在本机 **NOT TESTED**：当前会话没有可用显示器，
+`InitWindow` 报 `GLFW: Failed to get primary monitor`。
 
 未验证：Safari、Firefox、真实 iOS/Android 设备、真实 GPU 下的帧率、
 浏览器存储被禁用的实机路径（代码有错误横幅与只读降级）。

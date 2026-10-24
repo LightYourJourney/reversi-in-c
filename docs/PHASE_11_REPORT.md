@@ -85,7 +85,7 @@ Homebrew Clang 23.1.3，CMake 4.4.4，Emscripten 6.0.13
 | `core.bitboard` | 约 620,000 次差分断言 PASS |
 | `ai.endgame` | 12/10/8/6/4/2 空分数与**独立**全深度 alpha-beta 一致（`ai_search_choose_ex` 已禁用残局求解器）；INCOMPLETE 分类 PASS |
 | `ai.core` / `ai.worker` | PASS（TT/无 TT、取消、确定性、完整对局） |
-| GitHub Actions（1.2.0 首次推送，`40073029646`） | macOS/Windows Debug PASS；Linux 三个作业在构建 `reversi_ai_corpus` 时因 `CLOCK_MONOTONIC` 未声明失败 | FAIL（已修复，待重跑） |
+| GitHub Actions（1.2.0，`40073769484`） | 9/9 PASS：三平台 Debug 各 17/17、三平台 Release 各 17/17、Linux ASan+UBSan 17/17、Xvfb GUI 2/2、Linux 发行包验收；首跑 `40073029646` 的 Linux 构建失败已修正 | PASS |
 | Emscripten Release 构建 | PASS（主 wasm 316 KB，AI Worker wasm 54 KB） |
 | Web 浏览器套件 | **NOT TESTED**：本地预览服务被系统因内存压力停止，未在本阶段重启 |
 | 桌面 GUI | **NOT TESTED**：当前会话无显示器 |
@@ -97,8 +97,8 @@ Linux 失败原因不是测试断言，而是严格 C11 下 `<time.h>` 不暴露
 `CLOCK_MONOTONIC`：`ai_search` / `ai_endgame` 的 `defined(CLOCK_MONOTONIC)`
 分支被编译掉、静默走非单调回退，`bench_corpus.c` 则因直接调用而编译失败。
 已在三个编译单元包含头文件之前定义 `_POSIX_C_SOURCE=200809L`（仅
-`__linux__`，避免 macOS 上隐藏 `ru_maxrss`）。本机三套 17/17 复验通过，
-Linux 结果以修正后的 CI 重跑为准。
+`__linux__`，避免 macOS 上隐藏 `ru_maxrss`）。本机三套 17/17 复验通过；
+修正后 CI 重跑 `40073769484` 9/9 通过。
 
 ## 5. 性能数据
 

@@ -41,6 +41,9 @@
 ### Verified
 
 - 桌面 Debug / Release / ASan+UBSan 无窗口各 17/17。
+- GitHub Actions `40073769484` 9/9：Linux/Windows/macOS Debug 各 17/17、
+  三平台 Release 各 17/17（含 Windows `--version` 断言）、Linux ASan+UBSan
+  17/17、Xvfb GUI 2/2、Linux 发行包验收。
 - 固定深度 6 的 A/B 中两套引擎节点数完全相同；开局 73.8→9.7 ms、
   中局 516→198 ms、残局 12 空 72→8.6 ms；10/6 空的小幅回退在噪声内。
 - Hard 500 ms 预算下，开局 7→10 层、中局 6→7 层、残局 12 空精确
