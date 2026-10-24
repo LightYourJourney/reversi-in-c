@@ -86,7 +86,7 @@ jobs:
         run: >
           xvfb-run -a -s "-screen 0 1100x800x24"
           ctest --test-dir build -C Debug --output-on-failure
-          -R "app.smoke|app.autoplay"
+          -R "app.smoke|app.autoplay|app.lab"
 
   linux-package:
     name: Linux packaged smoke
@@ -150,7 +150,7 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1
         run: >
           ctest --test-dir build-sanitize -C Debug --output-on-failure
-          -E "app.smoke|app.autoplay"
+          -E "app.smoke|app.autoplay|app.lab"
 
       - name: GUI smoke under Xvfb
         env:
@@ -160,4 +160,4 @@ jobs:
         run: >
           xvfb-run -a -s "-screen 0 1100x800x24"
           ctest --test-dir build-sanitize -C Debug --output-on-failure
-          -R "app.smoke|app.autoplay"
+          -R "app.smoke|app.autoplay|app.lab"
