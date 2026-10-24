@@ -79,9 +79,9 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   各 17/17（Windows 含 `--version` 断言）；Linux ASan+UBSan 无窗口 17/17、
   Xvfb GUI 2/2；Linux 发行包在 Xvfb 下验收。首跑 `40073029646` 暴露
   Linux 严格 C11 下 `CLOCK_MONOTONIC` 未声明，已在提交 `438a510` 修正。
-- GitHub Actions 运行 `40107607886`（2026-10-24，审查修正前）9 个作业
-  全部 `success`：三平台 Debug/Release 各 19/19；Linux ASan+UBSan 无窗口
-  19/19；Linux Xvfb GUI 3/3（含 `app.lab`）；Linux 发行包验收。首跑
+- GitHub Actions 运行 `40111155790`（2026-10-24，Phase 12 审查修正后）9 个
+  作业全部 `success`：三平台 Debug/Release 各 20/20；Linux ASan+UBSan
+  无窗口 20/20；Linux Xvfb GUI 3/3（含 `app.lab`）；Linux 发行包验收。首跑
   `40106930342` 仅 ASan 作业把 `app.lab` 排进无窗口步骤，已在 `1cc9147`
   修正工作流。
 
