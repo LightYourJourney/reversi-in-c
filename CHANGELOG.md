@@ -27,13 +27,18 @@
 
 - 主菜单增加 Analysis lab 入口（8 项）。
 - `reversi_ui` 保持不依赖 AI；Lab 视图编译进 `reversi_app`。
+- 棋谱保存/读取改为用户数据目录的 `lab-record.rvr`；自定义局面拒绝
+  导出，避免伪造标准开局历史。
+- 分支分析分数按节点保存，不再覆盖主线评分曲线；复盘区可并排比较
+  当前分支与主兄弟，深度不同会标注。
+- 桌面最小窗口 760×600 也显示完整评估分量与评分曲线。
 
 ### Verified
 
-- 桌面 Debug / Release / ASan+UBSan 无窗口各 19/19。
-- GitHub Actions `40107607886` 9/9：三平台 Debug/Release 各 19/19、
-  Linux ASan+UBSan 19/19、Xvfb GUI 3/3、Linux 包验收。
-- Debug + GUI 22/22（含新增 `app.lab` 渲染冒烟）。
+- 桌面 Debug / Release / ASan+UBSan 无窗口各 20/20。
+- GitHub Actions `40107607886`（审查修正前）9/9：三平台 Debug/Release
+  各 19/19、Linux ASan+UBSan 19/19、Xvfb GUI 3/3、Linux 包验收。
+- Debug + GUI 23/23（含新增 `app.lab` 渲染冒烟）。
 - Emscripten Release 构建通过；浏览器套件在 1.3.0 上 **NOT TESTED**。
 - 分析性能见 `docs/benchmarks/phase12-analysis.txt`。
 

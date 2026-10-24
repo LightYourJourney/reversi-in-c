@@ -161,6 +161,79 @@ static void test_pass_node(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, !analysis_pass(&session));
 }
 
+static void test_model_accessors(TestStats *stats)
+{
+    AnalysisSession session;
+    analysis_reset_custom(&session, STONE_WHITE);
+    REVERSI_TEST_ASSERT(stats, analysis_current_kind(&session)
+                        == ANALYSIS_POSITION_CUSTOM);
+    REVERSI_TEST_ASSERT(stats, board_count(&analysis_current(&session)->state.board,
+                                           STONE_BLACK) == 0);
+    REVERSI_TEST_ASSERT(stats, analysis_current(&session)->state.current_player
+                        == STONE_WHITE);
+    REVERSI_TEST_ASSERT(stats, !analysis_current_playable(&session));
+    REVERSI_TEST_ASSERT(stats, analysis_position(&session, 0)
+                        == analysis_current(&session));
+    REVERSI_TEST_ASSERT(stats, analysis_position(&session, -1) == NULL);
+    REVERSI_TEST_ASSERT(stats, analysis_position(&session, 1) == NULL);
+    const AnalysisResult empty_result = analysis_current_result(&session);
+    /* Neither side can move on an empty board, so the rules call it a
+       terminal draw even though it is only an editing starting point. */
+    REVERSI_TEST_ASSERT(stats, empty_result.terminal);
+    REVERSI_TEST_ASSERT(stats, empty_result.result == GAME_RESULT_DRAW);
+    REVERSI_TEST_ASSERT(stats, empty_result.black_discs == 0
+                        && empty_result.white_discs == 0);
+
+    analysis_init(&session);
+    REVERSI_TEST_ASSERT(stats, analysis_play_move(&session, (Move){5, 3}));
+    REVERSI_TEST_ASSERT(stats, analysis_main_length(&session) == 1);
+    REVERSI_TEST_ASSERT(stats, analysis_main_node_at_ply(&session, 1)
+                        == session.current);
+    REVERSI_TEST_ASSERT(stats, analysis_main_node_at_ply(&session, 2) == -1);
+    REVERSI_TEST_ASSERT(stats, analysis_main_node_at_ply(&session, -1) == -1);
+
+    /* A VALID load only accepts the standard opening. */
+    GameState full;
+    memset(&full, 0, sizeof(full));
+    board_clear(&full.board);
+    for (int row = 0; row < REVERSI_BOARD_SIZE; ++row) {
+        for (int col = 0; col < REVERSI_BOARD_SIZE; ++col) {
+            board_set(&full.board, row, col, STONE_BLACK);
+        }
+    }
+    full.current_player = STONE_BLACK;
+    full.result = GAME_RESULT_ONGOING;
+    REVERSI_TEST_ASSERT(stats, analysis_load_state(
+        &session, &full, ANALYSIS_POSITION_CUSTOM));
+    const AnalysisResult full_result = analysis_current_result(&session);
+    REVERSI_TEST_ASSERT(stats, full_result.terminal);
+    REVERSI_TEST_ASSERT(stats, full_result.result == GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, full_result.black_discs == 64);
+    REVERSI_TEST_ASSERT(stats, !analysis_load_state(
+        &session, &full, ANALYSIS_POSITION_VALID));
+
+    /* The ply cap rejects a child beyond the documented limit. */
+    analysis_init(&session);
+    session.positions[0].ply = REVERSI_ANALYSIS_MAX_PLIES;
+    REVERSI_TEST_ASSERT(stats, !analysis_play_move(&session, (Move){5, 3}));
+    REVERSI_TEST_ASSERT(stats, session.count == 1);
+    session.positions[0].ply = 0;
+}
+
+static void test_variation_navigation(TestStats *stats)
+{
+    AnalysisSession session;
+    analysis_init(&session);
+    REVERSI_TEST_ASSERT(stats, analysis_play_move(&session, (Move){5, 3}));
+    REVERSI_TEST_ASSERT(stats, analysis_prev(&session));
+    REVERSI_TEST_ASSERT(stats, analysis_play_move(&session, (Move){4, 2}));
+    REVERSI_TEST_ASSERT(stats, analysis_prev_variation(&session));
+    REVERSI_TEST_ASSERT(stats, analysis_current(&session)->via.move.row == 5);
+    REVERSI_TEST_ASSERT(stats, !analysis_prev_variation(&session));
+    REVERSI_TEST_ASSERT(stats, analysis_next_variation(&session));
+    REVERSI_TEST_ASSERT(stats, analysis_current(&session)->via.move.row == 4);
+}
+
 static void test_history_import(TestStats *stats)
 {
     GameState state;
@@ -233,7 +306,7 @@ static void test_record_roundtrip(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, analysis_play_move(&session, alternative));
     REVERSI_TEST_ASSERT(stats, analysis_goto(&session, main_end));
 
-    char buffer[ANALYSIS_MAX_RECORD_BYTES];
+    char buffer[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
     const size_t written = analysis_record_write(&session, buffer,
                                                  sizeof(buffer));
     REVERSI_TEST_ASSERT(stats, written > 0);
@@ -257,7 +330,7 @@ static void test_record_roundtrip(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, analysis_variation_count(&loaded) == 2);
 
     /* Round trip is stable. */
-    char again[ANALYSIS_MAX_RECORD_BYTES];
+    char again[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
     const size_t rewritten = analysis_record_write(&loaded, again,
                                                    sizeof(again));
     REVERSI_TEST_ASSERT(stats, rewritten == written);
@@ -300,8 +373,10 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_tree_navigation);
     REVERSI_RUN_TEST(&stats, test_illegal_and_editing);
     REVERSI_RUN_TEST(&stats, test_pass_node);
+    REVERSI_RUN_TEST(&stats, test_model_accessors);
+    REVERSI_RUN_TEST(&stats, test_variation_navigation);
     REVERSI_RUN_TEST(&stats, test_history_import);
     REVERSI_RUN_TEST(&stats, test_record_roundtrip);
     REVERSI_RUN_TEST(&stats, test_record_rejects_bad_input);
-    return reversi_test_summary(&stats, "analysis");
+    return reversi_test_summary(&stats, "analysis.session");
 }

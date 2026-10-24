@@ -20,10 +20,10 @@
  * the current node navigates to that child instead of duplicating it.
  */
 
-#define ANALYSIS_MAX_POSITIONS 512
-#define ANALYSIS_MAX_PLIES 64
-#define ANALYSIS_MAX_VARIATIONS 8
-#define ANALYSIS_MAX_RECORD_BYTES 8192
+#define REVERSI_ANALYSIS_MAX_POSITIONS 512
+#define REVERSI_ANALYSIS_MAX_PLIES 64
+#define REVERSI_ANALYSIS_MAX_VARIATIONS 8
+#define REVERSI_ANALYSIS_MAX_RECORD_BYTES 8192
 
 typedef enum AnalysisPositionKind {
     /* Reachable from the standard opening by legal moves (or by the
@@ -76,7 +76,7 @@ typedef struct AnalysisResult {
 } AnalysisResult;
 
 typedef struct AnalysisSession {
-    AnalysisPosition positions[ANALYSIS_MAX_POSITIONS];
+    AnalysisPosition positions[REVERSI_ANALYSIS_MAX_POSITIONS];
     int count;
     int root;
     int current;
@@ -130,7 +130,12 @@ bool analysis_next(AnalysisSession *session);
 bool analysis_last(AnalysisSession *session);
 bool analysis_return_to_main(AnalysisSession *session);
 bool analysis_next_variation(AnalysisSession *session);
+bool analysis_prev_variation(AnalysisSession *session);
 int analysis_variation_count(const AnalysisSession *session);
+
+/* Main-line helpers shared by the record format and the UI. */
+int analysis_main_length(const AnalysisSession *session);
+int analysis_main_node_at_ply(const AnalysisSession *session, int ply);
 bool analysis_variation_at(const AnalysisSession *session, int index,
                            AnalysisVariation *out);
 

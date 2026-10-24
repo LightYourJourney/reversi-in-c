@@ -16,12 +16,12 @@ Homebrew Clang 21.0.0，CMake 4.4.4，Emscripten 6.0.13
 | 3. AI 分析 API | `ai/ai_analyze.h` + `ai_analyze_position()`；推荐、深度、分数、节点、耗时、完成/精确、PV | PASS |
 | 4. MultiPV | 最多 3 个候选；同深度全窗口、整层丢弃；候选分数可比 | PASS |
 | 5. 评估可视化 | 总分、角点、机动、潜在机动、稳定子、前沿、位置、子差、阶段；固定黑方为正 | PASS |
-| 6. 复盘 | 首/上/下/末、自动播放、速度、图线跳转、标记、分支切换、主线返回、History 导入 | PASS |
-| 7. 棋谱格式 | 版本化文本 v1，严格校验、Pass、一层分支；剪贴板导入/导出 | PASS（传输为剪贴板） |
-| 8. 分析 UI | 独立 Lab 页面；宽/窄布局；棋盘、候选、评估、时间轴、评分曲线 | PASS（渲染冒烟） |
+| 6. 复盘 | 首/上/下/末、自动播放、速度、图线跳转、标记、分支前后切换与分数对比（深度不同会标注）、主线返回、History 导入 | PASS |
+| 7. 棋谱格式 | 版本化文本 v1，严格校验、Pass、一层分支；保存/读取用户数据目录的 `lab-record.rvr` | PASS（固定文件名，无文件选择器） |
+| 8. 分析 UI | 独立 Lab 页面；桌面最小 760×600 即显示完整评估与曲线；更窄用紧凑布局 | PASS（渲染冒烟） |
 | 9. 生命周期 | 开始/停止/取消/换局面重搜；generation 绑定；后台线程/Worker | PASS |
 | 10. 自动分析与复盘 | Analyze all；逐 ply 最佳分数、实际着法对比、深度/完成度；不做浅层“严重错误”判定 | PASS（保守版） |
-| 11. 测试与性能 | 19 个无窗口测试、3 个 GUI 测试、Emscripten 构建、分析基准 | PASS（浏览器 NOT TESTED） |
+| 11. 测试与性能 | 20 个无窗口测试、3 个 GUI 测试、Emscripten 构建、分析基准 | PASS（浏览器 NOT TESTED） |
 
 ## 2. 关键决策
 
@@ -51,7 +51,8 @@ Homebrew Clang 21.0.0，CMake 4.4.4，Emscripten 6.0.13
 - `src/analysis/analysis.[ch]`、`src/analysis/record.[ch]`
 - `src/ai/ai_analyze.h`（实现位于 `src/ai/ai_search.c`）
 - `src/ui/lab_view.[ch]`
-- `tests/test_analysis.c`、`tests/test_analyze.c`、`tests/bench_analysis.c`
+- `tests/test_analysis.c`、`tests/test_analyze.c`、`tests/test_lab.c`、
+  `tests/bench_analysis.c`
 - `docs/ANALYSIS_ARCHITECTURE.md`、`docs/RECORD_FORMAT.md`
 - `docs/benchmarks/phase12-analysis.txt`
 
@@ -73,11 +74,12 @@ Homebrew Clang 21.0.0，CMake 4.4.4，Emscripten 6.0.13
 
 | 配置 | 结果 |
 |---|---|
-| Debug 无窗口 `ctest` | 19/19 PASS |
-| Release 无窗口 | 19/19 PASS |
-| ASan+UBSan 无窗口 | 19/19 PASS，无报告（116 s） |
-| Debug + GUI | 22/22 PASS（含 `app.lab` 20 帧渲染） |
-| `analysis.session` | 78 次断言：树、分支、Pass、编辑、History 导入、棋谱往返/拒绝 |
+| Debug 无窗口 `ctest` | 20/20 PASS |
+| Release 无窗口 | 20/20 PASS |
+| ASan+UBSan 无窗口 | 20/20 PASS，无报告 |
+| Debug + GUI | 23/23 PASS（含 `app.lab` 20 帧渲染） |
+| `analysis.session` | 108 次断言：树、分支、Pass、编辑、History 导入、棋谱往返/拒绝、访问器、ply 上限、VALID 根限制 |
+| `analysis.lab` | 9 次断言：generation 守卫、进入/退出取消分析 |
 | `ai.analyze` | 104 次断言：MultiPV 排序、PV 合法性、精确残局、取消、黑方视角 |
 | `ai.worker` | 44 次断言：分析任务、取消、结果隔离 |
 | `ai.endgame` | PASS（67 次断言）；sanitizer 下参照搜索超时则跳过比较 |
@@ -114,7 +116,7 @@ MultiPV=3、Hard 评估、上限 10 s：
 
 ## 6. 已知限制与缺口
 
-1. **浏览器未复验**：Web 构建通过，但分析 Worker 的文本协议、剪贴板
+1. **浏览器未复验**：Web 构建通过，但分析 Worker 的文本协议、棋谱文件
    导入/导出、窄屏 Lab 交互未在浏览器中运行。
 2. **Windows/Linux 物理机未运行**：CI 托管 VM 已通过（三平台 19/19），
    但物理桌面 GUI 仍未实测。
@@ -124,7 +126,8 @@ MultiPV=3、Hard 评估、上限 10 s：
 5. **PV 截短**：依赖 TT，非最佳候选的 PV 可能短于报告深度。
 6. **复盘判定保守**：批次分析展示“最佳着法评估变化”，不把浅层搜索的
    单次波动称为“严重错误”；精确残局才给出确定分数。
-7. **棋谱传输**：Copy/Paste record 依赖系统剪贴板；Web 端剪贴板权限未测。
+7. **棋谱文件**：固定文件名 `lab-record.rvr`，没有文件选择器或多份棋谱
+   管理；Web 端通过 `localStorage` 读写，未在浏览器复验。
 8. **编辑语义**：自定义局面不校验能否从标准开局到达；第一次编辑会重置
    当前分支树。
 
@@ -147,7 +150,7 @@ git revert <phase-12-commit>
 
 ## 8. 下一阶段依赖
 
-- 恢复 Web 预览服务，跑浏览器套件（含 Lab 分析 Worker 与剪贴板）。
+- 恢复 Web 预览服务，跑浏览器套件（含 Lab 分析 Worker 与棋谱文件）。
 - 为 Lab 增加自动化点击/键盘回归（可复用 `__reversiTest` 诊断导出）。
 - 评估更长的批次分析、TT 复用与 PV 三角表，减少 PV 截短。
 - 若需要跨工具棋谱兼容，另立格式与验证，不修改 v1 语义。

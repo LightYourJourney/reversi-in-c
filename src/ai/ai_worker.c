@@ -104,8 +104,9 @@ void ai_worker_destroy(AiWorker *worker)
     free(worker);
 }
 
-bool ai_worker_start(AiWorker *worker, const GameState *state,
-                     const AiConfig *config)
+static bool start_job(AiWorker *worker, const GameState *state,
+                      const AiConfig *config, int max_lines,
+                      AiWorkerKind kind)
 {
     if (worker == NULL || state == NULL || config == NULL
         || worker->job != NULL) {
@@ -117,11 +118,12 @@ bool ai_worker_start(AiWorker *worker, const GameState *state,
         return false;
     }
 
-    job->kind = AI_WORKER_JOB_MOVE;
+    job->kind = kind;
     job->state = *state;
     job->config = *config;
     job->config.should_cancel = job_should_cancel;
     job->config.cancel_context = job;
+    job->max_lines = max_lines;
     atomic_init(&job->cancel, false);
     atomic_init(&job->done, false);
 
@@ -132,6 +134,12 @@ bool ai_worker_start(AiWorker *worker, const GameState *state,
 
     worker->job = job;
     return true;
+}
+
+bool ai_worker_start(AiWorker *worker, const GameState *state,
+                     const AiConfig *config)
+{
+    return start_job(worker, state, config, 0, AI_WORKER_JOB_MOVE);
 }
 
 AiWorkerStatus ai_worker_status(AiWorker *worker)
@@ -152,32 +160,8 @@ AiWorkerStatus ai_worker_status(AiWorker *worker)
 bool ai_worker_start_analysis(AiWorker *worker, const GameState *state,
                               const AiConfig *config, int max_lines)
 {
-    if (worker == NULL || state == NULL || config == NULL
-        || worker->job != NULL) {
-        return false;
-    }
-
-    AiWorkerJob *job = calloc(1, sizeof(AiWorkerJob));
-    if (job == NULL) {
-        return false;
-    }
-
-    job->kind = AI_WORKER_JOB_ANALYSIS;
-    job->state = *state;
-    job->config = *config;
-    job->config.should_cancel = job_should_cancel;
-    job->config.cancel_context = job;
-    job->max_lines = max_lines;
-    atomic_init(&job->cancel, false);
-    atomic_init(&job->done, false);
-
-    if (!start_thread(job)) {
-        free(job);
-        return false;
-    }
-
-    worker->job = job;
-    return true;
+    return start_job(worker, state, config, max_lines,
+                     AI_WORKER_JOB_ANALYSIS);
 }
 
 bool ai_worker_take(AiWorker *worker, Move *out_move, AiStats *out_stats)

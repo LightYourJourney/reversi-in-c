@@ -1,27 +1,53 @@
 #include "ui/lab_view.h"
 
 #include "analysis/record.h"
+#include "storage/storage.h"
 #include "core/rules.h"
 #include "ui/board_view.h"
 #include "ui/theme.h"
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define LAB_MARGIN 20.0f
-#define LAB_TOP_HEIGHT 50.0f
-#define LAB_BOTTOM_HEIGHT 92.0f
-#define LAB_NOTICE_SECONDS 4.0f
+#define REVERSI_LAB_MARGIN 20.0f
+#define REVERSI_LAB_TOP_HEIGHT 50.0f
+#define REVERSI_LAB_BOTTOM_HEIGHT 92.0f
+#define REVERSI_LAB_NOTICE_SECONDS 4.0f
 
-static const float LAB_SPEEDS[] = {0.4f, 0.8f, 1.5f};
-static const int LAB_SPEED_COUNT =
-    (int)(sizeof(LAB_SPEEDS) / sizeof(LAB_SPEEDS[0]));
+static const float REVERSI_LAB_SPEEDS[] = {0.4f, 0.8f, 1.5f};
+static const int REVERSI_LAB_SPEED_COUNT =
+    (int)(sizeof(REVERSI_LAB_SPEEDS) / sizeof(REVERSI_LAB_SPEEDS[0]));
+
+static int lab_black_score(int side_to_move_score, Stone player);
+
+bool lab_view_accepts_result(unsigned requested_generation,
+                             unsigned current_generation)
+{
+    return requested_generation == current_generation;
+}
+
+static void lab_store_curve(LabView *view, int ply,
+                            const AiAnalysisLine *line, Stone player)
+{
+    if (ply < 0 || ply > REVERSI_ANALYSIS_MAX_PLIES) {
+        return;
+    }
+    view->score_valid[ply] = true;
+    view->score_values[ply] =
+        (float)lab_black_score(line->score, player);
+    view->best_valid[ply] = true;
+    view->best_moves[ply] = line->move;
+    view->review_depth[ply] = line->depth;
+    view->review_complete[ply] = line->complete;
+    view->review_exact[ply] = line->exact;
+}
 
 static void lab_notice(LabView *view, const char *text)
 {
     snprintf(view->notice, sizeof(view->notice), "%s", text);
-    view->notice_timer = LAB_NOTICE_SECONDS;
+    view->notice_timer = REVERSI_LAB_NOTICE_SECONDS;
 }
 
 static int lab_black_score(int side_to_move_score, Stone player)
@@ -29,27 +55,30 @@ static int lab_black_score(int side_to_move_score, Stone player)
     return player == STONE_BLACK ? side_to_move_score : -side_to_move_score;
 }
 
-static int lab_main_node_at_ply(const AnalysisSession *session, int ply)
+static bool lab_node_on_main(const AnalysisSession *session, int node)
 {
-    int node = session->root;
-    for (int i = 0; i < ply; ++i) {
-        node = session->positions[node].first_child;
-        if (node < 0) {
-            return -1;
+    int current = session->root;
+    while (current >= 0) {
+        if (current == node) {
+            return true;
         }
+        current = session->positions[current].first_child;
     }
-    return node;
+    return false;
 }
 
-static int lab_main_length(const AnalysisSession *session)
+static void lab_store_node_score(LabView *view, int node,
+                                 const AiAnalysisLine *line, Stone player)
 {
-    int node = session->root;
-    int length = 0;
-    while (session->positions[node].first_child >= 0) {
-        node = session->positions[node].first_child;
-        ++length;
+    if (node < 0 || node >= REVERSI_ANALYSIS_MAX_POSITIONS) {
+        return;
     }
-    return length;
+    view->node_score_valid[node] = true;
+    view->node_scores[node] =
+        (float)lab_black_score(line->score, player);
+    view->node_score_depth[node] = line->depth;
+    view->node_score_complete[node] = line->complete;
+    view->node_score_exact[node] = line->exact;
 }
 
 static void lab_move_text(Move move, char out[3])
@@ -65,12 +94,12 @@ static LabLayout lab_layout(void)
     const float width = (float)GetScreenWidth();
     const float height = (float)GetScreenHeight();
     LabLayout layout = {0};
-    const bool wide = width >= 1000.0f && height >= 680.0f;
+    const bool wide = width >= 760.0f && height >= 600.0f;
     layout.wide = wide;
 
-    const float margin = wide ? LAB_MARGIN : 12.0f;
-    const float top_height = wide ? LAB_TOP_HEIGHT : 44.0f;
-    const float bottom_height = wide ? LAB_BOTTOM_HEIGHT : 84.0f;
+    const float margin = wide ? REVERSI_LAB_MARGIN : 12.0f;
+    const float top_height = wide ? REVERSI_LAB_TOP_HEIGHT : 44.0f;
+    const float bottom_height = wide ? REVERSI_LAB_BOTTOM_HEIGHT : 84.0f;
 
     layout.top = (Rectangle){margin, margin, width - margin * 2.0f,
                              top_height};
@@ -126,7 +155,7 @@ static LabLayout lab_layout(void)
     const float row_height = wide ? 38.0f : 28.0f;
     const float row_gap = wide ? 4.0f : 3.0f;
     const float rows_y = layout.panel.y + (wide ? 96.0f : 76.0f);
-    for (int i = 0; i < AI_ANALYSIS_MAX_LINES; ++i) {
+    for (int i = 0; i < REVERSI_AI_ANALYSIS_MAX_LINES; ++i) {
         layout.candidate[i] = (Rectangle){
             layout.panel.x + 10.0f,
             rows_y + (float)i * (row_height + row_gap),
@@ -186,7 +215,7 @@ static bool lab_start_job(LabView *view, AiWorker *worker,
     config.max_depth = 8;
     config.time_budget_ms = 1500;
     if (!ai_worker_start_analysis(worker, state, &config,
-                                  AI_ANALYSIS_MAX_LINES)) {
+                                  REVERSI_AI_ANALYSIS_MAX_LINES)) {
         return false;
     }
     view->analyzing = true;
@@ -197,12 +226,12 @@ static bool lab_start_job(LabView *view, AiWorker *worker,
 
 static void lab_start_batch(LabView *view, AiWorker *worker)
 {
-    int nodes[ANALYSIS_MAX_PLIES + 1];
+    int nodes[REVERSI_ANALYSIS_MAX_PLIES + 1];
     int count = 1;
     nodes[0] = view->session.root;
     int node = view->session.root;
     while (view->session.positions[node].first_child >= 0
-           && count <= ANALYSIS_MAX_PLIES) {
+           && count <= REVERSI_ANALYSIS_MAX_PLIES) {
         node = view->session.positions[node].first_child;
         nodes[count++] = node;
     }
@@ -238,7 +267,8 @@ static void lab_poll_analysis(LabView *view, AiWorker *worker)
         lab_notice(view, "Analysis cancelled or failed");
         return;
     }
-    if (view->requested_generation != view->position_generation) {
+    if (!lab_view_accepts_result(view->requested_generation,
+                                 view->position_generation)) {
         return;
     }
 
@@ -249,14 +279,8 @@ static void lab_poll_analysis(LabView *view, AiWorker *worker)
             const int node = view->batch_nodes[index];
             const Stone player =
                 view->session.positions[node].state.current_player;
-            view->score_valid[index] = true;
-            view->score_values[index] =
-                (float)lab_black_score(result.lines[0].score, player);
-            view->best_valid[index] = true;
-            view->best_moves[index] = result.lines[0].move;
-            view->review_depth[index] = result.lines[0].depth;
-            view->review_complete[index] = result.lines[0].complete;
-            view->review_exact[index] = result.lines[0].exact;
+            lab_store_curve(view, index, &result.lines[0], player);
+            lab_store_node_score(view, node, &result.lines[0], player);
         }
         view->batch_index = index + 1;
         if (view->batch_index < view->batch_count) {
@@ -277,17 +301,16 @@ static void lab_poll_analysis(LabView *view, AiWorker *worker)
     view->analysis = result;
     view->has_analysis = true;
     const AnalysisPosition *pos = analysis_current(&view->session);
-    if (result.line_count > 0 && pos != NULL
-        && pos->ply <= ANALYSIS_MAX_PLIES) {
-        view->score_valid[pos->ply] = true;
-        view->score_values[pos->ply] =
-            (float)lab_black_score(result.lines[0].score,
-                                   pos->state.current_player);
-        view->best_valid[pos->ply] = true;
-        view->best_moves[pos->ply] = result.lines[0].move;
-        view->review_depth[pos->ply] = result.lines[0].depth;
-        view->review_complete[pos->ply] = result.lines[0].complete;
-        view->review_exact[pos->ply] = result.lines[0].exact;
+    if (result.line_count > 0 && pos != NULL) {
+        const int node = view->session.current;
+        lab_store_node_score(view, node, &result.lines[0],
+                             pos->state.current_player);
+        /* Only main-line results feed the record curve and the per-ply
+           review; a branch must not overwrite them. */
+        if (lab_node_on_main(&view->session, node)) {
+            lab_store_curve(view, pos->ply, &result.lines[0],
+                            pos->state.current_player);
+        }
     }
 }
 
@@ -327,21 +350,30 @@ static void lab_handle_actions(LabView *view, AiWorker *worker,
         }
         return;
     }
-    if (view->clicked[LAB_BTN_COPY]) {
-        char record[ANALYSIS_MAX_RECORD_BYTES];
+    if (view->clicked[LAB_BTN_SAVE_RECORD]) {
+        char record[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
+        char path[1024];
         const size_t written = analysis_record_write(
             &view->session, record, sizeof(record));
         if (written == 0) {
-            lab_notice(view, "Record is too large or invalid");
+            lab_notice(view,
+                       "Custom position or oversized record cannot be saved");
+        } else if (!storage_path("lab-record.rvr", path, sizeof(path))) {
+            lab_notice(view, "User data directory is unavailable");
+        } else if (!storage_write_atomic(path, record, written)) {
+            lab_notice(view, "Could not save the record");
         } else {
-            SetClipboardText(record);
-            lab_notice(view, "Record copied to clipboard");
+            lab_notice(view, "Record saved");
         }
     }
-    if (view->clicked[LAB_BTN_PASTE]) {
-        const char *text = GetClipboardText();
-        if (text == NULL || text[0] == '\0') {
-            lab_notice(view, "Clipboard is empty");
+    if (view->clicked[LAB_BTN_LOAD_RECORD]) {
+        char path[1024];
+        char *text = NULL;
+        size_t size = 0;
+        if (!storage_path("lab-record.rvr", path, sizeof(path))
+            || !storage_read(path, &text, &size,
+                             REVERSI_ANALYSIS_MAX_RECORD_BYTES)) {
+            lab_notice(view, "No saved record");
         } else {
             AnalysisSession loaded;
             char error[128] = {0};
@@ -349,11 +381,12 @@ static void lab_handle_actions(LabView *view, AiWorker *worker,
                                      sizeof(error))) {
                 view->session = loaded;
                 moved = true;
-                lab_notice(view, "Record imported");
+                lab_notice(view, "Record loaded");
             } else {
                 lab_notice(view, error[0] != '\0' ? error
                                                   : "Invalid record");
             }
+            free(text);
         }
         if (moved) {
             lab_position_changed(view, worker);
@@ -383,7 +416,7 @@ static void lab_handle_actions(LabView *view, AiWorker *worker,
         view->auto_timer = 0.0f;
     }
     if (view->clicked[LAB_BTN_SPEED]) {
-        view->speed_index = (view->speed_index + 1) % LAB_SPEED_COUNT;
+        view->speed_index = (view->speed_index + 1) % REVERSI_LAB_SPEED_COUNT;
     }
     if (view->clicked[LAB_BTN_ANALYZE]) {
         const AnalysisPosition *pos = analysis_current(&view->session);
@@ -470,6 +503,7 @@ void lab_view_enter(LabView *view, const Match *match, bool has_match)
     memset(view->score_valid, 0, sizeof(view->score_valid));
     memset(view->score_values, 0, sizeof(view->score_values));
     memset(view->marks, 0, sizeof(view->marks));
+    memset(view->node_score_valid, 0, sizeof(view->node_score_valid));
     memset(view->best_valid, 0, sizeof(view->best_valid));
     memset(view->review_complete, 0, sizeof(view->review_complete));
     memset(view->review_exact, 0, sizeof(view->review_exact));
@@ -521,10 +555,10 @@ static void lab_prepare_buttons(LabView *view)
                (Rectangle){layout->top.x + (top_width + gap), top_y,
                            top_width, top_button_height},
                view->has_match);
-    lab_button(view, LAB_BTN_COPY, "Copy record", false,
+    lab_button(view, LAB_BTN_SAVE_RECORD, "Save record", false,
                (Rectangle){layout->top.x + (top_width + gap) * 2.0f,
                            top_y, top_width, top_button_height}, true);
-    lab_button(view, LAB_BTN_PASTE, "Paste record", false,
+    lab_button(view, LAB_BTN_LOAD_RECORD, "Load record", false,
                (Rectangle){layout->top.x + (top_width + gap) * 3.0f,
                            top_y, top_width, top_button_height}, true);
 
@@ -552,7 +586,7 @@ static void lab_prepare_buttons(LabView *view)
     x += play_width + bottom_gap;
     static char speed_label[24];
     snprintf(speed_label, sizeof(speed_label), "Speed %.1fs",
-             (double)LAB_SPEEDS[view->speed_index]);
+             (double)REVERSI_LAB_SPEEDS[view->speed_index]);
     const float speed_width = wide ? 92.0f : 72.0f;
     lab_button(view, LAB_BTN_SPEED, speed_label, false,
                (Rectangle){x, bottom_y, speed_width, nav_height}, true);
@@ -662,7 +696,7 @@ LabAction lab_view_update(LabView *view, const UiInput *input, float dt,
     }
 
     /* Candidate rows play the suggested move. */
-    for (int i = 0; i < AI_ANALYSIS_MAX_LINES; ++i) {
+    for (int i = 0; i < REVERSI_AI_ANALYSIS_MAX_LINES; ++i) {
         if (view->has_analysis && i < view->analysis.line_count
             && input->mouse_pressed
             && CheckCollisionPointRec(input->mouse,
@@ -687,17 +721,21 @@ LabAction lab_view_update(LabView *view, const UiInput *input, float dt,
     }
     if (input->menu_pressed) {
         const AnalysisPosition *pos = analysis_current(&view->session);
-        if (pos != NULL && pos->ply <= ANALYSIS_MAX_PLIES) {
+        if (pos != NULL && pos->ply <= REVERSI_ANALYSIS_MAX_PLIES) {
             view->marks[pos->ply] = !view->marks[pos->ply];
         }
     }
-    if (input->up_pressed || input->down_pressed) {
+    if (input->up_pressed) {
+        lab_navigate(view, worker,
+                     analysis_prev_variation(&view->session));
+    }
+    if (input->down_pressed) {
         lab_navigate(view, worker,
                      analysis_next_variation(&view->session));
     }
     if (view->layout.wide && input->mouse_pressed
         && CheckCollisionPointRec(input->mouse, view->layout.graph)) {
-        const int length = lab_main_length(&view->session);
+        const int length = analysis_main_length(&view->session);
         if (length > 0) {
             const Rectangle rect = view->layout.graph;
             float t = (input->mouse.x - (rect.x + 8.0f))
@@ -709,7 +747,7 @@ LabAction lab_view_update(LabView *view, const UiInput *input, float dt,
                 t = 1.0f;
             }
             const int ply = (int)lroundf(t * (float)length);
-            const int node = lab_main_node_at_ply(&view->session, ply);
+            const int node = analysis_main_node_at_ply(&view->session, ply);
             if (node >= 0 && node != view->session.current
                 && analysis_goto(&view->session, node)) {
                 lab_position_changed(view, worker);
@@ -722,7 +760,7 @@ LabAction lab_view_update(LabView *view, const UiInput *input, float dt,
 
     if (view->auto_play) {
         view->auto_timer += dt;
-        if (view->auto_timer >= LAB_SPEEDS[view->speed_index]) {
+        if (view->auto_timer >= REVERSI_LAB_SPEEDS[view->speed_index]) {
             view->auto_timer = 0.0f;
             if (!analysis_next(&view->session)) {
                 view->auto_play = false;
@@ -786,63 +824,125 @@ static void lab_draw_candidates(const LabView *view, const UiFonts *fonts)
     }
 }
 
+static bool lab_branch_comparison(const LabView *view, int *cur_score,
+                                  int *cur_depth, int *other_score,
+                                  int *other_depth, bool *other_is_main)
+{
+    const int cur = view->session.current;
+    const int parent = view->session.positions[cur].parent;
+    if (parent < 0) {
+        return false;
+    }
+    const int main_child = view->session.positions[parent].first_child;
+    int other = -1;
+    if (cur == main_child) {
+        for (int c = view->session.positions[cur].next_sibling; c >= 0;
+             c = view->session.positions[c].next_sibling) {
+            if (view->node_score_valid[c]) {
+                other = c;
+                break;
+            }
+        }
+    } else {
+        other = main_child;
+    }
+    if (other < 0 || !view->node_score_valid[cur]
+        || !view->node_score_valid[other]) {
+        return false;
+    }
+    *cur_score = (int)lroundf(view->node_scores[cur]);
+    *cur_depth = view->node_score_depth[cur];
+    *other_score = (int)lroundf(view->node_scores[other]);
+    *other_depth = view->node_score_depth[other];
+    *other_is_main = other == main_child;
+    return true;
+}
+
 static void lab_draw_review(const LabView *view, const UiFonts *fonts)
 {
     if (!view->layout.wide) {
         return;
     }
     const AnalysisPosition *pos = analysis_current(&view->session);
-    if (pos == NULL || pos->ply <= 0 || !pos->has_via) {
-        return;
-    }
-    const int ply = pos->ply;
-    if (!view->best_valid[ply - 1]) {
-        return;
-    }
+    const bool have_review = pos != NULL && pos->ply > 0 && pos->has_via
+        && view->best_valid[pos->ply - 1];
 
-    char played[8];
-    if (pos->via.is_pass) {
-        snprintf(played, sizeof(played), "pass");
-    } else {
-        char notation[3];
-        lab_move_text(pos->via.move, notation);
-        snprintf(played, sizeof(played), "%s", notation);
+    int cur_score = 0;
+    int cur_depth = 0;
+    int other_score = 0;
+    int other_depth = 0;
+    bool other_is_main = false;
+    const bool have_compare = lab_branch_comparison(
+        view, &cur_score, &cur_depth, &other_score, &other_depth,
+        &other_is_main);
+    if (!have_review && !have_compare) {
+        return;
     }
-    char best[3];
-    lab_move_text(view->best_moves[ply - 1], best);
 
     const float x = view->layout.panel.x + 12.0f;
-    const float y = view->layout.candidate[AI_ANALYSIS_MAX_LINES - 1].y
-        + view->layout.candidate[AI_ANALYSIS_MAX_LINES - 1].height + 6.0f;
+    const float y = view->layout.candidate[REVERSI_AI_ANALYSIS_MAX_LINES - 1].y
+        + view->layout.candidate[REVERSI_AI_ANALYSIS_MAX_LINES - 1].height + 6.0f;
     const float width = view->layout.panel.width - 24.0f;
+    float line_y = y;
 
-    char line[192];
-    if (view->score_valid[ply] && view->score_valid[ply - 1]) {
-        const int delta = (int)lroundf(view->score_values[ply]
-                                       - view->score_values[ply - 1]);
-        const bool matched = !pos->via.is_pass
-            && pos->via.move.row == view->best_moves[ply - 1].row
-            && pos->via.move.col == view->best_moves[ply - 1].col;
-        snprintf(line, sizeof(line),
-                 "Review: played %s, best %s%s, eval change %+d, d%d %s",
-                 played, best, matched ? " (matched)" : "", delta,
-                 view->review_depth[ply - 1],
-                 view->review_exact[ply - 1] ? "exact"
-                     : view->review_complete[ply - 1] ? "complete"
-                                                      : "partial");
-    } else {
-        snprintf(line, sizeof(line), "Review: played %s, best %s", played,
-                 best);
+    if (have_review) {
+        const int ply = pos->ply;
+        char played[8];
+        if (pos->via.is_pass) {
+            snprintf(played, sizeof(played), "pass");
+        } else {
+            char notation[3];
+            lab_move_text(pos->via.move, notation);
+            snprintf(played, sizeof(played), "%s", notation);
+        }
+        char best[3];
+        lab_move_text(view->best_moves[ply - 1], best);
+
+        char line[192];
+        if (view->score_valid[ply] && view->score_valid[ply - 1]) {
+            const int delta = (int)lroundf(view->score_values[ply]
+                                           - view->score_values[ply - 1]);
+            const bool matched = !pos->via.is_pass
+                && pos->via.move.row == view->best_moves[ply - 1].row
+                && pos->via.move.col == view->best_moves[ply - 1].col;
+            snprintf(line, sizeof(line),
+                     "Review: played %s, best %s%s, eval change %+d, d%d %s",
+                     played, best, matched ? " (matched)" : "", delta,
+                     view->review_depth[ply - 1],
+                     view->review_exact[ply - 1] ? "exact"
+                         : view->review_complete[ply - 1] ? "complete"
+                                                          : "partial");
+        } else {
+            snprintf(line, sizeof(line), "Review: played %s, best %s",
+                     played, best);
+        }
+        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR, line,
+                             (Rectangle){x, line_y, width, 16.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+        line_y += 15.0f;
     }
-    ui_draw_text_clipped(fonts, UI_TEXT_REGULAR, line,
-                         (Rectangle){x, y, width, 16.0f},
-                         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_MUTED,
-                         UI_ALIGN_LEFT);
-    ui_draw_text_clipped(fonts, UI_TEXT_REGULAR,
-                         "Best-play comparison, not a win probability.",
-                         (Rectangle){x, y + 15.0f, width, 16.0f},
-                         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT,
-                         UI_ALIGN_LEFT);
+
+    char second[192];
+    if (have_compare) {
+        const char *cur_label = other_is_main ? "branch" : "main";
+        const char *other_label = other_is_main ? "main" : "branch";
+        snprintf(second, sizeof(second),
+                 "Branches: %s %+d (d%d) vs %s %+d (d%d)%s",
+                 cur_label, cur_score, cur_depth, other_label,
+                 other_score, other_depth,
+                 cur_depth != other_depth ? " · depths differ" : "");
+        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR, second,
+                             (Rectangle){x, line_y, width, 16.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+    } else {
+        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR,
+                             "Best-play comparison, not a win probability.",
+                             (Rectangle){x, line_y, width, 16.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
+    }
 }
 
 static void lab_draw_evaluation(const LabView *view, const UiFonts *fonts)
@@ -857,8 +957,8 @@ static void lab_draw_evaluation(const LabView *view, const UiFonts *fonts)
     ai_evaluation_to_black(&side, pos->state.current_player, &black);
 
     const float x = view->layout.panel.x + 12.0f;
-    float y = view->layout.candidate[AI_ANALYSIS_MAX_LINES - 1].y
-        + view->layout.candidate[AI_ANALYSIS_MAX_LINES - 1].height
+    float y = view->layout.candidate[REVERSI_AI_ANALYSIS_MAX_LINES - 1].y
+        + view->layout.candidate[REVERSI_AI_ANALYSIS_MAX_LINES - 1].height
         + (view->layout.wide ? 44.0f : 10.0f);
     const float width = view->layout.panel.width - 24.0f;
 
@@ -917,11 +1017,13 @@ static void lab_draw_evaluation(const LabView *view, const UiFonts *fonts)
                          (Rectangle){x, y, width, 18.0f},
                          REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT,
                          UI_ALIGN_LEFT);
-    ui_draw_text_clipped(fonts, UI_TEXT_REGULAR,
-                         "M mark · Up/Down branch · click graph to jump",
-                         (Rectangle){x, y + 16.0f, width, 16.0f},
-                         REVERSI_UI_FONT_TINY, REVERSI_UI_COLOR_TEXT_FAINT,
-                         UI_ALIGN_LEFT);
+    if (view->layout.panel.height >= 430.0f) {
+        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR,
+                             "M mark · Up/Down branch · click graph to jump",
+                             (Rectangle){x, y + 16.0f, width, 16.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_TEXT_FAINT, UI_ALIGN_LEFT);
+    }
 }
 
 static void lab_draw_graph(const LabView *view, const UiFonts *fonts)
@@ -932,7 +1034,7 @@ static void lab_draw_graph(const LabView *view, const UiFonts *fonts)
     }
     ui_draw_panel(rect, REVERSI_UI_RADIUS_SM,
                   REVERSI_UI_COLOR_SURFACE_ALT, REVERSI_UI_COLOR_BORDER);
-    const int length = lab_main_length(&view->session);
+    const int length = analysis_main_length(&view->session);
     if (length <= 0) {
         return;
     }
@@ -1003,7 +1105,7 @@ void lab_view_draw(const LabView *view, const UiFonts *fonts)
     const LabLayout *layout = &computed;
     ui_draw_panel(layout->top, REVERSI_UI_RADIUS_MD,
                   REVERSI_UI_COLOR_SURFACE, REVERSI_UI_COLOR_BORDER);
-    if (layout->wide) {
+    if ((float)GetScreenWidth() >= 1000.0f) {
         ui_draw_text_clipped(fonts, UI_TEXT_SEMIBOLD, "Reversi Lab",
                              (Rectangle){layout->top.x + 8.0f,
                                          layout->top.y,
@@ -1056,7 +1158,7 @@ void lab_view_draw(const LabView *view, const UiFonts *fonts)
     if (pos != NULL) {
         const size_t used = strlen(status);
         snprintf(status + used, sizeof(status) - used, "   Ply %d/%d",
-                 pos->ply, lab_main_length(&view->session));
+                 pos->ply, analysis_main_length(&view->session));
     }
     if (layout->wide) {
         ui_draw_text_clipped(

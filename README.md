@@ -27,7 +27,7 @@
 - Bitboard 着法生成、增量 Zobrist；Hard 在 ≤12 空时使用精确残局求解器。
 - 后台 AI 搜索、取消与快照隔离，思考期间界面保持响应。
 - Reversi Lab：局面树、历史跳转、分支、自由摆盘、MultiPV、PV、
-  评估分量、评分曲线、批次分析与版本化棋谱导入/导出。
+  评估分量、评分曲线、分支比较、批次分析与版本化棋谱导入/导出。
 - 撤销/重做、暂停、重开、历史、帮助、统计与结算页。
 - 自动存档、3 个手动存档槽、严格校验与原子写入。
 - 设置持久化、明暗主题、动画速度、合法提示与最后一步高亮。
@@ -39,9 +39,9 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 19/19、Release 19/19、ASan+UBSan 19/19（无窗口）；GUI 22/22 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 19/19，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
-| Linux x86_64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 19/19、ASan+UBSan、Xvfb GUI 3/3 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| macOS 11+ arm64 | 本机 Debug 20/20、Release 20/20、ASan+UBSan 20/20（无窗口）；GUI 23/23 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
+| Windows x64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 20/20，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 20/20、ASan+UBSan、Xvfb GUI 3/3 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 | Web（Chrome） | Emscripten 6.0.13；构建通过（v1.3.0），浏览器套件 9/9（v1.1.0），v1.2.0/v1.3.0 复验 NOT TESTED | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
@@ -504,10 +504,10 @@ ctest --test-dir build --output-on-failure
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug（无窗口） | 19/19 通过 |
-| Release（无窗口） | 19/19 通过 |
-| ASan+UBSan（无窗口） | 19/19 通过，无 Sanitizer 报告 |
-| Debug + GUI | 22/22 通过；含 `app.lab` 分析页 20 帧渲染冒烟 |
+| Debug（无窗口） | 20/20 通过 |
+| Release（无窗口） | 20/20 通过 |
+| ASan+UBSan（无窗口） | 20/20 通过，无 Sanitizer 报告 |
+| Debug + GUI | 23/23 通过；含 `app.lab` 分析页 20 帧渲染冒烟 |
 | 浏览器（Chrome） | v1.1.0 套件 9/9；v1.2.0/v1.3.0 浏览器复验 **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 346 KB，Worker 58 KB） |
 | GitHub Actions | v1.3.0 运行 `40107607886` 9/9 通过；v1.2.0 为 `40073769484` |

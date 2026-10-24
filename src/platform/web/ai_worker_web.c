@@ -190,7 +190,7 @@ static bool parse_analysis(const char *text, AiAnalysis *out)
         return false;
     }
     if (depth < 0 || depth > 64 || line_count < 0
-        || line_count > AI_ANALYSIS_MAX_LINES) {
+        || line_count > REVERSI_AI_ANALYSIS_MAX_LINES) {
         return false;
     }
 
@@ -225,7 +225,7 @@ static bool parse_analysis(const char *text, AiAnalysis *out)
         }
         if (row < 0 || row >= REVERSI_BOARD_SIZE || col < 0
             || col >= REVERSI_BOARD_SIZE || pv_length < 0
-            || pv_length > AI_ANALYSIS_MAX_PV) {
+            || pv_length > REVERSI_AI_ANALYSIS_MAX_PV) {
             return false;
         }
         line->move.row = (int)row;
@@ -334,8 +334,8 @@ bool ai_worker_start_analysis(AiWorker *worker, const GameState *state,
     if (max_lines < 1) {
         max_lines = 1;
     }
-    if (max_lines > AI_ANALYSIS_MAX_LINES) {
-        max_lines = AI_ANALYSIS_MAX_LINES;
+    if (max_lines > REVERSI_AI_ANALYSIS_MAX_LINES) {
+        max_lines = REVERSI_AI_ANALYSIS_MAX_LINES;
     }
 
     char board[REVERSI_BOARD_CELL_COUNT + 1];

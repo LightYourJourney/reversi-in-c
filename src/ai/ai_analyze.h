@@ -5,8 +5,8 @@
 
 #include <stdbool.h>
 
-#define AI_ANALYSIS_MAX_LINES 3
-#define AI_ANALYSIS_MAX_PV 16
+#define REVERSI_AI_ANALYSIS_MAX_LINES 3
+#define REVERSI_AI_ANALYSIS_MAX_PV 16
 
 /*
  * One root candidate. Lines at the same reported depth were searched with the
@@ -22,7 +22,7 @@ typedef struct AiAnalysisLine {
     bool complete;
     bool exact;
     int pv_length;
-    Move pv[AI_ANALYSIS_MAX_PV];
+    Move pv[REVERSI_AI_ANALYSIS_MAX_PV];
 } AiAnalysisLine;
 
 typedef struct AiAnalysis {
@@ -31,7 +31,7 @@ typedef struct AiAnalysis {
     bool exact;
     int depth;
     int line_count;
-    AiAnalysisLine lines[AI_ANALYSIS_MAX_LINES];
+    AiAnalysisLine lines[REVERSI_AI_ANALYSIS_MAX_LINES];
     AiStats stats;
 } AiAnalysis;
 
@@ -39,7 +39,7 @@ typedef struct AiAnalysis {
  * Read-only MultiPV analysis. Does not call or modify the move-choosing path
  * used by matches, and never mutates the input state.
  *
- * max_lines is clamped to [1, AI_ANALYSIS_MAX_LINES]. PV entries are
+ * max_lines is clamped to [1, REVERSI_AI_ANALYSIS_MAX_LINES]. PV entries are
  * reconstructed from the transposition table; each is replayed through the
  * rules before being reported, and the PV stops at a TT miss, a pass, or the
  * length limit. Scores are from the side to move. Returns false when the

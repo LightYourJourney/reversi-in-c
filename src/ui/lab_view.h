@@ -18,8 +18,8 @@ typedef enum LabAction {
 typedef enum LabButtonIndex {
     LAB_BTN_BACK = 0,
     LAB_BTN_LOAD_GAME,
-    LAB_BTN_COPY,
-    LAB_BTN_PASTE,
+    LAB_BTN_SAVE_RECORD,
+    LAB_BTN_LOAD_RECORD,
     LAB_BTN_FIRST,
     LAB_BTN_PREV,
     LAB_BTN_NEXT,
@@ -50,7 +50,7 @@ typedef struct LabLayout {
     float cell;
     Rectangle panel;
     Rectangle bottom;
-    Rectangle candidate[AI_ANALYSIS_MAX_LINES];
+    Rectangle candidate[REVERSI_AI_ANALYSIS_MAX_LINES];
     Rectangle graph;
 } LabLayout;
 
@@ -66,16 +66,24 @@ typedef struct LabView {
     bool batch_running;
     int batch_index;
     int batch_count;
-    int batch_nodes[ANALYSIS_MAX_PLIES + 1];
+    int batch_nodes[REVERSI_ANALYSIS_MAX_PLIES + 1];
 
-    bool score_valid[ANALYSIS_MAX_PLIES + 1];
-    float score_values[ANALYSIS_MAX_PLIES + 1];
-    bool marks[ANALYSIS_MAX_PLIES + 1];
-    Move best_moves[ANALYSIS_MAX_PLIES + 1];
-    bool best_valid[ANALYSIS_MAX_PLIES + 1];
-    int review_depth[ANALYSIS_MAX_PLIES + 1];
-    bool review_complete[ANALYSIS_MAX_PLIES + 1];
-    bool review_exact[ANALYSIS_MAX_PLIES + 1];
+    bool score_valid[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    float score_values[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    bool marks[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    Move best_moves[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    bool best_valid[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    int review_depth[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    bool review_complete[REVERSI_ANALYSIS_MAX_PLIES + 1];
+    bool review_exact[REVERSI_ANALYSIS_MAX_PLIES + 1];
+
+    /* Scores keyed by node, so a branch analysis never overwrites the
+       main-line curve. */
+    float node_scores[REVERSI_ANALYSIS_MAX_POSITIONS];
+    bool node_score_valid[REVERSI_ANALYSIS_MAX_POSITIONS];
+    int node_score_depth[REVERSI_ANALYSIS_MAX_POSITIONS];
+    bool node_score_complete[REVERSI_ANALYSIS_MAX_POSITIONS];
+    bool node_score_exact[REVERSI_ANALYSIS_MAX_POSITIONS];
 
     bool edit_mode;
     Stone edit_stone;
@@ -84,8 +92,6 @@ typedef struct LabView {
     int speed_index;
     int selected_line;
     bool has_match;
-    bool focus_visible;
-    int focus;
 
     char notice[160];
     float notice_timer;
@@ -94,6 +100,10 @@ typedef struct LabView {
     UiButton buttons[LAB_BTN_COUNT];
     bool clicked[LAB_BTN_COUNT];
 } LabView;
+
+/* True only when a finished search belongs to the current position. */
+bool lab_view_accepts_result(unsigned requested_generation,
+                             unsigned current_generation);
 
 void lab_view_init(LabView *view);
 

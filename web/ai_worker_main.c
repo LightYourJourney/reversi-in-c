@@ -61,7 +61,7 @@ static const char *analysis_request(const char *request)
         || budget_ms < 1 || budget_ms > 10000
         || player < STONE_BLACK || player > STONE_WHITE
         || result < GAME_RESULT_ONGOING || result > GAME_RESULT_DRAW
-        || max_lines < 1 || max_lines > AI_ANALYSIS_MAX_LINES) {
+        || max_lines < 1 || max_lines > REVERSI_AI_ANALYSIS_MAX_LINES) {
         return fail();
     }
 

@@ -347,7 +347,7 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 
 验证（本机 macOS arm64）：
 
-- Debug / Release / ASan+UBSan 无窗口各 19/19；Debug + GUI 22/22。
+- Debug / Release / ASan+UBSan 无窗口各 20/20；Debug + GUI 23/23。
 - Emscripten Release 构建通过（主 wasm 346 KB，Worker 58 KB）。
 - MultiPV 基准：开局 d8 约 70 ms，中局 30 空 d8 约 2.3 s，
   8 空精确约 11 ms。

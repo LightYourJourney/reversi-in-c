@@ -14,8 +14,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 22 个测试（Debug）：19 个
-无窗口测试、`app.smoke`、`app.lab` 与 `app.autoplay`。不开启时注册 19 个。
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 23 个测试（Debug）：20 个
+无窗口测试、`app.smoke`、`app.lab` 与 `app.autoplay`。不开启时注册 20 个。
 CTest 名称、可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
@@ -45,7 +45,8 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | ai.core | reversi_ai_tests | 2,977 | 评估、搜索合法性、TT 一致性、取消、确定性、自动对局 | PASS |
 | ai.endgame | reversi_endgame_tests | 67 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
-| analysis.session | reversi_analysis_tests | 78 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝 | PASS |
+| analysis.session | reversi_analysis_tests | 108 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝、访问器、ply 上限、VALID 根 | PASS |
+| analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
 | storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |
@@ -57,12 +58,12 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 
 实际运行结果：
 
-- Debug：19/19 无窗口测试通过（v1.3.0）。
-- Debug + GUI：v1.3.0 本机 22/22，包含 `app.lab`（Lab 页面 20 帧渲染），
+- Debug：20/20 无窗口测试通过（v1.3.0）。
+- Debug + GUI：v1.3.0 本机 23/23，包含 `app.lab`（Lab 页面 20 帧渲染），
   `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程
   仍 **NOT TESTED**。
-- Release：19/19 通过（v1.3.0）。
-- ASan+UBSan：v1.3.0 无窗口 19/19 通过，无 Sanitizer 报告；此前
+- Release：20/20 通过（v1.3.0）。
+- ASan+UBSan：v1.3.0 无窗口 20/20 通过，无 Sanitizer 报告；此前
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
 - 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
   并通过 `scripts/verify-package.sh` 独立启动验收。
@@ -78,9 +79,9 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   各 17/17（Windows 含 `--version` 断言）；Linux ASan+UBSan 无窗口 17/17、
   Xvfb GUI 2/2；Linux 发行包在 Xvfb 下验收。首跑 `40073029646` 暴露
   Linux 严格 C11 下 `CLOCK_MONOTONIC` 未声明，已在提交 `438a510` 修正。
-- GitHub Actions 运行 `40107607886`（2026-10-24，v1.3.0）9 个作业全部
-  `success`：三平台 Debug/Release 各 19/19；Linux ASan+UBSan 无窗口 19/19；
-  Linux Xvfb GUI 3/3（含 `app.lab`）；Linux 发行包验收。首跑
+- GitHub Actions 运行 `40107607886`（2026-10-24，审查修正前）9 个作业
+  全部 `success`：三平台 Debug/Release 各 19/19；Linux ASan+UBSan 无窗口
+  19/19；Linux Xvfb GUI 3/3（含 `app.lab`）；Linux 发行包验收。首跑
   `40106930342` 仅 ASan 作业把 `app.lab` 排进无窗口步骤，已在 `1cc9147`
   修正工作流。
 
@@ -257,6 +258,7 @@ RSS）。A/B 方法：把同一 `tests/bench_corpus.c` 编译到基线提交的�
   History 导入、棋谱 v1 往返与损坏输入拒绝。
 - `ai.analyze`：三个候选的排序与合法性、PV 重放、4 空精确解与
   `ai_endgame_solve` 分数一致、取消后无结果、黑方视角转换。
+- `analysis.lab`：generation 守卫；进入 Lab 后启动分析，退出时取消并 join。
 - `app.lab`（Debug + GUI）：在 Lab 页面渲染 20 帧并正常退出。
 - 基准输出见 `docs/benchmarks/phase12-analysis.txt`；绝对时间受机器负载
   影响。

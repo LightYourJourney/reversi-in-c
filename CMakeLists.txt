@@ -502,6 +502,16 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     set_tests_properties(analysis.session PROPERTIES
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+    add_executable(reversi_lab_tests tests/test_lab.c)
+    target_include_directories(reversi_lab_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_lab_tests PRIVATE
+        reversi_app reversi_warnings)
+    add_test(NAME analysis.lab COMMAND reversi_lab_tests)
+    set_tests_properties(analysis.lab PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+
     reversi_add_ai_test(reversi_ai_tests tests/test_ai.c ai.core)
     reversi_add_ai_test(reversi_endgame_tests tests/test_endgame.c ai.endgame)
     reversi_add_ai_test(reversi_analyze_tests tests/test_analyze.c ai.analyze)

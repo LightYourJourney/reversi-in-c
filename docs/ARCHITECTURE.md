@@ -58,7 +58,7 @@
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4/11/12 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、只读 MultiPV 分析、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
 | Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
-| Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Game、History、Rules、C 标准库 |
+| Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Board、Game、History、Rules、C 标准库 |
 | UI | `src/ui/` | Phase 2/3/4/5/12 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档/分析视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构；Lab 视图编译进 App |
 | App | `src/app/` | Phase 2/3/4/5/12 已实现 | 页面路由、转场、模态编排、输入路由、自动跳过与终局计时、AI 回合生命周期、存档与统计编排、Lab 页面与视图 | 所有下层模块 |
 | Storage | `src/storage/` | Phase 5 已实现 | 用户数据目录、原子文件读写、版本化存档、严格回放校验、统计持久化 | Game、History、Match、C 标准库、平台文件 API |

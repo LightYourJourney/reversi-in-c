@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RECORD_HEADER "reversi-record 1"
-#define RECORD_MAX_TOKENS 80
+#define REVERSI_RECORD_HEADER "reversi-record 1"
+#define REVERSI_RECORD_MAX_TOKENS 80
 
 static void set_error(char *error, size_t error_size, const char *text)
 {
@@ -131,29 +131,6 @@ static bool play_tokens(AnalysisSession *session, char **tokens, int count,
     return true;
 }
 
-static int main_node_at_ply(const AnalysisSession *session, int ply)
-{
-    int node = session->root;
-    for (int i = 0; i < ply; ++i) {
-        if (node < 0) {
-            return -1;
-        }
-        node = session->positions[node].first_child;
-    }
-    return node;
-}
-
-static int main_line_length(const AnalysisSession *session)
-{
-    int node = session->root;
-    int length = 0;
-    while (session->positions[node].first_child >= 0) {
-        node = session->positions[node].first_child;
-        ++length;
-    }
-    return length;
-}
-
 bool analysis_record_read(AnalysisSession *session, const char *text,
                           char *error, size_t error_size)
 {
@@ -161,12 +138,12 @@ bool analysis_record_read(AnalysisSession *session, const char *text,
         set_error(error, error_size, "invalid arguments");
         return false;
     }
-    if (strlen(text) >= ANALYSIS_MAX_RECORD_BYTES) {
+    if (strlen(text) >= REVERSI_ANALYSIS_MAX_RECORD_BYTES) {
         set_error(error, error_size, "record is too large");
         return false;
     }
 
-    char work[ANALYSIS_MAX_RECORD_BYTES];
+    char work[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
     memcpy(work, text, strlen(text) + 1);
 
     AnalysisSession *tmp = malloc(sizeof(*tmp));
@@ -198,8 +175,8 @@ bool analysis_record_read(AnalysisSession *session, const char *text,
         }
 
         char *after_line = next != NULL ? next : line + strlen(line);
-        char *tokens[RECORD_MAX_TOKENS];
-        const int count = split_tokens(line, tokens, RECORD_MAX_TOKENS);
+        char *tokens[REVERSI_RECORD_MAX_TOKENS];
+        const int count = split_tokens(line, tokens, REVERSI_RECORD_MAX_TOKENS);
         line = after_line;
         if (count < 0) {
             set_error(error, error_size, "too many tokens on a line");
@@ -228,11 +205,16 @@ bool analysis_record_read(AnalysisSession *session, const char *text,
                 break;
             }
             have_moves = true;
+            if (count - 1 > REVERSI_ANALYSIS_MAX_PLIES) {
+                set_error(error, error_size, "main line is too long");
+                ok = false;
+                break;
+            }
             if (!play_tokens(tmp, tokens + 1, count - 1, error, error_size)) {
                 ok = false;
                 break;
             }
-            main_length = main_line_length(tmp);
+            main_length = analysis_main_length(tmp);
             continue;
         }
 
@@ -255,7 +237,8 @@ bool analysis_record_read(AnalysisSession *session, const char *text,
                 ok = false;
                 break;
             }
-            if (count < 3 || variation_count >= ANALYSIS_MAX_VARIATIONS) {
+            if (count < 3 || variation_count >= REVERSI_ANALYSIS_MAX_VARIATIONS
+                || count - 2 > REVERSI_ANALYSIS_MAX_PLIES) {
                 set_error(error, error_size, "invalid or too many variations");
                 ok = false;
                 break;
@@ -268,7 +251,7 @@ bool analysis_record_read(AnalysisSession *session, const char *text,
                 ok = false;
                 break;
             }
-            const int node = main_node_at_ply(tmp, (int)ply);
+            const int node = analysis_main_node_at_ply(tmp, (int)ply);
             if (node < 0 || !analysis_goto(tmp, node)) {
                 set_error(error, error_size, "variation ply is not on the main line");
                 ok = false;
@@ -293,7 +276,7 @@ bool analysis_record_read(AnalysisSession *session, const char *text,
     }
 
     if (ok) {
-        const int end = main_node_at_ply(tmp, main_length);
+        const int end = analysis_main_node_at_ply(tmp, main_length);
         if (end < 0 || !analysis_goto(tmp, end)) {
             ok = false;
         } else if (have_result
@@ -357,13 +340,15 @@ size_t analysis_record_write(const AnalysisSession *session, char *buffer,
     }
     buffer[0] = '\0';
 
-    int main_length = 0;
-    int node = session->root;
-    while (session->positions[node].first_child >= 0) {
-        node = session->positions[node].first_child;
-        ++main_length;
+    /* A custom root has no standard-opening history; writing "moves" would
+       claim one. Refuse instead of exporting a misleading record. */
+    if (session->positions[session->root].kind != ANALYSIS_POSITION_VALID) {
+        return 0;
     }
-    if (main_length > ANALYSIS_MAX_PLIES) {
+
+    const int main_length = analysis_main_length(session);
+    int node = session->root;
+    if (main_length > REVERSI_ANALYSIS_MAX_PLIES) {
         return 0;
     }
 
@@ -374,7 +359,7 @@ size_t analysis_record_write(const AnalysisSession *session, char *buffer,
         .failed = false
     };
 
-    write_text(&writer, RECORD_HEADER "\n");
+    write_text(&writer, REVERSI_RECORD_HEADER "\n");
 
     const GameState *end = &session->positions[node].state;
     char result[32];
@@ -409,7 +394,7 @@ size_t analysis_record_write(const AnalysisSession *session, char *buffer,
             if (child == session->positions[node].first_child) {
                 continue;
             }
-            if (variations >= ANALYSIS_MAX_VARIATIONS) {
+            if (variations >= REVERSI_ANALYSIS_MAX_VARIATIONS) {
                 buffer[0] = '\0';
                 return 0;
             }

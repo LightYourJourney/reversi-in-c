@@ -65,10 +65,13 @@ static int last_child(const AnalysisSession *session, int parent)
 static int add_child(AnalysisSession *session, int parent,
                      const GameState *state, AnalysisMove via)
 {
-    if (session->count >= ANALYSIS_MAX_POSITIONS) {
+    if (session->count >= REVERSI_ANALYSIS_MAX_POSITIONS) {
         return -1;
     }
     const AnalysisPosition *parent_pos = &session->positions[parent];
+    if (parent_pos->ply >= REVERSI_ANALYSIS_MAX_PLIES) {
+        return -1;
+    }
     const int index = session->count++;
     AnalysisPosition *node = &session->positions[index];
     memset(node, 0, sizeof(*node));
@@ -142,13 +145,15 @@ bool analysis_load_state(AnalysisSession *session, const GameState *state,
     GameState copy = *state;
     if (kind == ANALYSIS_POSITION_CUSTOM) {
         refresh_custom_result(&copy);
-    } else if (copy.result != GAME_RESULT_ONGOING) {
-        /* A finished game is a valid starting point for review. */
-        if (!game_is_consistent(&copy)) {
+    } else {
+        /* A VALID root must be the standard opening: every other legal
+           position is reached by replaying history or analysis moves, which
+           keeps the "producible by legal moves" claim checkable. */
+        GameState opening;
+        game_init(&opening);
+        if (!game_state_equal(&copy, &opening)) {
             return false;
         }
-    } else if (!game_is_consistent(&copy)) {
-        return false;
     }
     reset_root(session, &copy, kind);
     return true;
@@ -416,6 +421,59 @@ bool analysis_variation_at(const AnalysisSession *session, int index,
         - session->positions[session->current].ply;
     out->child_index = index;
     return true;
+}
+
+bool analysis_prev_variation(AnalysisSession *session)
+{
+    if (session == NULL || session->current == session->root) {
+        return false;
+    }
+    const int parent = session->positions[session->current].parent;
+    if (parent < 0) {
+        return false;
+    }
+    int previous = -1;
+    for (int c = session->positions[parent].first_child; c >= 0;
+         c = session->positions[c].next_sibling) {
+        if (c == session->current) {
+            break;
+        }
+        previous = c;
+    }
+    if (previous < 0) {
+        return false;
+    }
+    session->current = previous;
+    return true;
+}
+
+int analysis_main_length(const AnalysisSession *session)
+{
+    if (session == NULL) {
+        return 0;
+    }
+    int node = session->root;
+    int length = 0;
+    while (session->positions[node].first_child >= 0) {
+        node = session->positions[node].first_child;
+        ++length;
+    }
+    return length;
+}
+
+int analysis_main_node_at_ply(const AnalysisSession *session, int ply)
+{
+    if (session == NULL || ply < 0) {
+        return -1;
+    }
+    int node = session->root;
+    for (int i = 0; i < ply; ++i) {
+        node = session->positions[node].first_child;
+        if (node < 0) {
+            return -1;
+        }
+    }
+    return node;
 }
 
 bool analysis_next_variation(AnalysisSession *session)

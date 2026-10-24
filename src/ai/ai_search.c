@@ -651,7 +651,7 @@ typedef struct AnalysisRootScore {
     Move move;
     int score;
     int pv_length;
-    Move pv[AI_ANALYSIS_MAX_PV];
+    Move pv[REVERSI_AI_ANALYSIS_MAX_PV];
 } AnalysisRootScore;
 
 static void sort_root_scores(AnalysisRootScore *scores, int count)
@@ -734,8 +734,8 @@ bool ai_analyze_position(const GameState *state, const AiConfig *config,
     if (max_lines < 1) {
         max_lines = 1;
     }
-    if (max_lines > AI_ANALYSIS_MAX_LINES) {
-        max_lines = AI_ANALYSIS_MAX_LINES;
+    if (max_lines > REVERSI_AI_ANALYSIS_MAX_LINES) {
+        max_lines = REVERSI_AI_ANALYSIS_MAX_LINES;
     }
     memset(out, 0, sizeof(*out));
 
@@ -820,7 +820,7 @@ bool ai_analyze_position(const GameState *state, const AiConfig *config,
                later root moves overwrite them. */
             current[filled].pv_length = extract_pv(
                 &search, state, moves[i], current[filled].pv,
-                AI_ANALYSIS_MAX_PV);
+                REVERSI_AI_ANALYSIS_MAX_PV);
             ++filled;
         }
 
