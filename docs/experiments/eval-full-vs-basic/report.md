@@ -1,6 +1,6 @@
 # Experiment: eval-full-vs-basic
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -44,10 +44,12 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 224 | 224 |
 | Nodes | 522872 | 848564 |
-| NPS | 245826 | 223248 |
-| P50 | 8 ms | 10 ms |
-| P95 | 20 ms | 46 ms |
+| NPS | 176170 | 177933 |
+| P50 | 10 ms | 12 ms |
+| P95 | 36 ms | 67 ms |
 | Max depth | 5 | 5 |
+| Cut rate | 16.8% | 15.7% |
+| TT hit rate | 0.7% | 0.0% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 

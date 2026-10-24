@@ -1,6 +1,6 @@
 # Experiment: tt-vs-nott
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -44,10 +44,12 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 224 | 224 |
 | Nodes | 1383640 | 3109902 |
-| NPS | 342062 | 323847 |
-| P50 | 13 ms | 30 ms |
-| P95 | 45 ms | 124 ms |
+| NPS | 211501 | 204936 |
+| P50 | 19 ms | 52 ms |
+| P95 | 80 ms | 190 ms |
 | Max depth | 6 | 6 |
+| Cut rate | 23.1% | 20.0% |
+| TT hit rate | 1.3% | 0.0% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 

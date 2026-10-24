@@ -1,6 +1,6 @@
 # Experiment: random-100
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -48,6 +48,8 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 | P50 | 0 ms | 0 ms |
 | P95 | 0 ms | 0 ms |
 | Max depth | 0 | 0 |
+| Cut rate | 0.0% | 0.0% |
+| TT hit rate | 0.0% | 0.0% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 

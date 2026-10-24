@@ -1,6 +1,6 @@
 # Experiment: depth-4-vs-6
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -44,10 +44,12 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 222 | 226 |
 | Nodes | 130038 | 1485830 |
-| NPS | 274922 | 262375 |
-| P50 | 2 ms | 16 ms |
-| P95 | 6 ms | 63 ms |
+| NPS | 135881 | 151863 |
+| P50 | 2 ms | 24 ms |
+| P95 | 12 ms | 155 ms |
 | Max depth | 4 | 6 |
+| Cut rate | 18.3% | 26.1% |
+| TT hit rate | 0.4% | 1.8% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 

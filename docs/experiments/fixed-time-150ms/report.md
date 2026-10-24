@@ -1,6 +1,6 @@
 # Experiment: fixed-time-150ms
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -25,16 +25,16 @@
 
 | Metric | Value |
 |---|---|
-| A wins | 5 |
-| B wins | 3 |
+| A wins | 3 |
+| B wins | 5 |
 | Draws | 0 |
 | A wins as Black | 1 |
-| A wins as White | 4 |
+| A wins as White | 2 |
 | Illegal games | 0 |
 | Timeouts | 0 |
 | Aborted | 0 |
-| A score (draw=0.5) | 0.625 (95% CI 0.306..0.863) |
-| Elo difference | +89 (95% CI -142..+320) |
+| A score (draw=0.5) | 0.375 (95% CI 0.137..0.694) |
+| Elo difference | -89 (95% CI -320..+142) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -42,12 +42,14 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 
 | Metric | A | B |
 |---|---|---|
-| Moves | 222 | 226 |
-| Nodes | 9260108 | 9106963 |
-| NPS | 337566 | 334593 |
-| P50 | 151 ms | 150 ms |
-| P95 | 163 ms | 168 ms |
-| Max depth | 13 | 13 |
+| Moves | 223 | 225 |
+| Nodes | 6038657 | 5913312 |
+| NPS | 221002 | 218187 |
+| P50 | 151 ms | 151 ms |
+| P95 | 168 ms | 165 ms |
+| Max depth | 13 | 14 |
+| Cut rate | 24.8% | 24.6% |
+| TT hit rate | 2.7% | 2.4% |
 | Timeouts | 174 | 173 |
 | Node cap hits | 0 | 0 |
 

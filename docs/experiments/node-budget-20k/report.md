@@ -1,6 +1,6 @@
 # Experiment: node-budget-20k
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -44,10 +44,12 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 115 | 115 |
 | Nodes | 2012302 | 2012302 |
-| NPS | 425794 | 423197 |
-| P50 | 43 ms | 43 ms |
-| P95 | 75 ms | 74 ms |
+| NPS | 278250 | 274380 |
+| P50 | 65 ms | 62 ms |
+| P95 | 119 ms | 118 ms |
 | Max depth | 10 | 10 |
+| Cut rate | 22.3% | 22.3% |
+| TT hit rate | 1.7% | 1.7% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 97 | 97 |
 

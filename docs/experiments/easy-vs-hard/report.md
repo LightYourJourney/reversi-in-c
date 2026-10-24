@@ -1,6 +1,6 @@
 # Experiment: easy-vs-hard
 
-- Commit: `ce8f7f4`
+- Commit: `babbb23`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -42,13 +42,15 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 
 | Metric | A | B |
 |---|---|---|
-| Moves | 217 | 231 |
-| Nodes | 1282 | 2380666 |
-| NPS | 256400 | 320370 |
-| P50 | 0 ms | 20 ms |
-| P95 | 0 ms | 117 ms |
+| Moves | 216 | 231 |
+| Nodes | 1302 | 2365816 |
+| NPS | 130200 | 262227 |
+| P50 | 0 ms | 25 ms |
+| P95 | 0 ms | 132 ms |
 | Max depth | 1 | 12 |
-| Timeouts | 0 | 3 |
+| Cut rate | 0.0% | 30.0% |
+| TT hit rate | 0.0% | 4.2% |
+| Timeouts | 0 | 5 |
 | Node cap hits | 0 | 0 |
 
 Raw data: `games.csv`, `moves.csv`, `summary.json`. The HTML report renders the same JSON.
