@@ -101,7 +101,7 @@ static void set_button_bounds(GameView *view, const GameLayout *layout)
         const float pad = 16.0f;
         const float gap = 6.0f;
         const float button_width = 88.0f;
-        const float button_height = 42.0f;
+        const float button_height = 44.0f;
         const Rectangle bar = layout->bottom_bar;
 
         /* Narrow screens cannot fit five buttons in one row; use two rows

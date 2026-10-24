@@ -11,6 +11,7 @@
   var stage = document.getElementById('stage');
   var statusBox = document.getElementById('status');
   var errorBox = document.getElementById('error');
+  var audioHint = document.getElementById('audio-hint');
 
   function showError(message) {
     errorBox.textContent = String(message);
@@ -38,7 +39,14 @@
     window.webkitAudioContext = PatchedAudioContext;
   }
 
+  if (!NativeAudioContext && audioHint) {
+    audioHint.hidden = true;
+  }
+
   function unlockAudio() {
+    if (audioHint) {
+      audioHint.hidden = true;
+    }
     for (var i = 0; i < audioContexts.length; i += 1) {
       var context = audioContexts[i];
       if (context.state === 'suspended') {

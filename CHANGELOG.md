@@ -18,6 +18,7 @@
 - `tests/bench_corpus.c`：固定局面语料、标量/位板微基准与固定深度搜索；
   可在基线提交上编译做同时段 A/B。
 - `docs/AI_ENGINE.md`、`docs/benchmarks/`。
+- Web 页面在首次输入前提示“点击后启用声音”；窄屏操作按钮提高到 44 px。
 
 ### Changed
 
@@ -28,6 +29,7 @@
 - 叶子节点不再构造着法数组。
 - 搜索计时改为平台单调时钟（Windows / Emscripten / POSIX），C11
   `timespec_get` 仅作回退。
+- EMSCRIPTEN 构建仅对 raylib 开启 GNU C 扩展；第一方源码保持严格 C11。
 
 ### Fixed
 
@@ -37,6 +39,8 @@
   会静默回退到非单调的 `timespec_get(TIME_UTC)`，语料基准则直接编译失败。
   现在在三个使用该时钟的编译单元中、包含头文件之前定义
   `_POSIX_C_SOURCE=200809L`（仅 `__linux__`）。
+- 文档不再宣称 27 局对局基准“与基线一致”（编译器与对局集合不同），
+  ROADMAP 的 Phase 11 数字改用最终 A/B。
 
 ### Verified
 

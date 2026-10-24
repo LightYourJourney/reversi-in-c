@@ -5,7 +5,9 @@
 
 ## 1. 目标与约束
 
-- 核心实现使用 **ISO C11**，不依赖编译器扩展。
+- 核心实现使用 **ISO C11**，不依赖编译器扩展。唯一例外是位板的
+  popcount/ctz：`__has_builtin` 可用时使用内建，否则走可移植实现，
+  ISO C11 始终是可编译基线（见 §20）。
 - 游戏规则、AI、持久化均不得依赖 GUI 或图形上下文。
 - AI 不得直接修改 UI 状态或绕过规则校验。
 - 唯一第三方图形库为 raylib；其余能力使用 C 标准库。后台线程使用平台线程
@@ -516,6 +518,10 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 3. **AI Worker 隔离**：Web 端不使用 pthread。`ai_worker_web.c` 保持
    `ai_worker.h` 语义，通过 `postMessage` 驱动独立的 `ai_worker` 模块；
    取消 = 终止 Worker，主线程从不 join，也不执行阻塞搜索。
+   该模块只服务一个 Worker 实例，因此用翻译单元内的 `g_active_worker` /
+   `g_generation` 保存回调上下文；JS 回调 `reversi_ai_worker_complete`
+   只在 `.c` 中声明。这是 §1「避免全局可变状态」与 §10「公开函数在头文件
+   声明」的显式例外，不适用于桌面代码。
 4. **资源与尺寸**：`--preload-file assets@/assets` 提供字体；Web 端关闭
    `FLAG_WINDOW_HIGHDPI`，由 JS 按 CSS 尺寸调用 `reversi_web_resize`，
    避免 raylib Web 把画布按 DPR 缩小后只绘制左上角。

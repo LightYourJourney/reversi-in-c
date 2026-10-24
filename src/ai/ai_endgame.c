@@ -25,9 +25,9 @@
 #define REVERSI_ENDGAME_CHECK_MASK 1023u
 
 typedef enum EndgameFlag {
-    ENDGAME_EXACT = 0,
-    ENDGAME_LOWER,
-    ENDGAME_UPPER
+    ENDGAME_TT_EXACT = 0,
+    ENDGAME_TT_LOWER,
+    ENDGAME_TT_UPPER
 } EndgameFlag;
 
 typedef struct EndgameTtEntry {
@@ -253,12 +253,12 @@ static int solve_node(EndgameSearch *search, const Bitboard *bb, uint64_t hash,
             has_tt_best = true;
             if (entry->empties >= empties) {
                 ++search->stats.tt_hits;
-                if (entry->flag == ENDGAME_EXACT) {
+                if (entry->flag == ENDGAME_TT_EXACT) {
                     return entry->score;
                 }
-                if (entry->flag == ENDGAME_LOWER && entry->score > alpha) {
+                if (entry->flag == ENDGAME_TT_LOWER && entry->score > alpha) {
                     alpha = entry->score;
-                } else if (entry->flag == ENDGAME_UPPER
+                } else if (entry->flag == ENDGAME_TT_UPPER
                            && entry->score < beta) {
                     beta = entry->score;
                 }
@@ -322,11 +322,11 @@ static int solve_node(EndgameSearch *search, const Bitboard *bb, uint64_t hash,
         entry->empties = empties;
         entry->best = best_move;
         if (best <= alpha_window) {
-            entry->flag = ENDGAME_UPPER;
+            entry->flag = ENDGAME_TT_UPPER;
         } else if (best >= beta_window) {
-            entry->flag = ENDGAME_LOWER;
+            entry->flag = ENDGAME_TT_LOWER;
         } else {
-            entry->flag = ENDGAME_EXACT;
+            entry->flag = ENDGAME_TT_EXACT;
         }
     }
 

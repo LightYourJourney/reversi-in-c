@@ -141,8 +141,10 @@ Hard 默认 500 ms 预算下的实际深度：
 
 峰值 RSS：基线 5,072 KB，新引擎 9,136 KB（Hard TT 2 MiB 与残局 TT 在其
 中）；同机轻载复跑为 5,056 KB，说明该指标受分配器复用影响，只作数量级
-参考。对局基准 27 局 `illegal=0 failures=0 unfinished=0`，结果与基线一致；
-原始输出见 `docs/benchmarks/phase11-matchups.txt`。
+参考。对局基准 27 局 `illegal=0 failures=0 unfinished=0`；但基线与当前
+运行使用不同编译器（Clang 23.1.3 / 21.0.0），基线记录缺少 Random 对局，
+Easy vs Hard 的胜负也不同（1/2 与 0/3）。因此该数据只作为合法性与终止性
+回归，不作为强度对照。原始输出见 `docs/benchmarks/phase11-matchups.txt`。
 
 微基准（10,000 次/局面，Release）：
 
@@ -160,7 +162,9 @@ Hard 默认 500 ms 预算下的实际深度：
 
 1. **评估仍是标量**：中局 NPS 的主要限制；位板化的机动性/前沿/潜在
    机动性/稳定子尚未实现。
-2. **两套 Zobrist/TT**：主搜索与残局求解器各有一份；后续可共享。
+2. **两套 Zobrist/TT**：主搜索与残局求解器各有一份；`ai_endgame.c` 还重复
+   实现了时钟、着法排序与 `moves_from_bits`，后续应上移到
+   `ai_internal.h` 共享。
 3. **TT 生命周期**：Hard 每次搜索 `calloc/free` 2 MiB，替换为直接覆盖；
    长对局中的分配开销与跨着法复用未处理。
 4. **残局求解器只在 ≤12 空启用**：更深的精确求解需要更强的排序/内存
@@ -169,6 +173,8 @@ Hard 默认 500 ms 预算下的实际深度：
 6. **Web 浏览器套件未复验**：AI Worker 的 wasm 已成功构建，但浏览器
    行为未在本阶段运行；桌面与 Web 共用同一份 AI 源码。
 7. **性能数字受外部负载影响**：报告给出同时段 A/B，但不宣称绝对 NPS。
+8. **测试辅助函数重复**：新增测试各自复制 `next_random`；可迁入
+   `tests/test_helpers.h`。
 
 ## 7. 回滚方法
 
@@ -207,9 +213,22 @@ git revert <final-commit> 5ab2d0d 7102239
   的搜索路径。
 - **提交粒度**：`5ab2d0d` 同时包含位板着法、增量哈希与叶子优化；它们
   在同一次回归中验证，但没有拆成三个提交。
+- **残局状态**：任务书列出 `EXACT / HEURISTIC / INCOMPLETE`，实现只保留
+  `AI_ENDGAME_EXACT` / `AI_ENDGAME_INCOMPLETE`；HEURISTIC 由常规迭代加深
+  回退承担，API 未单列第三态，避免声明一个求解器永远不会产生的状态。
 - **残局求解器**：未实现奇偶排序、跨调用 TT 复用；集成上限为 12 空。
 - **平台**：只在本机 macOS 与 Emscripten 构建上执行；Windows/Linux
   物理机与 Web 浏览器套件未在 1.2.0 上复验。
+
+### 8.1 第二次审查（Phase 10 + 11 联合，2026-10-24）
+
+| 审查发现 | 处理 | 复验 |
+|---|---|---|
+| EMSCRIPTEN 下全局开启 GNU 扩展，与 ARCHITECTURE §10 冲突 | 仅 raylib 使用 GNU 模式，第一方源码严格 C11 | Web 构建 PASS |
+| 内部 TT 标志与公共 `AI_ENDGAME_*` 同名不同义 | 重命名为 `ENDGAME_TT_*` | 三套 17/17 |
+| 对局基准被描述为“与基线一致” | 记录编译器与对局集合差异，改为合法性/终止性回归 | 文档同步 |
+| ROADMAP 仍引用修正前 A/B | 改用最终 14 局面数据 | 文档同步 |
+| 任务书的三态分类缺少 HEURISTIC | 由回退搜索承担，记录为偏差 | 文档同步 |
 
 ## 9. 下一阶段依赖
 

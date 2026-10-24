@@ -16,7 +16,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 if(EMSCRIPTEN)
     # raylib's bundled miniaudio uses EM_ASM, which Emscripten only allows in
-    # GNU C modes. First-party sources still target C11 semantics.
+    # GNU C modes. Reset to OFF after raylib is configured so first-party
+    # sources stay strict C11.
     set(CMAKE_C_EXTENSIONS ON)
 else()
     set(CMAKE_C_EXTENSIONS OFF)
@@ -125,6 +126,11 @@ if(NOT REVERSI_RAYLIB_TARGET)
     endif()
 
     message(STATUS "Reversi: using fetched raylib ${REVERSI_RAYLIB_VERSION}")
+endif()
+
+if(EMSCRIPTEN)
+    # Only raylib needs GNU C mode; first-party sources stay strict C11.
+    set(CMAKE_C_EXTENSIONS OFF)
 endif()
 
 if(NOT EMSCRIPTEN)
