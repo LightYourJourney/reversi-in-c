@@ -1,3 +1,7 @@
+#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "ai/ai_endgame.h"
 
 #include "ai/ai_internal.h"
