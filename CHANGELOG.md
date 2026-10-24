@@ -31,6 +31,8 @@
 ### Verified
 
 - 桌面 Debug / Release / ASan+UBSan 无窗口各 19/19。
+- GitHub Actions `40107607886` 9/9：三平台 Debug/Release 各 19/19、
+  Linux ASan+UBSan 19/19、Xvfb GUI 3/3、Linux 包验收。
 - Debug + GUI 22/22（含新增 `app.lab` 渲染冒烟）。
 - Emscripten Release 构建通过；浏览器套件在 1.3.0 上 **NOT TESTED**。
 - 分析性能见 `docs/benchmarks/phase12-analysis.txt`。

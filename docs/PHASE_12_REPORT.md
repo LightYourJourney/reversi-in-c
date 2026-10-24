@@ -82,8 +82,8 @@ Homebrew Clang 21.0.0，CMake 4.4.4，Emscripten 6.0.13
 | `ai.worker` | 44 次断言：分析任务、取消、结果隔离 |
 | `ai.endgame` | PASS（67 次断言）；sanitizer 下参照搜索超时则跳过比较 |
 | Emscripten Release 构建 | PASS（主 wasm 346 KB，Worker wasm 58 KB） |
+| GitHub Actions `40107607886` | 9/9 PASS：三平台 Debug 各 19/19、三平台 Release 各 19/19、Linux ASan+UBSan 无窗口 19/19、Xvfb GUI 3/3、Linux 包验收 |
 | Web 浏览器套件 | **NOT TESTED**：本轮未启动预览服务 |
-| Windows/Linux | **NOT TESTED**（未推送，CI 未运行） |
 
 `app.lab` 是 Debug 渲染冒烟：在 Lab 页面渲染 20 帧并正常退出，验证布局
 与绘制路径不崩溃；它不模拟点击，也不启动分析。
@@ -116,7 +116,8 @@ MultiPV=3、Hard 评估、上限 10 s：
 
 1. **浏览器未复验**：Web 构建通过，但分析 Worker 的文本协议、剪贴板
    导入/导出、窄屏 Lab 交互未在浏览器中运行。
-2. **Windows/Linux 未运行**：本轮未推送，CI 未执行。
+2. **Windows/Linux 物理机未运行**：CI 托管 VM 已通过（三平台 19/19），
+   但物理桌面 GUI 仍未实测。
 3. **UI 交互未自动化**：`app.lab` 只验证渲染；按钮、棋盘点击、分支切换、
    拖拽/键盘流程由代码审查覆盖，没有自动化点击回归。
 4. **长时分析**：分钟级连续分析与内存增长未测。
@@ -146,7 +147,7 @@ git revert <phase-12-commit>
 
 ## 8. 下一阶段依赖
 
-- 推送后在 CI 上验证三平台，并恢复 Web 预览服务跑浏览器套件。
+- 恢复 Web 预览服务，跑浏览器套件（含 Lab 分析 Worker 与剪贴板）。
 - 为 Lab 增加自动化点击/键盘回归（可复用 `__reversiTest` 诊断导出）。
 - 评估更长的批次分析、TT 复用与 PV 三角表，减少 PV 截短。
 - 若需要跨工具棋谱兼容，另立格式与验证，不修改 v1 语义。
