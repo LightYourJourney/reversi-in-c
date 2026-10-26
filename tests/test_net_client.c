@@ -37,7 +37,7 @@ static void on_status(void *context, NetClientStatus status,
     }
 }
 
-static void sleep_ms(int ms)
+static void test_sleep_ms(int ms)
 {
 #if defined(_WIN32)
     Sleep((DWORD)ms);
@@ -77,7 +77,7 @@ static bool wait_message(NetServer *server, NetClient *a, NetClient *b,
         if (take_message(events, type, out)) {
             return true;
         }
-        sleep_ms(1);
+        test_sleep_ms(1);
     }
     return false;
 }
@@ -91,7 +91,7 @@ static bool wait_status(NetServer *server, NetClient *client, Events *events,
         if (events->status == status) {
             return true;
         }
-        sleep_ms(1);
+        test_sleep_ms(1);
     }
     return false;
 }

@@ -12,7 +12,7 @@
 #include <string.h>
 #include <time.h>
 
-static void sleep_ms(int ms)
+static void test_sleep_ms(int ms)
 {
 #if defined(_WIN32)
     Sleep((DWORD)ms);
@@ -35,7 +35,7 @@ static bool wait_phase(NetServer *server, NetSession *a, NetSession *b,
         if (a->phase == phase) {
             return true;
         }
-        sleep_ms(1);
+        test_sleep_ms(1);
     }
     return false;
 }
@@ -86,7 +86,7 @@ static void test_session_flow(TestStats *stats)
         net_session_update(a, 0.002f);
         net_session_update(b, 0.002f);
         net_server_poll(server, 1);
-        sleep_ms(1);
+        test_sleep_ms(1);
     }
     REVERSI_TEST_ASSERT(stats, a->seq == 1);
     REVERSI_TEST_ASSERT(stats, b->seq == 1);

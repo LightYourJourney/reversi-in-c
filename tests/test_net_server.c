@@ -44,7 +44,7 @@ typedef struct TestClient {
     char token[REVERSI_NET_TOKEN_LEN + 1];
 } TestClient;
 
-static void sleep_ms(int ms)
+static void test_sleep_ms(int ms)
 {
 #if defined(_WIN32)
     Sleep((DWORD)ms);
@@ -539,7 +539,7 @@ static void test_fuzz_survives(TestStats *stats)
         (void)send(fuzz.socket, (const char *)data, (int)length, 0);
         net_server_poll(server, 1);
     }
-    sleep_ms(20);
+    test_sleep_ms(20);
     net_server_poll(server, 1);
     /* A valid client can still use the server. */
     TestClient good;
@@ -615,7 +615,7 @@ static void test_server_restart(TestStats *stats)
     char code[7];
     snprintf(code, sizeof(code), "%s", message.code);
     net_server_destroy(first);
-    sleep_ms(10);
+    test_sleep_ms(10);
 
     NetServer *second = net_server_create(&config);
     REVERSI_TEST_ASSERT(stats, net_server_start(second, error, sizeof(error)));
