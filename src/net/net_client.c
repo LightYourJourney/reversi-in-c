@@ -268,9 +268,11 @@ static void *client_thread(void *argument)
     NetWsParser parser;
     net_ws_parser_init(&parser);
     uint8_t buffer[4096];
+    NET_TRACE("read loop enter\n");
     while (!atomic_load(&client->stop)) {
         const int read = (int)recv(socket_fd, (char *)buffer,
                                    (int)sizeof(buffer), 0);
+        NET_TRACE("recv=%d stop=%d\n", read, (int)atomic_load(&client->stop));
         if (read == 0) {
             set_status(client, NET_CLIENT_DISCONNECTED, "closed");
             break;
@@ -340,8 +342,10 @@ static void *client_thread(void *argument)
 static void thread_join(NetClient *client)
 {
     if (!atomic_load(&client->thread_started)) {
+        NET_TRACE("join skipped (not started)\n");
         return;
     }
+    NET_TRACE("join waiting\n");
 #if defined(_WIN32)
     WaitForSingleObject(client->thread, INFINITE);
     CloseHandle(client->thread);
@@ -402,18 +406,23 @@ void net_client_destroy(NetClient *client)
     if (client == NULL) {
         return;
     }
-    NET_TRACE("destroy/disconnect called\n");
+    NET_TRACE("destroy called\n");
     atomic_store(&client->stop, true);
+    NET_TRACE("destroy locking\n");
     lock_client(client);
+    NET_TRACE("destroy locked socket=%d\n", (int)client->socket);
     if (client->socket != CLIENT_INVALID) {
 #if defined(_WIN32)
-        shutdown(client->socket, SD_BOTH);
+        const int rc = shutdown(client->socket, SD_BOTH);
+        NET_TRACE("shutdown rc=%d err=%d\n", rc, WSAGetLastError());
 #else
         shutdown(client->socket, SHUT_RDWR);
 #endif
     }
     unlock_client(client);
+    NET_TRACE("destroy joining\n");
     thread_join(client);
+    NET_TRACE("destroy joined\n");
     if (client->mutex_ready) {
 #if defined(_WIN32)
         DeleteCriticalSection(&client->mutex);
