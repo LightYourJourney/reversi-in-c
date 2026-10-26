@@ -18,6 +18,8 @@
 #include "ui/help_view.h"
 #include "ui/history_view.h"
 #include "ui/lab_view.h"
+#include "ui/net_view.h"
+#include "net/net_session.h"
 #include "ui/menu_view.h"
 #include "ui/modal.h"
 #include "ui/pause_view.h"
@@ -57,7 +59,8 @@ typedef enum AppScreen {
     APP_SCREEN_HELP,
     APP_SCREEN_STATS,
     APP_SCREEN_SAVES,
-    APP_SCREEN_LAB
+    APP_SCREEN_LAB,
+    APP_SCREEN_NET
 } AppScreen;
 
 typedef enum PendingGameAction {
@@ -91,6 +94,14 @@ typedef struct App {
     StatsView stats_view;
     SavesView saves_view;
     LabView lab;
+    NetView net_view;
+    NetSession *net;
+    bool net_mode;
+    bool net_enter_pending;
+    int net_state_seq;
+    bool net_move_pending;
+    UiButton net_resign;
+    UiButton net_leave;
     SaveSlotInfo save_slots[REVERSI_SAVES_ROW_COUNT];
     bool saves_saving;
     AppScreen saves_return;
@@ -156,6 +167,10 @@ static void app_handle_settings_action(App *app, SettingsAction action);
 static void app_handle_saves_action(App *app, SavesAction action);
 static void app_maybe_record_result(App *app);
 static void app_play_result_sound(const App *app);
+static void app_handle_net_action(App *app, NetViewAction action);
+static void app_build_net_match(App *app);
+static void app_update_net_game(App *app, const UiInput *input, float dt);
+static void app_draw_net_hud(const App *app);
 
 static UiInput read_input(void)
 {
@@ -316,6 +331,14 @@ static void app_init(App *app)
     stats_view_init(&app->stats_view);
     saves_view_init(&app->saves_view);
     lab_view_init(&app->lab);
+    net_view_init(&app->net_view);
+    app->net = net_session_create();
+    app->net_mode = false;
+    app->net_enter_pending = false;
+    app->net_state_seq = -1;
+    app->net_move_pending = false;
+    ui_button_init(&app->net_resign, "Resign", false);
+    ui_button_init(&app->net_leave, "Leave", false);
     modal_init(&app->modal);
     ui_animation_reset(&app->animation);
 
@@ -335,6 +358,11 @@ static void app_init(App *app)
         && strcmp(lab_smoke, "0") != 0) {
         lab_view_enter(&app->lab, &app->match, false);
         app->screen = APP_SCREEN_LAB;
+    }
+    const char *net_smoke = getenv("REVERSI_NET_SMOKE");
+    if (net_smoke != NULL && net_smoke[0] != '\0'
+        && strcmp(net_smoke, "0") != 0) {
+        app->screen = APP_SCREEN_NET;
     }
 #endif
 
@@ -795,6 +823,9 @@ static void app_update_transition(App *app, float dt)
 static void app_update_passive(App *app, float dt)
 {
     const UiInput input = {.reduce_motion = !app->settings.animations};
+    if (app->net != NULL) {
+        net_session_update(app->net, dt);
+    }
 
     switch (app->screen) {
     case APP_SCREEN_MENU:
@@ -843,6 +874,9 @@ static void app_update_passive(App *app, float dt)
         (void)lab_view_update(
             &app->lab, &input, dt, app->ai_worker, &app->match,
             app->match.history.count > 1);
+        break;
+    case APP_SCREEN_NET:
+        (void)net_view_update(&app->net_view, &input, dt, app->net);
         break;
     }
 }
@@ -951,6 +985,9 @@ static void app_handle_menu_action(App *app, MenuAction action)
                        app->match.history.count > 1);
         app_request_screen(app, APP_SCREEN_LAB);
         break;
+    case MENU_ACTION_ONLINE:
+        app_request_screen(app, APP_SCREEN_NET);
+        break;
     case MENU_ACTION_PLAY:
         setup_view_set_difficulty(
             &app->setup_view,
@@ -1056,9 +1093,213 @@ static void app_handle_modal_confirm(App *app)
     }
 }
 
+static void app_handle_net_action(App *app, NetViewAction action)
+{
+    if (action == NET_VIEW_NONE || app->net == NULL) {
+        return;
+    }
+    switch (action) {
+    case NET_VIEW_CONNECT: {
+        const int port = atoi(app->net_view.port);
+        if (port <= 0 || port > 65535
+            || !net_session_connect(app->net, app->net_view.host, port)) {
+            app_notice(app, "Could not start the connection");
+        }
+        break;
+    }
+    case NET_VIEW_DISCONNECT:
+        net_session_disconnect(app->net);
+        break;
+    case NET_VIEW_TOGGLE_COLOR:
+        app->net_view.color = stone_opponent(app->net_view.color);
+        break;
+    case NET_VIEW_CREATE:
+        if (!net_session_create_room(app->net, app->net_view.color)) {
+            app_notice(app, "Could not create the room");
+        }
+        break;
+    case NET_VIEW_JOIN:
+        if (!net_session_join_room(app->net, app->net_view.code,
+                                   app->net_view.color)) {
+            app_notice(app, "Enter a 6-character room code");
+        }
+        break;
+    case NET_VIEW_READY:
+        (void)net_session_ready(app->net);
+        break;
+    case NET_VIEW_LEAVE:
+        net_session_leave(app->net);
+        break;
+    case NET_VIEW_COPY_CODE:
+        if (app->net->code[0] != '\0') {
+            SetClipboardText(app->net->code);
+            app_notice(app, "Room code copied");
+        }
+        break;
+    case NET_VIEW_BACK:
+        if (app->net->active) {
+            net_session_leave(app->net);
+        }
+        app_request_screen(app, APP_SCREEN_MENU);
+        break;
+    default:
+        break;
+    }
+}
+
+static void app_build_net_match(App *app)
+{
+    NetSession *net = app->net;
+    MatchConfig config = {
+        .mode = GAME_MODE_PVP,
+        .human_color = net->color,
+        .ai = NULL
+    };
+    if (!match_start_from(&app->match, &config, &net->game)) {
+        app->match.config = config;
+        app->match.state = net->game;
+        app->match.history.count = 0;
+        app->match.history.current = 0;
+    }
+    app->match.phase = net->game.result == GAME_RESULT_ONGOING
+        ? MATCH_PHASE_PLAYER_TURN : MATCH_PHASE_GAME_OVER;
+    app->match.last_move = net->last;
+    app->match.last_mover =
+        net->game.current_player == net->color
+            ? stone_opponent(net->color) : net->color;
+    app->match.last_flips = 0;
+    app->match.has_last_move = net->has_last;
+    app->match.last_pass = (PassEvent){
+        .occurred = net->pass,
+        .player = net->game.current_player
+    };
+    app->stats_recorded = true;
+    app->last_move_age = 0.0f;
+    app->net_state_seq = net->seq;
+    app->net_move_pending = false;
+    net->state_dirty = false;
+    ui_animation_reset(&app->animation);
+}
+
+static void app_update_net_game(App *app, const UiInput *input, float dt)
+{
+    NetSession *net = app->net;
+    if (net == NULL) {
+        app->net_mode = false;
+        return;
+    }
+    if (net->phase == NET_SESSION_LOBBY || net->phase == NET_SESSION_FAILED
+        || net->phase == NET_SESSION_IDLE) {
+        app->net_mode = false;
+        app_request_screen(app, APP_SCREEN_NET);
+        return;
+    }
+    if (net->error[0] != '\0') {
+        app->net_move_pending = false;
+    }
+    if (net->state_dirty || net->seq != app->net_state_seq) {
+        const int previous = app->net_state_seq;
+        app_build_net_match(app);
+        if (previous >= 0 && net->seq > previous) {
+            audio_play(AUDIO_CUE_PLACE);
+        }
+    }
+
+    const float width = (float)GetScreenWidth();
+    ui_button_set_bounds(&app->net_resign,
+                         (Rectangle){width - 210.0f, 12.0f, 90.0f, 30.0f});
+    ui_button_set_bounds(&app->net_leave,
+                         (Rectangle){width - 110.0f, 12.0f, 90.0f, 30.0f});
+    app->net_resign.enabled = net->phase == NET_SESSION_PLAYING;
+    app->net_leave.enabled = true;
+    if (ui_button_update(&app->net_resign, input, true, dt)) {
+        (void)net_session_resign(net);
+    }
+    if (ui_button_update(&app->net_leave, input, true, dt)) {
+        net_session_leave(net);
+        app->net_mode = false;
+        app_request_screen(app, APP_SCREEN_NET);
+        return;
+    }
+    if (input->escape_pressed) {
+        net_session_leave(net);
+        app->net_mode = false;
+        app_request_screen(app, APP_SCREEN_NET);
+        return;
+    }
+
+    const GameViewAction action = game_view_update(
+        &app->game_view, &app->match, input, true, dt);
+    if (action.type == GAME_VIEW_MOVE && !app->net_move_pending
+        && net_session_can_move(net)) {
+        if (net_session_move(net, action.move)) {
+            app->net_move_pending = true;
+        }
+    } else if (action.type == GAME_VIEW_MENU) {
+        net_session_leave(net);
+        app->net_mode = false;
+        app_request_screen(app, APP_SCREEN_NET);
+    }
+}
+
+static void app_draw_net_hud(const App *app)
+{
+    const NetSession *net = app->net;
+    if (net == NULL) {
+        return;
+    }
+    const float width = (float)GetScreenWidth();
+    const Rectangle panel = {12.0f, 52.0f, width - 24.0f, 48.0f};
+    ui_draw_panel(panel, REVERSI_UI_RADIUS_SM,
+                  ui_color_alpha(REVERSI_UI_COLOR_SURFACE, 0.92f),
+                  REVERSI_UI_COLOR_BORDER);
+    char text[256];
+    snprintf(text, sizeof(text), "Online  room %s  you %s%s  opponent %s  %d ms",
+             net->code, ui_player_name(net->color),
+             net->is_host ? " (host)" : "",
+             net->opponent_status[0] != '\0' ? net->opponent_status : "connected",
+             net->latency_ms);
+    ui_draw_text_clipped(&app->fonts, UI_TEXT_SEMIBOLD, text,
+                         (Rectangle){panel.x + 12.0f, panel.y,
+                                     panel.width - 240.0f, panel.height},
+                         REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT,
+                         UI_ALIGN_LEFT);
+    if (net->phase == NET_SESSION_DISCONNECTED) {
+        ui_draw_text_clipped(&app->fonts, UI_TEXT_REGULAR,
+                             "Reconnecting...", 
+                             (Rectangle){panel.x + 12.0f, panel.y + 24.0f,
+                                         panel.width - 240.0f, 18.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_DANGER, UI_ALIGN_LEFT);
+    } else if (net->phase == NET_SESSION_FINISHED) {
+        char result[128];
+        snprintf(result, sizeof(result), "Game over: %s%s",
+                 ui_result_title(net->result),
+                 net->reason[0] != '\0' ? net->reason : "");
+        ui_draw_text_clipped(&app->fonts, UI_TEXT_REGULAR, result,
+                             (Rectangle){panel.x + 12.0f, panel.y + 24.0f,
+                                         panel.width - 240.0f, 18.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_TEXT_MUTED, UI_ALIGN_LEFT);
+    } else if (net->error[0] != '\0') {
+        ui_draw_text_clipped(&app->fonts, UI_TEXT_REGULAR, net->error,
+                             (Rectangle){panel.x + 12.0f, panel.y + 24.0f,
+                                         panel.width - 240.0f, 18.0f},
+                             REVERSI_UI_FONT_TINY,
+                             REVERSI_UI_COLOR_DANGER, UI_ALIGN_LEFT);
+    }
+    ui_button_draw(&app->net_resign, &app->fonts, false);
+    ui_button_draw(&app->net_leave, &app->fonts, false);
+}
+
 static void app_update_game(App *app, const UiInput *input, float dt)
 {
     Match *match = &app->match;
+
+    if (app->net_mode) {
+        app_update_net_game(app, input, dt);
+        return;
+    }
 
     if (input->save_pressed) {
         app_open_saves(app, true);
@@ -1467,6 +1708,20 @@ static void app_update(App *app, const UiInput *input, float dt)
         app_handle_saves_action(app, action);
         break;
     }
+    case APP_SCREEN_NET: {
+        const NetViewAction action = net_view_update(
+            &app->net_view, input, dt, app->net);
+        app_handle_net_action(app, action);
+        if (app->net != NULL
+            && (app->net->phase == NET_SESSION_PLAYING
+                || app->net->phase == NET_SESSION_FINISHED)
+            && !app->net_mode) {
+            app_build_net_match(app);
+            app->net_mode = true;
+            app_request_screen(app, APP_SCREEN_GAME);
+        }
+        break;
+    }
     case APP_SCREEN_LAB: {
         const LabAction action = lab_view_update(
             &app->lab, input, dt, app->ai_worker, &app->match,
@@ -1496,8 +1751,11 @@ static void app_draw(const App *app)
                        ui_should_show_hints(&app->match,
                                             app->settings.legal_hints),
                        app->settings.last_move_highlight,
-                       app->last_move_age, app->settings.animations);
-        if (app->match.phase == MATCH_PHASE_PAUSED) {
+                       app->last_move_age,
+                       app->settings.animations && !app->net_mode);
+        if (app->net_mode) {
+            app_draw_net_hud(app);
+        } else if (app->match.phase == MATCH_PHASE_PAUSED) {
             pause_view_draw(&app->pause_view, &app->fonts);
         }
         break;
@@ -1522,6 +1780,9 @@ static void app_draw(const App *app)
         break;
     case APP_SCREEN_LAB:
         lab_view_draw(&app->lab, &app->fonts);
+        break;
+    case APP_SCREEN_NET:
+        net_view_draw(&app->net_view, app->net, &app->fonts);
         break;
     }
 
@@ -1636,6 +1897,10 @@ static void app_shutdown(AppRun *run)
     if (app->ai_worker != NULL) {
         ai_worker_destroy(app->ai_worker);
         app->ai_worker = NULL;
+    }
+    if (app->net != NULL) {
+        net_session_destroy(app->net);
+        app->net = NULL;
     }
     (void)settings_save(&app->settings);
     (void)stats_save(&app->stats);

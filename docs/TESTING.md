@@ -14,8 +14,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 24 个测试（Debug）：21 个
-无窗口测试、`app.smoke`、`app.lab` 与 `app.autoplay`。不开启时注册 21 个。
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 30 个测试（Debug）：26 个
+无窗口测试、`app.smoke`、`app.lab`、`app.net` 与 `app.autoplay`。不开启时注册 26 个。
 CTest 名称、可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
@@ -47,6 +47,11 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
 | analysis.session | reversi_analysis_tests | 108 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝、访问器、ply 上限、VALID 根 | PASS |
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
+| net.protocol | reversi_net_protocol_tests | 28 | 协议字段/版本/方向/棋盘/错误 | PASS |
+| net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
+| net.server | reversi_net_server_tests | 624 | 完整对局、非法、重复、重连、离开、多房间、重启、模糊 | PASS |
+| net.client | reversi_net_client_tests | 26 | 连接、创建/加入/ready/落子、断线重连 | PASS |
+| net.session | reversi_net_session_tests | 24 | 会话相位、颜色、seq、回合、落子 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
@@ -59,12 +64,12 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 
 实际运行结果：
 
-- Debug：21/21 无窗口测试通过（v1.4.0）。
-- Debug + GUI：v1.4.0 本机 24/24，包含 `app.lab`（Lab 页面 20 帧渲染），
+- Debug：26/26 无窗口测试通过（v2.0.0）。
+- Debug + GUI：v2.0.0 本机 30/30，包含 `app.lab` 与 `app.net`（大厅 20 帧渲染），
   `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程
   仍 **NOT TESTED**。
-- Release：21/21 通过（v1.4.0）。
-- ASan+UBSan：v1.4.0 无窗口 21/21 通过，无 Sanitizer 报告；此前
+- Release：26/26 通过（v2.0.0）。
+- ASan+UBSan：v2.0.0 无窗口 26/26 通过，无 Sanitizer 报告；此前
   GUI 冒烟 17/17 通过，Sanitizer 二进制的 `--frames 2` 退出码 0。
 - 全新 Release 构建树（`build-p7-clean`，联网获取 raylib 6.2）15/15 通过，
   并通过 `scripts/verify-package.sh` 独立启动验收。
@@ -285,3 +290,21 @@ scripts/run-experiments.sh      # 手动，完整实验
   `summary.json` 生成。
 - 性能阈值不在 CI 判定：不同机器/负载的耗时不可比；回归只判断非法、
   超时、中止与确定性结果。
+
+
+## 12. 在线对战测试（Phase 14）
+
+```bash
+ctest --test-dir build -R '^net\.'
+scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
+```
+
+- `net.protocol` / `net.ws`：字段与帧的严格解析、掩码方向、分片、长度上限、
+  20k 随机帧模糊。
+- `net.server`：两名独立 TCP 客户端完成整局；非法/重复/越权；断线重连；
+  房主离开；多房间并发；服务端重启；随机帧不崩溃。
+- `net.client` / `net.session`：桌面线程客户端与浏览器共用会话逻辑；创建/
+  加入/ready/落子/seq。
+- `app.net`：Online 大厅渲染 20 帧。
+- **未覆盖**：浏览器双客户端 E2E、真实网络延迟/丢包、TLS/WSS、公网部署、
+  在线终局导入 Lab 复盘。

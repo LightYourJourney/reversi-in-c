@@ -377,9 +377,31 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 已知限制：跨代码版本对照需两次构建；崩溃不保留部分原始数据；Elo 只覆盖
 双引擎。方法与 CI 策略见 [BENCHMARK_METHODOLOGY.md](BENCHMARK_METHODOLOGY.md)。
 
+## Phase 14：Reversi Online 在线对战（v2.0.0，源码）
+
+- 独立网络层：协议 v1、WebSocket 帧/握手、权威服务端、桌面线程客户端、
+  Web WebSocket 适配与会话状态机。
+- 房间生命周期、颜色/ready、服务端规则校验、seq 防重复、Pass、终局、
+  超时、断线重连、投降与离开。
+- 安全：消息/帧上限、速率限制、连接/房间上限、令牌轮换、日志不记录令牌；
+  本地只绑定回环，TLS 由反向代理终止（未实现/未测试）。
+- 大厅与网络对局 HUD；`app.net` 渲染冒烟。
+- 文档：NETWORK_ARCHITECTURE、NETWORK_PROTOCOL、NETWORK_SECURITY、
+  PHASE_14_REPORT。
+
+验证（本机 macOS arm64）：
+
+- Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
+- 两名独立客户端完成整局；非法、重复、断线重连、多房间、服务端重启、
+  20k 随机帧与 ASan 通过。
+- Emscripten Release 构建通过（wasm 385 KB）。
+
+未验证：浏览器双客户端联机、真实网络延迟/丢包、TLS/WSS、公网部署、
+在线对局导入 Lab 复盘。详见 [PHASE_14_REPORT.md](PHASE_14_REPORT.md)。
+
 ## 非目标（当前）
 
-- 在线对战、账号系统、网络协议
+- 账号系统、排位、观战（在线对战已在 Phase 14 实现基础版）
 - 移动端原生包（Web 构建已在 Phase 10 完成）
 - 第三方 UI 框架或资源商店素材
 

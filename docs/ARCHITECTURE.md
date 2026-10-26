@@ -58,6 +58,7 @@
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4/11/12 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、只读 MultiPV 分析、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
 | Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
+| Net | `src/net/`、`server/` | Phase 14 已实现 | 协议/WS、权威房间服务端、桌面线程客户端、WebSocket 适配、客户端会话 | core（只读/服务端权威）、平台 socket、Emscripten、C 标准库 |
 | Experiment | `src/experiment/` | Phase 13 已实现 | 版本化实验配置、配对对局、强度/性能统计、CSV/JSON/Markdown/HTML 报告 | AI、core、C 标准库、平台进程/文件 API |
 | Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Board、Game、History、Rules、C 标准库 |
 | UI | `src/ui/` | Phase 2/3/4/5/12 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档/分析视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构；Lab 视图编译进 App |
@@ -584,3 +585,20 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    精确强度结论。
 6. **回归分层**：确定性 oracle 进入 CTest；完整实验由脚本手动运行，
    不把不同 CI 机器的原始耗时当算法优劣。
+
+
+## 23. Phase 14 关键决策：在线对战
+
+1. **服务端权威**：`reversi_server` 链接 `core`，所有落子/Pass/终局/超时
+   由服务端判定；客户端只发送意图，UI 不自行决定胜负。
+2. **内置最小 WebSocket**：RFC 6455 握手与帧编解码、SHA-1/base64、
+   掩码/长度/分片校验；无新增第三方依赖。TLS 由反向代理终止。
+3. **两套传输、一个会话**：桌面用 socket + worker 线程 + 消息队列；Web 用
+   浏览器 WebSocket + JS 回调队列；二者实现同一个 `net_client` 接口，
+   `net_session` 与 UI 完全共用。
+4. **seq 与令牌**：每步状态序号防止重复/乱序落子；128 位会话令牌用于
+   断线重连并轮换；房间代码随机查重。
+5. **临时房间**：无账号、无持久化；服务端重启丢失房间并明确返回
+   `room_not_found`。默认只绑定回环地址。
+6. **UI 边界**：大厅与网络 HUD 只读 `NetSession`；socket/协议不进入
+   `app`/`ui` 之外的规则路径，本地双人/AI 路径不受影响。

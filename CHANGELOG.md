@@ -4,6 +4,40 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-26
+
+### Added
+
+- 独立网络层：协议、WebSocket 帧/握手、权威服务端、桌面客户端线程、
+  WebSocket 浏览器客户端与会话状态机。
+- `reversi_server`：临时房间、创建/加入/颜色/ready、服务端规则校验、
+  seq 防重复、Pass、终局、120 s 超时、60 s 重连窗口、投降与离开。
+- 安全控制：消息/帧大小、速率限制、连接与房间上限、握手/空闲超时、
+  128 位令牌（重连轮换）、日志不记录令牌。
+- 菜单新增 Online play；大厅（服务器/端口/房间代码、颜色、ready、
+  复制代码）与网络对局 HUD（对手状态、延迟、Resign/Leave）。
+- 测试：`net.protocol`、`net.ws`、`net.server`、`net.client`、
+  `net.session` 与 `app.net` 渲染冒烟。
+- `docs/NETWORK_ARCHITECTURE.md`、`NETWORK_PROTOCOL.md`、
+  `NETWORK_SECURITY.md`、`PHASE_14_REPORT.md`。
+
+### Changed
+
+- 主菜单 9 项；现有本地双人、AI、Lab 与实验平台路径未改。
+- Web 构建包含浏览器 WebSocket 适配；桌面构建包含 socket/线程客户端。
+
+### Verified
+
+- Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
+- 两名独立客户端完成整局，服务端与本地重放状态一致；非法、重复、断线
+  重连、多房间、服务端重启与 20k 随机帧通过。
+- Emscripten Release 构建通过（wasm 385 KB）。
+
+### Not tested
+
+- 浏览器双客户端联机、真实网络延迟/丢包、TLS/WSS 与公网部署。
+- 在线对局导入 Reversi Lab 复盘未实现。
+
 ## [1.4.0] - 2026-10-25
 
 ### Added

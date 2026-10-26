@@ -198,6 +198,54 @@ add_library(reversi_core STATIC
 target_include_directories(reversi_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(reversi_core PRIVATE reversi_warnings)
 
+add_library(reversi_net STATIC
+    src/net/net_protocol.c
+    src/net/net_ws.c)
+target_include_directories(reversi_net PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(reversi_net
+    PUBLIC reversi_core
+    PRIVATE reversi_warnings)
+
+set(REVERSI_NET_CLIENT_SOURCE src/net/net_client.c)
+if(EMSCRIPTEN)
+    set(REVERSI_NET_CLIENT_SOURCE src/platform/web/net_client_web.c)
+endif()
+add_library(reversi_net_client STATIC
+    ${REVERSI_NET_CLIENT_SOURCE}
+    src/net/net_session.c)
+target_include_directories(reversi_net_client PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(reversi_net_client
+    PUBLIC reversi_net
+    PRIVATE reversi_warnings)
+if(NOT EMSCRIPTEN)
+    if(WIN32)
+        target_link_libraries(reversi_net_client PRIVATE ws2_32)
+    else()
+        find_package(Threads REQUIRED)
+        target_link_libraries(reversi_net_client PRIVATE Threads::Threads)
+    endif()
+endif()
+
+if(NOT EMSCRIPTEN)
+    add_library(reversi_net_server STATIC src/net/net_server.c)
+    target_include_directories(reversi_net_server PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(reversi_net_server
+        PUBLIC reversi_net
+        PRIVATE reversi_warnings)
+    if(WIN32)
+        target_link_libraries(reversi_net_server PRIVATE ws2_32 bcrypt)
+    endif()
+
+    add_executable(reversi_server server/main.c)
+    target_link_libraries(reversi_server PRIVATE
+        reversi_net_server reversi_warnings)
+    set_target_properties(reversi_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif()
+
 add_library(reversi_analysis STATIC
     src/analysis/analysis.c
     src/analysis/record.c)
@@ -300,13 +348,14 @@ endif()
 
 add_library(reversi_app STATIC
     src/app/app.c
-    src/ui/lab_view.c)
+    src/ui/lab_view.c
+    src/ui/net_view.c)
 target_include_directories(reversi_app PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(reversi_app
     PUBLIC reversi_analysis reversi_ui reversi_ai
-           reversi_persistence reversi_audio
+           reversi_persistence reversi_audio reversi_net_client
     PRIVATE reversi_warnings)
 
 add_executable(reversi src/main.c)
@@ -324,7 +373,7 @@ if(EMSCRIPTEN)
         "-sFORCE_FILESYSTEM=1"
         "-sMODULARIZE=1"
         "-sEXPORT_NAME=createReversi"
-        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_ai_worker_analysis_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_match_mode','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes','_reversi_web_persist']"
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_reversi_ai_worker_complete','_reversi_ai_worker_analysis_complete','_reversi_web_resize','_reversi_web_frames','_reversi_web_mouse_x','_reversi_web_mouse_y','_reversi_web_screen_w','_reversi_web_screen_h','_reversi_web_game_over','_reversi_web_result','_reversi_web_screen_index','_reversi_web_ai_active','_reversi_web_match_mode','_reversi_web_cancel_ai_test','_reversi_web_heap_bytes','_reversi_web_persist','_reversi_net_client_web_message','_reversi_net_client_web_status']"
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
         "SHELL:--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
         "SHELL:--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
@@ -511,6 +560,59 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
         core.history)
     reversi_add_core_test(reversi_match_tests tests/test_match.c
         core.match)
+    add_executable(reversi_net_session_tests tests/test_net_session.c)
+    target_include_directories(reversi_net_session_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_net_session_tests PRIVATE
+        reversi_net_client reversi_net_server reversi_warnings)
+    add_test(NAME net.session COMMAND reversi_net_session_tests)
+    set_tests_properties(net.session PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        TIMEOUT 60)
+
+    add_executable(reversi_net_client_tests tests/test_net_client.c)
+    target_include_directories(reversi_net_client_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_net_client_tests PRIVATE
+        reversi_net_client reversi_net_server reversi_warnings)
+    add_test(NAME net.client COMMAND reversi_net_client_tests)
+    set_tests_properties(net.client PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        TIMEOUT 60)
+
+    add_executable(reversi_net_server_tests tests/test_net_server.c)
+    target_include_directories(reversi_net_server_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_net_server_tests PRIVATE
+        reversi_net_server reversi_warnings)
+    add_test(NAME net.server COMMAND reversi_net_server_tests)
+    set_tests_properties(net.server PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        TIMEOUT 60)
+
+    add_executable(reversi_net_protocol_tests tests/test_net_protocol.c)
+    target_include_directories(reversi_net_protocol_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_net_protocol_tests PRIVATE
+        reversi_net reversi_warnings)
+    add_test(NAME net.protocol COMMAND reversi_net_protocol_tests)
+    set_tests_properties(net.protocol PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    add_executable(reversi_net_ws_tests tests/test_net_ws.c)
+    target_include_directories(reversi_net_ws_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_link_libraries(reversi_net_ws_tests PRIVATE
+        reversi_net reversi_warnings)
+    add_test(NAME net.ws COMMAND reversi_net_ws_tests)
+    set_tests_properties(net.ws PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+
     add_executable(reversi_analysis_tests tests/test_analysis.c)
     target_include_directories(reversi_analysis_tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -614,6 +716,14 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
         # Debug-only autoplay hook: one completed game, one stats record,
         # terminal autosave removed. Requires a display like app.smoke.
         if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            add_test(NAME app.net COMMAND reversi --frames 20)
+            set_tests_properties(app.net PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                ENVIRONMENT
+                    "REVERSI_NET_SMOKE=1;HOME=${CMAKE_BINARY_DIR}/test-home;XDG_DATA_HOME=${CMAKE_BINARY_DIR}/test-home;APPDATA=${CMAKE_BINARY_DIR}/test-home"
+                LABELS "gui"
+                TIMEOUT 30)
+
             add_test(NAME app.lab COMMAND reversi --frames 20)
             set_tests_properties(app.lab PROPERTIES
                 WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
