@@ -33,7 +33,7 @@
 
 - Debug / Release / ASan+UBSan 无窗口各 21/21；Debug + GUI 24/24。
 - 7 组配对实验与随机稳定性实验，全部 `illegal=0 timeouts=0 aborted=0`。
-- GitHub Actions `40118354934` 9/9：三平台 Debug/Release 各 21/21；
+- GitHub Actions `40281111365` 9/9：三平台 Debug/Release 各 21/21；
   Linux ASan+UBSan 21/21、Xvfb 3/3、三平台打包与 Linux 包验收。
 - 规则吞吐、精确残局与实验报告见 `docs/experiments/`。
 

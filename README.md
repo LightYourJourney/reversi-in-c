@@ -513,7 +513,7 @@ ctest --test-dir build --output-on-failure
 | Debug + GUI | 24/24 通过；含 `app.lab` 分析页 20 帧渲染冒烟 |
 | 浏览器（Chrome） | v1.1.0 套件 9/9；v1.2.0–v1.4.0 浏览器复验 **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 346 KB，Worker 58 KB） |
-| GitHub Actions | v1.4.0 运行 `40118354934` 9/9 通过；v1.3.0 为 `40111155790` |
+| GitHub Actions | v1.4.0 运行 `40281111365` 9/9 通过；v1.3.0 为 `40111155790` |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、

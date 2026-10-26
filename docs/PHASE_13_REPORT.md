@@ -107,7 +107,7 @@ AppleClang 21，CMake 4.4.4
 | `experiment.regression` | 78 次断言：配置拒绝、颜色配对、确定性/节点 oracle、节点上限分类、输出文件与异常列表 |
 | `ai.core` | 2,988 次断言（含节点上限、flags 入口与共享基线） |
 | Emscripten Release | 构建通过（实验模块不进入 Web 构建） |
-| GitHub Actions `40118354934` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
+| GitHub Actions `40281111365` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
 
 ## 6. 已知限制
 
