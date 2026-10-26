@@ -103,7 +103,7 @@ P50 为 151 ms，本次 `moves.csv` 最大 `elapsed_ms` 为 225 ms（此前重�
 | `experiment.regression` | 87 次断言：配置拒绝、颜色配对、种子敏感性、未配对/中止分类、确定性/节点 oracle、节点上限分类、输出文件与异常列表 |
 | `ai.core` | 2,988 次断言（含节点上限、flags 入口与共享基线） |
 | Emscripten Release | 构建通过（实验模块不进入 Web 构建） |
-| GitHub Actions `40281111365` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
+| GitHub Actions `40288248734` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |
 
 ## 6. 已知限制
 

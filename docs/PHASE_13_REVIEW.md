@@ -87,7 +87,7 @@
 | 节点上限/残局 | `ai.endgame` 70 次断言 | PASS |
 | 节点上限/flags | `ai.core` 2,988 次断言 | PASS |
 | CI（审计前代码） | GitHub Actions `40118354934` | 9/9 success（三平台 21/21、ASan 21/21、Xvfb 3/3） |
-| 审计提交 CI | GitHub Actions `40281111365` | 9/9 success（三平台 21/21、ASan 21/21、Xvfb 3/3） |
+| 审查修正 CI | GitHub Actions `40288248734` | 9/9 success（三平台 21/21、ASan 21/21、Xvfb 3/3） |
 
 ## 5. 仍未解决的风险
 

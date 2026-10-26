@@ -80,7 +80,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   各 17/17（Windows 含 `--version` 断言）；Linux ASan+UBSan 无窗口 17/17、
   Xvfb GUI 2/2；Linux 发行包在 Xvfb 下验收。首跑 `40073029646` 暴露
   Linux 严格 C11 下 `CLOCK_MONOTONIC` 未声明，已在提交 `438a510` 修正。
-- GitHub Actions 运行 `40281111365`（2026-10-26，Phase 13）9 个作业全部
+- GitHub Actions 运行 `40288248734`（2026-10-26，Phase 13）9 个作业全部
   `success`：三平台 Debug/Release 各 21/21；Linux ASan+UBSan 无窗口 21/21；
   Linux Xvfb GUI 3/3；三平台打包与 Linux 包验收。
 - GitHub Actions 运行 `40111155790`（2026-10-24，Phase 12）9 个作业全部
