@@ -63,8 +63,9 @@ static void test_run_and_reports(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, first.games[0].a_color
                         != first.games[1].a_color);
 
-    /* Deterministic regression oracle: a change to rules, greedy evaluation
-       or move selection that alters these outcomes must be deliberate. */
+    /* Deterministic regression oracle: rules, greedy evaluation, move
+       selection or the seeded random stream are all pinned here; a changed
+       outcome must be deliberate and accompanied by a baseline update. */
     static const GameResult expected[4] = {
         GAME_RESULT_BLACK_WIN, GAME_RESULT_WHITE_WIN,
         GAME_RESULT_WHITE_WIN, GAME_RESULT_BLACK_WIN
@@ -117,6 +118,68 @@ static void test_run_and_reports(TestStats *stats)
 
     experiment_result_free(&first);
     experiment_result_free(&second);
+}
+
+static void test_seed_controls_random(TestStats *stats)
+{
+    const char *config_text =
+        "version 1\n"
+        "name seed-control\n"
+        "seed 7\n"
+        "games 2\n"
+        "openings 1\n"
+        "opening-ply 0\n"
+        "max-plies 100\n"
+        "engine-a kind=random label=Random\n"
+        "engine-b kind=greedy label=Greedy\n";
+    ExperimentConfig config;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, experiment_config_parse(
+        &config, config_text, error, sizeof(error)));
+    ExperimentResult first;
+    ExperimentResult second;
+    REVERSI_TEST_ASSERT(stats, experiment_run(&config, &first, error,
+                                              sizeof(error)));
+    config.seed = 8;
+    REVERSI_TEST_ASSERT(stats, experiment_run(&config, &second, error,
+                                              sizeof(error)));
+    bool differs = first.move_count != second.move_count;
+    const int common = first.move_count < second.move_count
+        ? first.move_count : second.move_count;
+    for (int i = 0; i < common && !differs; ++i) {
+        if (first.moves[i].move.row != second.moves[i].move.row
+            || first.moves[i].move.col != second.moves[i].move.col) {
+            differs = true;
+        }
+    }
+    REVERSI_TEST_ASSERT(stats, differs);
+    experiment_result_free(&first);
+    experiment_result_free(&second);
+}
+
+static void test_aborted_classification(TestStats *stats)
+{
+    const char *config_text =
+        "version 1\n"
+        "name abort-smoke\n"
+        "seed 4\n"
+        "games 2\n"
+        "openings 1\n"
+        "opening-ply 0\n"
+        "max-plies 1\n"
+        "engine-a kind=random label=Random\n"
+        "engine-b kind=greedy label=Greedy\n";
+    ExperimentConfig config;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, experiment_config_parse(
+        &config, config_text, error, sizeof(error)));
+    ExperimentResult result;
+    REVERSI_TEST_ASSERT(stats, experiment_run(&config, &result, error,
+                                              sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, result.summary.aborted == 2);
+    REVERSI_TEST_ASSERT(stats, result.summary.completed == 0);
+    REVERSI_TEST_ASSERT(stats, result.games[0].aborted);
+    experiment_result_free(&result);
 }
 
 static void test_search_regression(TestStats *stats)
@@ -245,6 +308,8 @@ int main(void)
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_config_parse);
     REVERSI_RUN_TEST(&stats, test_run_and_reports);
+    REVERSI_RUN_TEST(&stats, test_seed_controls_random);
+    REVERSI_RUN_TEST(&stats, test_aborted_classification);
     REVERSI_RUN_TEST(&stats, test_search_regression);
     REVERSI_RUN_TEST(&stats, test_invalid_run_config);
     REVERSI_RUN_TEST(&stats, test_node_limit_classification);

@@ -235,6 +235,7 @@ static void build_json(const ExperimentResult *result, TextBuffer *buffer)
                   ",\"summary\":{\"games\":%d,\"completed\":%d,\"a_wins\":%d"
                   ",\"b_wins\":%d,\"draws\":%d,\"illegal\":%d"
                   ",\"timeouts\":%d,\"node_limited\":%d,\"aborted\":%d"
+                  ",\"strength_games\":%d,\"excluded_unpaired\":%d"
                   ",\"a_black_wins\":%d,\"a_white_wins\":%d"
                   ",\"b_black_wins\":%d,\"b_white_wins\":%d"
                   ",\"a_score\":%.6f,\"score_low\":%.6f"
@@ -243,6 +244,7 @@ static void build_json(const ExperimentResult *result, TextBuffer *buffer)
                   ",\"peak_rss_kb\":%" PRIu64 "}",
                   s->games, s->completed, s->a_wins, s->b_wins, s->draws,
                   s->illegal, s->timeouts, s->node_limited, s->aborted,
+                  s->strength_games, s->excluded_unpaired,
                   s->a_black_wins,
                   s->a_white_wins, s->b_black_wins, s->b_white_wins,
                   s->a_score, s->score_low, s->score_high, s->elo,
@@ -446,6 +448,8 @@ static void build_markdown(const ExperimentResult *result, TextBuffer *buffer)
     buffer_printf(buffer, "| Timeouts | %d |\n", s->timeouts);
     buffer_printf(buffer, "| Node-limit games | %d |\n", s->node_limited);
     buffer_printf(buffer, "| Aborted | %d |\n", s->aborted);
+    buffer_printf(buffer, "| Excluded (unpaired) | %d |\n",
+                  s->excluded_unpaired);
     if (s->elo_defined) {
         buffer_printf(buffer,
                       "| A score (draw=0.5) | %.3f (95%% CI %.3f..%.3f) |\n",
@@ -575,7 +579,7 @@ static void build_html(const TextBuffer *json, TextBuffer *buffer)
         "(s.elo>=0?'+':'')+s.elo.toFixed(0)+' ['+s.elo_low.toFixed(0)+"
         "'..'+s.elo_high.toFixed(0)+']':'n/a'],['Illegal',s.illegal],"
         "['Timeouts',s.timeouts],['Node-limit',s.node_limited],"
-        "['Aborted',s.aborted]]));"
+        "['Aborted',s.aborted],['Excluded unpaired',s.excluded_unpaired]]));"
         "app.appendChild(el('h2',null,'Search performance'));"
         "const perf=[['Metric',a.name,b.name],['Moves',s.a_stats.moves,"
         "s.b_stats.moves],['Nodes',s.a_stats.nodes,s.b_stats.nodes],"

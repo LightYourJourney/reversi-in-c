@@ -59,8 +59,10 @@ AppleClang 21，CMake 4.4.4
 可以宣称存在统计显著的强度差异；Easy vs Hard 的 1:7 也只是点估计。
 
 固定时间对局的深度与耗时只描述该次运行；同一配置的重跑出现 4:4、5:3、
-3:5、2:6 的差异，说明该类结果受时序影响。节点预算实验在多次运行中给出相同的
-节点总数与深度。
+3:5、2:6 的差异，说明该类结果受时序影响。预算每 1024 节点检查一次，负载下
+单次检查间隔可超时：150 ms 实验的 P50 为 151 ms，但 `moves.csv` 中最大
+`elapsed_ms` 为 417 ms（该着法仍来自已完成的深度，标记 `timed_out=1`）。
+节点预算实验在多次运行中给出相同的节点总数与深度。
 
 “评估函数版本”用完整组件（Hard）与基础组件（Medium）在同一深度下近似；
 实验入口现在对非 Hard 配置也按 `tt=on` 分配置换表，BasicEval 的
@@ -104,7 +106,7 @@ AppleClang 21，CMake 4.4.4
 | Release 无窗口 | 21/21 PASS |
 | ASan+UBSan 无窗口 | 21/21 PASS |
 | Debug + GUI | 24/24 PASS |
-| `experiment.regression` | 78 次断言：配置拒绝、颜色配对、确定性/节点 oracle、节点上限分类、输出文件与异常列表 |
+| `experiment.regression` | 87 次断言：配置拒绝、颜色配对、种子敏感性、未配对/中止分类、确定性/节点 oracle、节点上限分类、输出文件与异常列表 |
 | `ai.core` | 2,988 次断言（含节点上限、flags 入口与共享基线） |
 | Emscripten Release | 构建通过（实验模块不进入 Web 构建） |
 | GitHub Actions `40281111365` | 9/9 PASS：三平台 Debug/Release 各 21/21、Linux ASan+UBSan 21/21、Xvfb GUI 3/3、三平台打包与 Linux 包验收 |

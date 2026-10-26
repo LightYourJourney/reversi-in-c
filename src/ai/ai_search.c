@@ -457,6 +457,17 @@ static void finish_stats(AiSearch *search, int completed_depth, int score,
     out_stats->node_limit = search->node_limit;
 }
 
+/* The exact solver checks only its time budget and does not enforce
+   max_nodes, so it cannot honour a node cap; a capped search also skips the
+   endgame depth extension for the same reason. */
+static bool endgame_available(bool use_endgame, const AiConfig *config,
+                              int empty)
+{
+    return use_endgame && config->max_nodes == 0
+        && config->difficulty == AI_DIFFICULTY_HARD
+        && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES;
+}
+
 static bool search_choose(const GameState *state, const AiConfig *config,
                           bool use_tt, bool use_endgame,
                           bool tt_any_difficulty,
@@ -497,11 +508,7 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     const int white = board_count(&state->board, STONE_WHITE);
     const int empty = REVERSI_BOARD_CELL_COUNT - black - white;
 
-    /* The exact solver has its own time budget and no node accounting, so it
-       cannot honour a node cap; skip it when one is configured. */
-    if (use_endgame && config->max_nodes == 0
-        && config->difficulty == AI_DIFFICULTY_HARD
-        && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES) {
+    if (endgame_available(use_endgame, config, empty)) {
         AiConfig endgame_config = *config;
         if (config->time_budget_ms > 1) {
             /* Leave headroom for the regular search if the solve is cut. */
@@ -533,9 +540,8 @@ static bool search_choose(const GameState *state, const AiConfig *config,
         search.start_ms = ai_now_ms();
     }
 
-    if (use_endgame && config->max_nodes == 0
-        && config->difficulty == AI_DIFFICULTY_HARD
-        && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES && max_depth < empty) {
+    if (endgame_available(use_endgame, config, empty)
+        && max_depth < empty) {
         max_depth = empty;
     }
 

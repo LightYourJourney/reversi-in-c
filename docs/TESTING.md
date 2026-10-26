@@ -47,7 +47,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
 | analysis.session | reversi_analysis_tests | 108 | 局面树/分支/Pass、编辑、History 导入、棋谱往返与拒绝、访问器、ply 上限、VALID 根 | PASS |
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
-| experiment.regression | reversi_experiment_tests | 78 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
+| experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
 | storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |

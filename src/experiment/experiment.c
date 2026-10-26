@@ -655,12 +655,13 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
         record->a_color = a_black ? STONE_BLACK : STONE_WHITE;
 
         GameState state = openings[record->opening];
-        uint64_t rng[2] = {
+        const uint64_t engine_seeds[2] = {
             mix_seed((uint64_t)config->seed
                      ^ config->engines[0].seed, game, 0),
             mix_seed((uint64_t)config->seed
                      ^ config->engines[1].seed, game, 1)
         };
+        uint64_t rng[2] = {engine_seeds[0], engine_seeds[1]};
         int ply = 0;
         for (; ply < config->max_plies
              && state.result == GAME_RESULT_ONGOING; ++ply) {
@@ -677,10 +678,7 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
                     == a_black ? 0 : 1;
             const ExperimentEngine *spec = &config->engines[engine];
             AiConfig ai = ai_default_config(spec->difficulty,
-                                            (unsigned)mix_seed(
-                                                (uint64_t)config->seed
-                                                ^ spec->seed, game,
-                                                engine));
+                                            (unsigned)engine_seeds[engine]);
             ai.max_depth = spec->max_depth;
             ai.time_budget_ms = spec->time_budget_ms;
             ai.max_nodes = spec->max_nodes;
@@ -765,6 +763,16 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
 
     ExperimentSummary *summary = &result->summary;
     summary->games = config->games;
+    bool pair_complete[REVERSI_EXPERIMENT_MAX_GAMES / 2] = {false};
+    for (int pair = 0; pair < config->games / 2; ++pair) {
+        const ExperimentGame *first = &result->games[pair * 2];
+        const ExperimentGame *second = &result->games[pair * 2 + 1];
+        pair_complete[pair] = !first->illegal && !first->timed_out
+            && !first->node_limit && !first->aborted
+            && !second->illegal && !second->timed_out
+            && !second->node_limit && !second->aborted;
+    }
+
     for (int i = 0; i < config->games; ++i) {
         const ExperimentGame *game = &result->games[i];
         if (game->illegal) {
@@ -784,6 +792,14 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
             continue;
         }
         ++summary->completed;
+        if (!pair_complete[i / 2]) {
+            /* The paired opening lost one game; keep the survivor out of
+               strength statistics instead of treating it as an independent
+               sample. */
+            ++summary->excluded_unpaired;
+            continue;
+        }
+        ++summary->strength_games;
         if (game->result == GAME_RESULT_DRAW) {
             ++summary->draws;
         } else {
@@ -808,13 +824,12 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
         }
     }
 
-    if (summary->completed > 0) {
+    if (summary->strength_games > 0) {
         summary->a_score = ((double)summary->a_wins
                             + 0.5 * (double)summary->draws)
-            / (double)summary->completed;
-        /* Games are paired by opening with colors swapped, so the
-           independent unit is a pair, not a single game. */
-        const int pairs = (summary->completed + 1) / 2;
+            / (double)summary->strength_games;
+        /* Only fully completed pairs contribute, so n is exact. */
+        const int pairs = summary->strength_games / 2;
         wilson_mean(summary->a_score, pairs, &summary->score_low,
                     &summary->score_high);
         summary->elo = elo_from_score(summary->a_score);

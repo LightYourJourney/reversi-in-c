@@ -66,7 +66,8 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 
 `search` 的 `depth` 是硬上限；`time` 与 `nodes` 是软上限，命中时与时间预算
 一样丢弃未完成的一层，返回上一层结果。`endgame=on` 只对 Hard 生效；设置
-`nodes` 时精确残局求解器会被跳过，因为它只按时间计预算、无法遵守节点上限。
+`nodes` 时会跳过精确残局求解器与残局自动加深，因为求解器只按时间计预算、
+无法遵守节点上限。
 
 ## 4. 公平对战
 

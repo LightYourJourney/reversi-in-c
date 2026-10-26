@@ -96,6 +96,10 @@ typedef struct ExperimentEngineStats {
 typedef struct ExperimentSummary {
     int games;
     int completed;
+    /* Completed games that belong to a fully completed opening pair; these
+       are the only games used for strength statistics. */
+    int strength_games;
+    int excluded_unpaired;
     int a_wins;
     int b_wins;
     int draws;
