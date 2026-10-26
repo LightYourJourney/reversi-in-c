@@ -41,9 +41,6 @@ typedef pthread_t ClientThread;
 
 #define REVERSI_NET_CLIENT_QUEUE 32
 
-/* TEMPORARY diagnostic trace */
-#define NET_TRACE(...) fprintf(stderr, "[net] " __VA_ARGS__)
-
 typedef struct ClientQueueEntry {
     char text[REVERSI_NET_MAX_MESSAGE + 1];
 } ClientQueueEntry;
@@ -114,6 +111,26 @@ static void socket_close(ClientSocket socket)
 #endif
 }
 
+/* 1 = readable, 0 = timeout, -1 = error. */
+static int socket_wait_readable(ClientSocket socket, int timeout_ms)
+{
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(socket, &set);
+    struct timeval timeout = {.tv_sec = timeout_ms / 1000,
+                              .tv_usec = (timeout_ms % 1000) * 1000};
+    return select((int)socket + 1, &set, NULL, NULL, &timeout);
+}
+
+static bool socket_read_would_block(void)
+{
+#if defined(_WIN32)
+    return WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+#endif
+}
+
 static void set_status(NetClient *client, NetClientStatus status,
                        const char *reason)
 {
@@ -177,6 +194,13 @@ static bool client_handshake(NetClient *client)
     size_t used = 0;
     const uint64_t deadline = now_ms() + 5000;
     while (used < sizeof(response) - 1 && now_ms() < deadline) {
+        const int ready = socket_wait_readable(client->socket, 100);
+        if (ready == 0) {
+            continue;
+        }
+        if (ready < 0) {
+            return false;
+        }
         const int read = (int)recv(client->socket, response + used,
                                    (int)(sizeof(response) - 1 - used), 0);
         if (read > 0) {
@@ -185,13 +209,9 @@ static bool client_handshake(NetClient *client)
             if (strstr(response, "\r\n\r\n") != NULL) {
                 break;
             }
-        } else if (read < 0) {
-            fd_set set;
-            FD_ZERO(&set);
-            FD_SET(client->socket, &set);
-            struct timeval timeout = {.tv_sec = 0, .tv_usec = 10000};
-            select((int)client->socket + 1, &set, NULL, NULL, &timeout);
-        } else {
+        } else if (read == 0) {
+            return false;
+        } else if (!socket_read_would_block()) {
             return false;
         }
     }
@@ -213,7 +233,6 @@ static void *client_thread(void *argument)
     hints.ai_socktype = SOCK_STREAM;
     char service[16];
     snprintf(service, sizeof(service), "%d", client->port);
-    NET_TRACE("thread start host=%s port=%d\n", client->host, client->port);
     struct addrinfo *results = NULL;
     if (getaddrinfo(client->host, service, &hints, &results) != 0) {
         set_status(client, NET_CLIENT_FAILED, "resolve_failed");
@@ -237,7 +256,6 @@ static void *client_thread(void *argument)
         socket_fd = CLIENT_INVALID;
     }
     freeaddrinfo(results);
-    NET_TRACE("connect fd=%d\n", (int)socket_fd);
     if (socket_fd == CLIENT_INVALID) {
         set_status(client, NET_CLIENT_FAILED, "connect_failed");
         atomic_store(&client->running, false);
@@ -263,26 +281,29 @@ static void *client_thread(void *argument)
         return NULL;
 #endif
     }
-    NET_TRACE("handshake ok\n");
     set_status(client, NET_CLIENT_CONNECTED, NULL);
     NetWsParser parser;
     net_ws_parser_init(&parser);
     uint8_t buffer[4096];
-    NET_TRACE("read loop enter\n");
     while (!atomic_load(&client->stop)) {
+        /* Selecting first keeps teardown join bounded: a blocked recv is not
+         * reliably interrupted by shutdown() from another thread on Windows. */
+        const int ready = socket_wait_readable(socket_fd, 20);
+        if (ready == 0) {
+            continue;
+        }
+        if (ready < 0) {
+            set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
+            break;
+        }
         const int read = (int)recv(socket_fd, (char *)buffer,
                                    (int)sizeof(buffer), 0);
-        NET_TRACE("recv=%d stop=%d\n", read, (int)atomic_load(&client->stop));
         if (read == 0) {
             set_status(client, NET_CLIENT_DISCONNECTED, "closed");
             break;
         }
         if (read < 0) {
-            fd_set set;
-            FD_ZERO(&set);
-            FD_SET(socket_fd, &set);
-            struct timeval timeout = {.tv_sec = 0, .tv_usec = 20000};
-            if (select((int)socket_fd + 1, &set, NULL, NULL, &timeout) == 0) {
+            if (socket_read_would_block()) {
                 continue;
             }
             set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
@@ -324,7 +345,6 @@ static void *client_thread(void *argument)
             offset += consumed;
         }
     }
-    NET_TRACE("thread exit loop stop=%d\n", (int)atomic_load(&client->stop));
     lock_client(client);
     if (client->socket != CLIENT_INVALID) {
         socket_close(client->socket);
@@ -342,10 +362,8 @@ static void *client_thread(void *argument)
 static void thread_join(NetClient *client)
 {
     if (!atomic_load(&client->thread_started)) {
-        NET_TRACE("join skipped (not started)\n");
         return;
     }
-    NET_TRACE("join waiting\n");
 #if defined(_WIN32)
     WaitForSingleObject(client->thread, INFINITE);
     CloseHandle(client->thread);
@@ -406,23 +424,17 @@ void net_client_destroy(NetClient *client)
     if (client == NULL) {
         return;
     }
-    NET_TRACE("destroy called\n");
     atomic_store(&client->stop, true);
-    NET_TRACE("destroy locking\n");
     lock_client(client);
-    NET_TRACE("destroy locked socket=%d\n", (int)client->socket);
     if (client->socket != CLIENT_INVALID) {
 #if defined(_WIN32)
-        const int rc = shutdown(client->socket, SD_BOTH);
-        NET_TRACE("shutdown rc=%d err=%d\n", rc, WSAGetLastError());
+        shutdown(client->socket, SD_BOTH);
 #else
         shutdown(client->socket, SHUT_RDWR);
 #endif
     }
     unlock_client(client);
-    NET_TRACE("destroy joining\n");
     thread_join(client);
-    NET_TRACE("destroy joined\n");
     if (client->mutex_ready) {
 #if defined(_WIN32)
         DeleteCriticalSection(&client->mutex);

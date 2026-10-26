@@ -31,7 +31,6 @@ static void test_sleep_ms(int ms)
 static bool wait_phase(NetServer *server, NetSession *a, NetSession *b,
                        NetSessionPhase phase, int timeout_ms)
 {
-    fprintf(stderr, "[test] wait phase %d\n", (int)phase);
     for (int elapsed = 0; elapsed < timeout_ms; ++elapsed) {
         net_session_update(a, 0.002f);
         if (b != NULL) {
@@ -99,11 +98,8 @@ static void test_session_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, b->seq == 1);
     REVERSI_TEST_ASSERT(stats, b->game.current_player == b->color);
 
-    fprintf(stderr, "[test] destroying a\n");
     net_session_destroy(a);
-    fprintf(stderr, "[test] destroying b\n");
     net_session_destroy(b);
-    fprintf(stderr, "[test] done\n");
     net_server_destroy(server);
 }
 

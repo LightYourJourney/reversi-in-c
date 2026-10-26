@@ -73,8 +73,6 @@ static bool wait_message(NetServer *server, NetClient *a, NetClient *b,
                          Events *events, NetMessageType type, NetMessage *out,
                          int timeout_ms)
 {
-    fprintf(stderr, "[test] wait message %s\n",
-            net_message_type_name(type));
     for (int elapsed = 0; elapsed < timeout_ms; elapsed += 1) {
         net_client_poll(a);
         if (b != NULL) {
@@ -92,7 +90,6 @@ static bool wait_message(NetServer *server, NetClient *a, NetClient *b,
 static bool wait_status(NetServer *server, NetClient *client, Events *events,
                         NetClientStatus status, int timeout_ms)
 {
-    fprintf(stderr, "[test] wait status %d\n", (int)status);
     for (int elapsed = 0; elapsed < timeout_ms; elapsed += 1) {
         net_client_poll(client);
         net_server_poll(server, 1);
@@ -182,13 +179,9 @@ static void test_client_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, wait_message(server, a2, b, &again,
                                             NET_MSG_STATE, &message, 3000));
 
-    fprintf(stderr, "[test] destroying a2\n");
     net_client_destroy(a2);
-    fprintf(stderr, "[test] destroying a\n");
     net_client_destroy(a);
-    fprintf(stderr, "[test] destroying b\n");
     net_client_destroy(b);
-    fprintf(stderr, "[test] done\n");
     net_server_destroy(server);
 }
 
