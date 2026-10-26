@@ -46,8 +46,8 @@
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
 | macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口）；GUI 30/30 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM（v1.3.0）：Debug/Release 各 26/26，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
-| Linux x86_64 | GitHub Actions 托管 VM（v1.4.0）：Debug/Release 各 26/26、ASan+UBSan、Xvfb GUI 3/3 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| Windows x64 | GitHub Actions 托管 VM（v2.0.0）：Debug 26/26（运行 `40303018155`），发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM（v2.0.0）：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 | Web（Chrome） | Emscripten 6.0.13；构建通过（v1.4.0），浏览器套件 9/9（v1.1.0），v1.2.0–v1.4.0 复验 NOT TESTED | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与

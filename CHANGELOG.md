@@ -26,9 +26,20 @@
 - 主菜单 9 项；现有本地双人、AI、Lab 与实验平台路径未改。
 - Web 构建包含浏览器 WebSocket 适配；桌面构建包含 socket/线程客户端。
 
+### Fixed
+
+- 桌面客户端在 Windows 上断线/销毁时，`shutdown` 不保证唤醒阻塞的
+  `recv`，线程 `join` 会挂起；读取循环改为先 `select`（20 ms）再 `recv`，
+  握手等待同样限时。
+- `net.session` 测试只等本方 `seq`，在 Linux CI 上可能早于对手收包；
+  改为等待双方状态。
+- `app.net` 需要显示：纳入 Xvfb GUI 步骤，并从无头作业中排除。
+
 ### Verified
 
 - Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
+- GitHub Actions `40303018155`：三平台 Debug 各 26/26，ASan+UBSan
+  26/26，Xvfb GUI 4/4，三平台打包与 Linux 包验收全部通过。
 - 两名独立客户端完成整局，服务端与本地重放状态一致；非法、重复、断线
   重连、多房间、服务端重启与 20k 随机帧通过。
 - Emscripten Release 构建通过（wasm 385 KB）。

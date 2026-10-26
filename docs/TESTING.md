@@ -88,6 +88,13 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - GitHub Actions 运行 `40288248734`（2026-10-26，Phase 13）9 个作业全部
   `success`：三平台 Debug/Release 各 21/21；Linux ASan+UBSan 无窗口 21/21；
   Linux Xvfb GUI 3/3；三平台打包与 Linux 包验收。
+- GitHub Actions 运行 `40303018155`（2026-10-26，Phase 14）9 个作业全部
+  `success`：Linux/Windows（MSVC）/macOS Debug 各 26/26；Linux ASan+UBSan
+  无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包与 Linux 包
+  验收。首跑 `40298668533` 暴露测试缺少 `windows.h` 与 Linux 端
+  `net.session` 等待竞态；`40299103857` 进一步显示 Windows 上 `shutdown`
+  不唤醒阻塞的 `recv`，读取循环已改为先 `select` 再 `recv`
+  （`95ccd03`、`699efbb`）。
 - GitHub Actions 运行 `40111155790`（2026-10-24，Phase 12）9 个作业全部
   `success`：三平台 Debug/Release 各 20/20；Linux ASan+UBSan 无窗口
   20/20；Linux Xvfb GUI 3/3；Linux 发行包验收。Phase 13 的 CI 结果在

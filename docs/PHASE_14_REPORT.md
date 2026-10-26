@@ -52,6 +52,7 @@ ARCHITECTURE/TESTING。
 | Release 无窗口 | 26/26 PASS |
 | ASan+UBSan 无窗口 | 26/26 PASS |
 | Debug + GUI | 30/30 PASS（含 `app.net` 大厅渲染） |
+| GitHub Actions `40303018155` | 9/9 作业 PASS：Linux/Windows（MSVC）/macOS Debug 各 26/26；ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 | `net.protocol` | 28 次断言：字段/版本/方向/棋盘/错误 |
 | `net.ws` | 20,026 次断言：握手、掩码、长度、分片、ping、20k 随机帧 |
 | `net.server` | 624 次断言：完整对局、非法、重复、重连、离开、多房间、重启、模糊 |
@@ -61,6 +62,11 @@ ARCHITECTURE/TESTING。
 | 浏览器在线双客户端 | **NOT TESTED**：未做 Playwright 双页面联机 |
 | 真实网络延迟/丢包 | **NOT TESTED**；只在回环上测试 |
 | 公网/TLS/WSS | **NOT TESTED**；未部署、未购买资源 |
+
+首次跨平台 CI（`40298668533`、`40299103857`）暴露并修正了三处问题：
+测试在 Windows 缺少 `windows.h`；`net.session` 只等本方 `seq` 造成 Linux
+竞态；Windows 上 `shutdown` 返回 0 但不唤醒阻塞的 `recv`，导致客户端线程
+`join` 挂起（读取循环改为先 `select` 再 `recv`，握手等待同样加超时）。
 
 ## 5. 关键证据
 
