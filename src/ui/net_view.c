@@ -140,7 +140,7 @@ NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
     set_button(view, NET_BTN_JOIN, "Join room", false,
                (Rectangle){x, button_y + 46.0f, button_width, 38.0f},
                session->phase == NET_SESSION_LOBBY && !in_room);
-    set_button(view, NET_BTN_READY, session->ready ? "Ready" : "Ready",
+    set_button(view, NET_BTN_READY, "Ready",
                true, (Rectangle){x + button_width + gap, button_y + 46.0f,
                                  button_width, 38.0f},
                session->phase == NET_SESSION_WAITING && !session->ready);

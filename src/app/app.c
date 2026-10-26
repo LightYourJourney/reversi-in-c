@@ -97,7 +97,6 @@ typedef struct App {
     NetView net_view;
     NetSession *net;
     bool net_mode;
-    bool net_enter_pending;
     int net_state_seq;
     bool net_move_pending;
     UiButton net_resign;
@@ -334,7 +333,6 @@ static void app_init(App *app)
     net_view_init(&app->net_view);
     app->net = net_session_create();
     app->net_mode = false;
-    app->net_enter_pending = false;
     app->net_state_seq = -1;
     app->net_move_pending = false;
     ui_button_init(&app->net_resign, "Resign", false);
@@ -1155,24 +1153,10 @@ static void app_build_net_match(App *app)
         .human_color = net->color,
         .ai = NULL
     };
-    if (!match_start_from(&app->match, &config, &net->game)) {
-        app->match.config = config;
-        app->match.state = net->game;
-        app->match.history.count = 0;
-        app->match.history.current = 0;
+    if (!match_sync_network(&app->match, &config, &net->game, net->last,
+                            net->has_last, net->pass)) {
+        return;
     }
-    app->match.phase = net->game.result == GAME_RESULT_ONGOING
-        ? MATCH_PHASE_PLAYER_TURN : MATCH_PHASE_GAME_OVER;
-    app->match.last_move = net->last;
-    app->match.last_mover =
-        net->game.current_player == net->color
-            ? stone_opponent(net->color) : net->color;
-    app->match.last_flips = 0;
-    app->match.has_last_move = net->has_last;
-    app->match.last_pass = (PassEvent){
-        .occurred = net->pass,
-        .player = net->game.current_player
-    };
     app->stats_recorded = true;
     app->last_move_age = 0.0f;
     app->net_state_seq = net->seq;
@@ -1230,6 +1214,9 @@ static void app_update_net_game(App *app, const UiInput *input, float dt)
 
     const GameViewAction action = game_view_update(
         &app->game_view, &app->match, input, true, dt);
+    /* The server owns the online game: no local pause or restart. */
+    app->game_view.pause.enabled = false;
+    app->game_view.restart.enabled = false;
     if (action.type == GAME_VIEW_MOVE && !app->net_move_pending
         && net_session_can_move(net)) {
         if (net_session_move(net, action.move)) {

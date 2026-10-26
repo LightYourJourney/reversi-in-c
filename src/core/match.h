@@ -71,6 +71,16 @@ bool match_restore_checked(Match *match, const MatchConfig *config,
                            const Move *moves, int count,
                            const GameState *expected);
 
+/*
+ * Installs a position received from an authoritative peer (online play).
+ * History starts at this position. last/pass describe the move that produced
+ * it; the mover and the passed player are derived from the state. The call
+ * fails without changing the match when the position is inconsistent.
+ */
+bool match_sync_network(Match *match, const MatchConfig *config,
+                        const GameState *state, Move last, bool has_last,
+                        bool pass);
+
 /* Applies a move in PLAYER_TURN and enters ANIMATING. */
 bool match_apply_move(Match *match, Move move);
 

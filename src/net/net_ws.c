@@ -304,6 +304,16 @@ bool net_ws_validate_handshake_response(const char *response, size_t length,
     return strcmp(value, expected) == 0;
 }
 
+static uint64_t ws_rng_next(uint64_t *rng)
+{
+    uint64_t x = *rng;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    *rng = x;
+    return x * 0x2545F4914F6CDD1DULL;
+}
+
 bool net_ws_generate_key(uint64_t *rng, char out[25])
 {
     if (rng == NULL || out == NULL) {
@@ -311,12 +321,7 @@ bool net_ws_generate_key(uint64_t *rng, char out[25])
     }
     uint8_t bytes[16];
     for (int i = 0; i < 16; i += 8) {
-        uint64_t x = *rng;
-        x ^= x >> 12;
-        x ^= x << 25;
-        x ^= x >> 27;
-        *rng = x;
-        const uint64_t value = x * 0x2545F4914F6CDD1DULL;
+        const uint64_t value = ws_rng_next(rng);
         for (int j = 0; j < 8; ++j) {
             bytes[i + j] = (uint8_t)(value >> (j * 8));
         }
@@ -397,13 +402,11 @@ NetWsResult net_ws_parse(NetWsParser *parser, const uint8_t *data,
 
     const uint8_t *payload = data + header;
     uint8_t *target = NULL;
-    size_t target_capacity = 0;
     if (is_control(opcode)) {
         if (!fin || payload_length > sizeof(parser->control)) {
             return NET_WS_ERROR;
         }
         target = parser->control;
-        target_capacity = sizeof(parser->control);
     } else if (opcode == 0x1 || opcode == 0x0) {
         if (opcode == 0x1 && parser->in_message) {
             return NET_WS_ERROR;
@@ -420,7 +423,6 @@ NetWsResult net_ws_parse(NetWsParser *parser, const uint8_t *data,
             return NET_WS_ERROR;
         }
         target = parser->message + parser->message_length;
-        target_capacity = payload_length;
     } else {
         return NET_WS_ERROR;
     }
@@ -451,18 +453,7 @@ NetWsResult net_ws_parse(NetWsParser *parser, const uint8_t *data,
     out->payload = parser->message;
     out->length = parser->message_length;
     out->type = NET_WS_TEXT;
-    (void)target_capacity;
     return NET_WS_TEXT;
-}
-
-static uint64_t ws_rng_next(uint64_t *rng)
-{
-    uint64_t x = *rng;
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    *rng = x;
-    return x * 0x2545F4914F6CDD1DULL;
 }
 
 size_t net_ws_encode(uint8_t opcode, const uint8_t *payload, size_t length,

@@ -531,7 +531,8 @@ bool net_protocol_board_from_state(const GameState *state, char out[65])
 bool net_protocol_state_from_board(const char *board, Stone turn,
                                    GameResult result, GameState *out)
 {
-    if (board == NULL || out == NULL || strlen(board) != 64
+    if (board == NULL || out == NULL
+        || strlen(board) != REVERSI_BOARD_CELL_COUNT
         || !stone_is_player(turn)) {
         return false;
     }

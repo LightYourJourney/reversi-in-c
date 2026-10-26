@@ -89,7 +89,7 @@ S: opponent status=reconnected   (发给对手)
 ## 6. 错误码
 
 `bad_message`、`message_too_large`、`rate_limited`、`not_in_room`、
-`already_in_room`、`not_playing`、`not_your_turn`、`stale_state`、
+`already_in_room`、`not_playing`、`not_ready_state`、`not_your_turn`、`stale_state`、
 `illegal_move`、`room_not_found`、`room_full`、`room_in_progress`、
 `color_taken`、`rejoin_failed`、`server_full`、`server_busy`、
 `unexpected_message`。

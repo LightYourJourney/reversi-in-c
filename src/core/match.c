@@ -134,6 +134,35 @@ bool match_restore_checked(Match *match, const MatchConfig *config,
     return restore_replay(match, config, moves, count, expected);
 }
 
+bool match_sync_network(Match *match, const MatchConfig *config,
+                        const GameState *state, Move last, bool has_last,
+                        bool pass)
+{
+    Match synced;
+    if (match == NULL || !match_initialize(&synced, config, state)) {
+        return false;
+    }
+    synced.last_move = has_last ? last : (Move){0, 0};
+    synced.has_last_move = has_last;
+    /* A pass keeps the turn with the mover, so the mover is the current
+     * player only after an automatic pass; otherwise it is the opponent. */
+    synced.last_mover = STONE_EMPTY;
+    if (has_last) {
+        synced.last_mover = pass ? state->current_player
+                                 : stone_opponent(state->current_player);
+    }
+    synced.last_pass = pass
+        ? (PassEvent){true, stone_opponent(state->current_player)}
+        : (PassEvent){false, STONE_EMPTY};
+    /* The snapshot is the first history entry, so undo cannot cross it. */
+    synced.history.entries[0].has_move = synced.has_last_move;
+    synced.history.entries[0].move = synced.last_move;
+    synced.history.entries[0].mover = synced.last_mover;
+    synced.history.entries[0].pass = synced.last_pass;
+    *match = synced;
+    return true;
+}
+
 static int count_flips(const Board *before, const Board *after,
                        Stone mover, Move move)
 {

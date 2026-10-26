@@ -24,8 +24,6 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <bcrypt.h>
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment(lib, "bcrypt.lib")
 typedef SOCKET NetSocket;
 typedef int NetSockLen;
 #define NET_INVALID INVALID_SOCKET
@@ -1152,7 +1150,12 @@ static void server_timers(NetServer *server)
             if (!connected0 && !connected1) {
                 room_close(server, r, "abandoned");
             } else {
-                const int winner = connected0 ? 0 : 1;
+                /* The player to move loses on the clock; when only one seat
+                 * is connected the absent opponent forfeits. */
+                const int to_move =
+                    room->players[0].color == room->game.current_player ? 0 : 1;
+                const int winner = connected0 && connected1 ? 1 - to_move
+                    : connected0 ? 0 : 1;
                 room_finish(server, r,
                             room->players[winner].color == STONE_BLACK
                                 ? GAME_RESULT_BLACK_WIN

@@ -562,6 +562,46 @@ static void test_restore_terminal(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&restored));
 }
 
+static void test_sync_network(TestStats *stats)
+{
+    MatchConfig config = pvp_config();
+    Match source;
+    REVERSI_TEST_ASSERT(stats, match_start(&source, &config));
+    REVERSI_TEST_ASSERT(stats, match_apply_move(&source, (Move){5, 3}));
+    const GameState after = source.state;
+
+    Match synced;
+    REVERSI_TEST_ASSERT(stats, match_sync_network(&synced, &config, &after,
+                                                 (Move){5, 3}, true, false));
+    REVERSI_TEST_ASSERT(stats, game_state_equal(&synced.state, &after));
+    REVERSI_TEST_ASSERT(stats, synced.phase == MATCH_PHASE_PLAYER_TURN);
+    REVERSI_TEST_ASSERT(stats, synced.has_last_move);
+    REVERSI_TEST_ASSERT(stats, synced.last_move.row == 5
+                        && synced.last_move.col == 3);
+    REVERSI_TEST_ASSERT(stats, synced.last_mover == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, !synced.last_pass.occurred);
+    REVERSI_TEST_ASSERT(stats, synced.history.count == 1);
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&synced));
+
+    GameState pass_start;
+    build_auto_pass(&pass_start);
+    Match pass_match;
+    REVERSI_TEST_ASSERT(stats,
+        match_start_from(&pass_match, &config, &pass_start));
+    REVERSI_TEST_ASSERT(stats, match_apply_move(&pass_match, (Move){0, 0}));
+    REVERSI_TEST_ASSERT(stats, match_sync_network(&synced, &config,
+                                                 &pass_match.state,
+                                                 (Move){0, 0}, true, true));
+    REVERSI_TEST_ASSERT(stats, synced.last_mover == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, synced.last_pass.occurred);
+    REVERSI_TEST_ASSERT(stats, synced.last_pass.player == STONE_WHITE);
+
+    REVERSI_TEST_ASSERT(stats, !match_sync_network(NULL, &config, &after,
+                                                   (Move){0, 0}, false, false));
+    REVERSI_TEST_ASSERT(stats, !match_sync_network(&synced, &config, NULL,
+                                                   (Move){0, 0}, false, false));
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -577,6 +617,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_terminal_without_full_board);
     REVERSI_RUN_TEST(&stats, test_restore_from_moves);
     REVERSI_RUN_TEST(&stats, test_restore_terminal);
+    REVERSI_RUN_TEST(&stats, test_sync_network);
 
     return reversi_test_summary(&stats, "core.match");
 }

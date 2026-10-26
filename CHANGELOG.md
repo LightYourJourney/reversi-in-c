@@ -34,6 +34,10 @@
 - `net.session` 测试只等本方 `seq`，在 Linux CI 上可能早于对手收包；
   改为等待双方状态。
 - `app.net` 需要显示：纳入 Xvfb GUI 步骤，并从无头作业中排除。
+- 落子超时曾按“座位 0 在线”判胜，可能让拖延的一方获胜；改为超时方判负。
+- 在线对局直接改写 `Match` 字段；新增 `match_sync_network`，恢复
+  `match_*` 单一写路径，并修正 Pass 后最后落子方的归属。
+- 在线对局隐藏本地暂定/重开按钮；`net_view` 的 Ready 文本去除死分支。
 
 ### Verified
 
