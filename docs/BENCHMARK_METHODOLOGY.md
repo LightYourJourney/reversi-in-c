@@ -49,6 +49,8 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 
 - `games` 必须为偶数：每两局共享同一开局并交换黑白。
 - `openings` 个开局由 `seed` 派生，使用合法随机着法生成到 `opening-ply`。
+- 每个引擎的随机流由**实验种子、引擎 seed、局号与引擎编号**共同派生；
+  固定这些值即可复现 Random 与 Easy 的随机性。
 - `max-plies` 是安全上限；达到时记为 `aborted`，不当作平局。
 - 未知键、奇数局数、越界参数一律拒绝，不静默修正。
 - 运行器会把规范化配置写回输出目录的 `config.exp`。
@@ -63,7 +65,8 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 | `search` | `ai_search_choose_flags`，可独立控制 TT、残局求解、深度、时间与节点 |
 
 `search` 的 `depth` 是硬上限；`time` 与 `nodes` 是软上限，命中时与时间预算
-一样丢弃未完成的一层，返回上一层结果。`endgame=on` 只对 Hard 生效。
+一样丢弃未完成的一层，返回上一层结果。`endgame=on` 只对 Hard 生效；设置
+`nodes` 时精确残局求解器会被跳过，因为它只按时间计预算、无法遵守节点上限。
 
 ## 4. 公平对战
 

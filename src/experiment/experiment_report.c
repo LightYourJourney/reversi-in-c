@@ -638,6 +638,7 @@ bool experiment_write_all(const ExperimentResult *result, const char *dir,
                            error, error_size);
     buffer_free(&markdown);
     if (!md_ok) {
+        buffer_free(&json);
         report_error(error, error_size, "cannot write report.md");
         return false;
     }

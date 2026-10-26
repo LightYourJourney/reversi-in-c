@@ -145,6 +145,24 @@ static void test_incomplete_classification(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, move_is_legal(&state, move));
 }
 
+static void test_node_cap_skips_solver(TestStats *stats)
+{
+    GameState state;
+    if (!position_with_empties(0x7777ULL, 4, &state)) {
+        return;
+    }
+    AiConfig config = ai_default_config(AI_DIFFICULTY_HARD, 3);
+    config.max_nodes = 1;
+    config.time_budget_ms = 10000;
+    Move move = {-1, -1};
+    AiStats search;
+    const bool ok = ai_search_choose_flags(&state, &config, true, true,
+                                           &move, &search);
+    REVERSI_TEST_ASSERT(stats, !ok);
+    REVERSI_TEST_ASSERT(stats, search.node_limit);
+    REVERSI_TEST_ASSERT(stats, !search.timed_out);
+}
+
 static void test_limits(TestStats *stats)
 {
     GameState state;
@@ -174,6 +192,7 @@ int main(void)
     TestStats stats = {0, 0};
     REVERSI_RUN_TEST(&stats, test_exact_against_full_depth);
     REVERSI_RUN_TEST(&stats, test_incomplete_classification);
+    REVERSI_RUN_TEST(&stats, test_node_cap_skips_solver);
     REVERSI_RUN_TEST(&stats, test_limits);
     return reversi_test_summary(&stats, "ai.endgame");
 }

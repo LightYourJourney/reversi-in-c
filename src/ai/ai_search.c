@@ -497,7 +497,10 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     const int white = board_count(&state->board, STONE_WHITE);
     const int empty = REVERSI_BOARD_CELL_COUNT - black - white;
 
-    if (use_endgame && config->difficulty == AI_DIFFICULTY_HARD
+    /* The exact solver has its own time budget and no node accounting, so it
+       cannot honour a node cap; skip it when one is configured. */
+    if (use_endgame && config->max_nodes == 0
+        && config->difficulty == AI_DIFFICULTY_HARD
         && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES) {
         AiConfig endgame_config = *config;
         if (config->time_budget_ms > 1) {
@@ -530,7 +533,8 @@ static bool search_choose(const GameState *state, const AiConfig *config,
         search.start_ms = ai_now_ms();
     }
 
-    if (use_endgame && config->difficulty == AI_DIFFICULTY_HARD
+    if (use_endgame && config->max_nodes == 0
+        && config->difficulty == AI_DIFFICULTY_HARD
         && empty <= REVERSI_AI_ENDGAME_MAX_EMPTIES && max_depth < empty) {
         max_depth = empty;
     }

@@ -66,10 +66,10 @@ static void test_run_and_reports(TestStats *stats)
     /* Deterministic regression oracle: a change to rules, greedy evaluation
        or move selection that alters these outcomes must be deliberate. */
     static const GameResult expected[4] = {
-        GAME_RESULT_BLACK_WIN, GAME_RESULT_BLACK_WIN,
-        GAME_RESULT_WHITE_WIN, GAME_RESULT_WHITE_WIN
+        GAME_RESULT_BLACK_WIN, GAME_RESULT_WHITE_WIN,
+        GAME_RESULT_WHITE_WIN, GAME_RESULT_BLACK_WIN
     };
-    static const int expected_plies[4] = {58, 58, 58, 12};
+    static const int expected_plies[4] = {58, 58, 58, 58};
     for (int i = 0; i < 4; ++i) {
         REVERSI_TEST_ASSERT(stats, first.games[i].result == expected[i]);
         REVERSI_TEST_ASSERT(stats, first.games[i].plies

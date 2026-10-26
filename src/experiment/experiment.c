@@ -656,8 +656,10 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
 
         GameState state = openings[record->opening];
         uint64_t rng[2] = {
-            mix_seed(config->seed, game, 0),
-            mix_seed(config->seed, game, 1)
+            mix_seed((uint64_t)config->seed
+                     ^ config->engines[0].seed, game, 0),
+            mix_seed((uint64_t)config->seed
+                     ^ config->engines[1].seed, game, 1)
         };
         int ply = 0;
         for (; ply < config->max_plies
@@ -676,7 +678,9 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
             const ExperimentEngine *spec = &config->engines[engine];
             AiConfig ai = ai_default_config(spec->difficulty,
                                             (unsigned)mix_seed(
-                                                spec->seed, game, engine));
+                                                (uint64_t)config->seed
+                                                ^ spec->seed, game,
+                                                engine));
             ai.max_depth = spec->max_depth;
             ai.time_budget_ms = spec->time_budget_ms;
             ai.max_nodes = spec->max_nodes;
