@@ -41,6 +41,9 @@ typedef pthread_t ClientThread;
 
 #define REVERSI_NET_CLIENT_QUEUE 32
 
+/* TEMPORARY diagnostic trace */
+#define NET_TRACE(...) fprintf(stderr, "[net] " __VA_ARGS__)
+
 typedef struct ClientQueueEntry {
     char text[REVERSI_NET_MAX_MESSAGE + 1];
 } ClientQueueEntry;
@@ -210,6 +213,7 @@ static void *client_thread(void *argument)
     hints.ai_socktype = SOCK_STREAM;
     char service[16];
     snprintf(service, sizeof(service), "%d", client->port);
+    NET_TRACE("thread start host=%s port=%d\n", client->host, client->port);
     struct addrinfo *results = NULL;
     if (getaddrinfo(client->host, service, &hints, &results) != 0) {
         set_status(client, NET_CLIENT_FAILED, "resolve_failed");
@@ -233,6 +237,7 @@ static void *client_thread(void *argument)
         socket_fd = CLIENT_INVALID;
     }
     freeaddrinfo(results);
+    NET_TRACE("connect fd=%d\n", (int)socket_fd);
     if (socket_fd == CLIENT_INVALID) {
         set_status(client, NET_CLIENT_FAILED, "connect_failed");
         atomic_store(&client->running, false);
@@ -258,6 +263,7 @@ static void *client_thread(void *argument)
         return NULL;
 #endif
     }
+    NET_TRACE("handshake ok\n");
     set_status(client, NET_CLIENT_CONNECTED, NULL);
     NetWsParser parser;
     net_ws_parser_init(&parser);
@@ -316,6 +322,7 @@ static void *client_thread(void *argument)
             offset += consumed;
         }
     }
+    NET_TRACE("thread exit loop stop=%d\n", (int)atomic_load(&client->stop));
     lock_client(client);
     if (client->socket != CLIENT_INVALID) {
         socket_close(client->socket);
@@ -395,6 +402,7 @@ void net_client_destroy(NetClient *client)
     if (client == NULL) {
         return;
     }
+    NET_TRACE("destroy/disconnect called\n");
     atomic_store(&client->stop, true);
     lock_client(client);
     if (client->socket != CLIENT_INVALID) {
