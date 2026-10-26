@@ -1,6 +1,6 @@
 # Experiment: easy-vs-hard
 
-- Commit: `423aba2`
+- Commit: `d7c6bb8`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -25,17 +25,17 @@
 
 | Metric | Value |
 |---|---|
-| A wins | 1 |
-| B wins | 7 |
+| A wins | 2 |
+| B wins | 6 |
 | Draws | 0 |
 | A wins as Black | 0 |
-| A wins as White | 1 |
+| A wins as White | 2 |
 | Illegal games | 0 |
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
-| A score (draw=0.5) | 0.125 (95% CI 0.013..0.604) |
-| Elo difference | -338 (95% CI -750..+74) |
+| A score (draw=0.5) | 0.250 (95% CI 0.046..0.699) |
+| Elo difference | -191 (95% CI -528..+147) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -43,16 +43,16 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 
 | Metric | A | B |
 |---|---|---|
-| Moves | 213 | 235 |
-| Nodes | 1241 | 2458969 |
-| NPS | 248200 | 668561 |
-| Average | 0 ms | 15 ms |
-| P50 | 0 ms | 12 ms |
-| P95 | 0 ms | 47 ms |
+| Moves | 218 | 230 |
+| Nodes | 1292 | 2148642 |
+| NPS | 184571 | 341379 |
+| Average | 0 ms | 27 ms |
+| P50 | 0 ms | 20 ms |
+| P95 | 0 ms | 79 ms |
 | Average depth | 1 | 6 |
 | Max depth | 1 | 12 |
-| Cut rate | 0.0% | 29.9% |
-| TT hit rate | 0.0% | 4.1% |
+| Cut rate | 0.0% | 29.3% |
+| TT hit rate | 0.0% | 2.7% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 ## Anomalies

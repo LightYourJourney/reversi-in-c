@@ -1,6 +1,6 @@
 # Experiment: random-100
 
-- Commit: `423aba2`
+- Commit: `d7c6bb8`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -25,17 +25,17 @@
 
 | Metric | Value |
 |---|---|
-| A wins | 45 |
-| B wins | 49 |
-| Draws | 6 |
-| A wins as Black | 21 |
-| A wins as White | 24 |
+| A wins | 47 |
+| B wins | 45 |
+| Draws | 8 |
+| A wins as Black | 24 |
+| A wins as White | 23 |
 | Illegal games | 0 |
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
-| A score (draw=0.5) | 0.480 (95% CI 0.348..0.615) |
-| Elo difference | -14 (95% CI -109..+81) |
+| A score (draw=0.5) | 0.510 (95% CI 0.376..0.643) |
+| Elo difference | +7 (95% CI -88..+102) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -43,7 +43,7 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 
 | Metric | A | B |
 |---|---|---|
-| Moves | 3006 | 2992 |
+| Moves | 3003 | 2995 |
 | Nodes | 0 | 0 |
 | NPS | 0 | 0 |
 | Average | 0 ms | 0 ms |
