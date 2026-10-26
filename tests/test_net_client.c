@@ -11,6 +11,11 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 typedef struct Events {
     NetMessage messages[32];
     int count;

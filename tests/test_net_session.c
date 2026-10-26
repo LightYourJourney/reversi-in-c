@@ -12,6 +12,11 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 static void test_sleep_ms(int ms)
 {
 #if defined(_WIN32)
@@ -82,7 +87,8 @@ static void test_session_flow(TestStats *stats)
         REVERSI_BOARD_CELL_COUNT);
     REVERSI_TEST_ASSERT(stats, count > 0);
     REVERSI_TEST_ASSERT(stats, net_session_move(a, moves[0]));
-    for (int elapsed = 0; elapsed < 3000 && a->seq < 1; ++elapsed) {
+    for (int elapsed = 0; elapsed < 3000 && (a->seq < 1 || b->seq < 1);
+         ++elapsed) {
         net_session_update(a, 0.002f);
         net_session_update(b, 0.002f);
         net_server_poll(server, 1);
