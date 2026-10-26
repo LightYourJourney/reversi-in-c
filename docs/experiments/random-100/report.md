@@ -1,6 +1,6 @@
 # Experiment: random-100
 
-- Commit: `d7c6bb8`
+- Commit: `6ae6e01`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -34,6 +34,7 @@
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
+| Excluded (unpaired) | 0 |
 | A score (draw=0.5) | 0.510 (95% CI 0.376..0.643) |
 | Elo difference | +7 (95% CI -88..+102) |
 

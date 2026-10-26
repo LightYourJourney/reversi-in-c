@@ -1,6 +1,6 @@
 # Experiment: easy-vs-hard
 
-- Commit: `d7c6bb8`
+- Commit: `6ae6e01`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -16,7 +16,7 @@
 | kind | ai | ai |
 | difficulty | 0 | 2 |
 | depth | 8 | 6 |
-| time budget | 500 ms | 200 ms |
+| time budget | 500 ms | 10000 ms |
 | node cap | 0 | 0 |
 | TT | on | on |
 | endgame solver | on | on |
@@ -34,6 +34,7 @@
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
+| Excluded (unpaired) | 0 |
 | A score (draw=0.5) | 0.250 (95% CI 0.046..0.699) |
 | Elo difference | -191 (95% CI -528..+147) |
 
@@ -45,10 +46,10 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 218 | 230 |
 | Nodes | 1292 | 2148642 |
-| NPS | 184571 | 341379 |
-| Average | 0 ms | 27 ms |
-| P50 | 0 ms | 20 ms |
-| P95 | 0 ms | 79 ms |
+| NPS | 117455 | 212547 |
+| Average | 0 ms | 43 ms |
+| P50 | 0 ms | 28 ms |
+| P95 | 0 ms | 141 ms |
 | Average depth | 1 | 6 |
 | Max depth | 1 | 12 |
 | Cut rate | 0.0% | 29.3% |

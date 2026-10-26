@@ -1,6 +1,6 @@
 # Experiment: depth-4-vs-6
 
-- Commit: `d7c6bb8`
+- Commit: `6ae6e01`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -16,7 +16,7 @@
 | kind | search | search |
 | difficulty | 2 | 2 |
 | depth | 4 | 6 |
-| time budget | 5000 ms | 5000 ms |
+| time budget | 10000 ms | 10000 ms |
 | node cap | 0 | 0 |
 | TT | on | on |
 | endgame solver | off | off |
@@ -34,6 +34,7 @@
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
+| Excluded (unpaired) | 0 |
 | A score (draw=0.5) | 0.250 (95% CI 0.046..0.699) |
 | Elo difference | -191 (95% CI -528..+147) |
 
@@ -45,10 +46,10 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 222 | 226 |
 | Nodes | 130038 | 1485830 |
-| NPS | 255477 | 287840 |
-| Average | 2 ms | 22 ms |
-| P50 | 2 ms | 17 ms |
-| P95 | 6 ms | 64 ms |
+| NPS | 202236 | 210846 |
+| Average | 2 ms | 31 ms |
+| P50 | 2 ms | 20 ms |
+| P95 | 7 ms | 82 ms |
 | Average depth | 3 | 5 |
 | Max depth | 4 | 6 |
 | Cut rate | 18.3% | 26.1% |

@@ -1,6 +1,6 @@
 # Experiment: eval-full-vs-basic
 
-- Commit: `d7c6bb8`
+- Commit: `6ae6e01`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -16,7 +16,7 @@
 | kind | search | search |
 | difficulty | 2 | 1 |
 | depth | 5 | 5 |
-| time budget | 2000 ms | 2000 ms |
+| time budget | 10000 ms | 10000 ms |
 | node cap | 0 | 0 |
 | TT | on | on |
 | endgame solver | off | off |
@@ -34,6 +34,7 @@
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
+| Excluded (unpaired) | 0 |
 | A score (draw=0.5) | 0.500 (95% CI 0.150..0.850) |
 | Elo difference | +0 (95% CI -301..+301) |
 
@@ -45,10 +46,10 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 224 | 224 |
 | Nodes | 522872 | 460234 |
-| NPS | 205693 | 201946 |
-| Average | 11 ms | 10 ms |
-| P50 | 9 ms | 6 ms |
-| P95 | 28 ms | 34 ms |
+| NPS | 336468 | 318281 |
+| Average | 6 ms | 6 ms |
+| P50 | 7 ms | 5 ms |
+| P95 | 16 ms | 16 ms |
 | Average depth | 4 | 4 |
 | Max depth | 5 | 5 |
 | Cut rate | 16.8% | 18.8% |

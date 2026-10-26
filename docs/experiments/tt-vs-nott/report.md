@@ -1,6 +1,6 @@
 # Experiment: tt-vs-nott
 
-- Commit: `d7c6bb8`
+- Commit: `6ae6e01`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
 - Compiler: AppleClang 21.0.0.21000334
@@ -16,7 +16,7 @@
 | kind | search | search |
 | difficulty | 2 | 2 |
 | depth | 6 | 6 |
-| time budget | 2000 ms | 2000 ms |
+| time budget | 10000 ms | 10000 ms |
 | node cap | 0 | 0 |
 | TT | on | off |
 | endgame solver | off | off |
@@ -34,6 +34,7 @@
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
+| Excluded (unpaired) | 0 |
 | A score (draw=0.5) | 0.500 (95% CI 0.150..0.850) |
 | Elo difference | +0 (95% CI -301..+301) |
 
@@ -45,10 +46,10 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 |---|---|---|
 | Moves | 224 | 224 |
 | Nodes | 1383640 | 3109902 |
-| NPS | 270930 | 253621 |
-| Average | 22 ms | 54 ms |
-| P50 | 14 ms | 33 ms |
-| P95 | 70 ms | 184 ms |
+| NPS | 44069 | 39254 |
+| Average | 140 ms | 353 ms |
+| P50 | 26 ms | 67 ms |
+| P95 | 645 ms | 1778 ms |
 | Average depth | 5 | 5 |
 | Max depth | 6 | 6 |
 | Cut rate | 23.1% | 20.0% |

@@ -1,10 +1,9 @@
-depth-4-vs-6: games=8 completed=8 moves=448 score=0.250 CI=[0.046,0.699] sha=d7c6bb8
-easy-vs-hard: games=8 completed=8 moves=448 score=0.250 CI=[0.046,0.699] sha=d7c6bb8
-eval-full-vs-basic: games=8 completed=8 moves=448 score=0.500 CI=[0.150,0.850] sha=d7c6bb8
-fixed-time-150ms: games=8 completed=8 moves=448 score=0.250 CI=[0.046,0.699] sha=d7c6bb8
-node-budget-20k: games=4 completed=4 moves=230 score=0.500 CI=[0.095,0.905] sha=d7c6bb8
-random-100: games=100 completed=100 moves=5998 score=0.510 CI=[0.376,0.643] sha=d7c6bb8
-tt-vs-nott: games=8 completed=8 moves=448 score=0.500 CI=[0.150,0.850] sha=d7c6bb8
+depth-4-vs-6: games=8 strength=8 excluded=0 moves=448 score=0.250 CI=[0.046,0.699] sha=6ae6e01
+easy-vs-hard: games=8 strength=8 excluded=0 moves=448 score=0.250 CI=[0.046,0.699] sha=6ae6e01
+eval-full-vs-basic: games=8 strength=8 excluded=0 moves=448 score=0.500 CI=[0.150,0.850] sha=6ae6e01
+fixed-time-150ms: games=8 strength=8 excluded=0 moves=448 score=0.375 CI=[0.092,0.781] sha=6ae6e01
+node-budget-20k: games=4 strength=4 excluded=0 moves=230 score=0.500 CI=[0.095,0.905] sha=6ae6e01
+random-100: games=100 strength=100 excluded=0 moves=5998 score=0.510 CI=[0.376,0.643] sha=6ae6e01
+tt-vs-nott: games=8 strength=8 excluded=0 moves=448 score=0.500 CI=[0.150,0.850] sha=6ae6e01
 version: 1.4.0
 errors: none
-metric recomputation errors: none

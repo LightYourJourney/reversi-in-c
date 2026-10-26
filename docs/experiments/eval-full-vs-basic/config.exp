@@ -5,5 +5,5 @@ games 8
 openings 2
 opening-ply 4
 max-plies 100
-engine-a kind=search difficulty=hard depth=5 time=2000 nodes=0 tt=on endgame=off label=FullEval
-engine-b kind=search difficulty=medium depth=5 time=2000 nodes=0 tt=on endgame=off label=BasicEval
+engine-a kind=search difficulty=hard depth=5 time=10000 nodes=0 tt=on endgame=off label=FullEval
+engine-b kind=search difficulty=medium depth=5 time=10000 nodes=0 tt=on endgame=off label=BasicEval
