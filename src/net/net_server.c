@@ -54,8 +54,7 @@ typedef socklen_t NetSockLen;
 typedef enum ConnectionState {
     CONNECTION_FREE = 0,
     CONNECTION_HANDSHAKE,
-    CONNECTION_OPEN,
-    CONNECTION_CLOSING
+    CONNECTION_OPEN
 } ConnectionState;
 
 typedef struct ServerConnection {
@@ -494,6 +493,7 @@ static void start_game(NetServer *server, int room_index)
     room->result = GAME_RESULT_ONGOING;
     room->playing = true;
     room->finished = false;
+    room->finish_status[0] = '\0';
     room->move_deadline = now_ms() + (uint64_t)server->config.move_timeout_ms;
     room_send_state(server, room, true);
     room_send_room(server, room, 0);

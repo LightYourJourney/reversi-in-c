@@ -16,7 +16,7 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
   大厅、桌面/Web、版本化协议、测试与报告）；`NETWORK_ARCHITECTURE.md`、
   `NETWORK_PROTOCOL.md`、`NETWORK_SECURITY.md`、`ARCHITECTURE.md`、
   `TESTING.md`。
-- 代码：`git diff be5b90d...HEAD`（35 个文件，+6284/−27，审计前）；
+- 代码：`git diff be5b90d...dfe2d33`（38 个文件，+6544/−36，审计前）；
   `src/net/*`、`server/main.c`、`src/platform/web/net_client_web.c`、
   `src/ui/net_view.*`、`src/app/app.c` 网络路径、`src/core/match.*`、
   `CMakeLists.txt`、`.github/workflows/ci.yml`。
@@ -73,11 +73,12 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 
 1. **终局快照**（`src/net/net_protocol.c`）：`result != O` 时只校验棋盘
    合法性、回合与结果枚举，由服务端权威决定胜负；`ongoing` 仍要求本地
-   一致性。`GAMEOVER` 应用结果并标记脏状态。`app_build_net_match` 返回
-   `bool`，仅在同步成功时进入对局。
+   一致性。`app_build_net_match` 返回 `bool`，仅在同步成功时进入对局。
+   （`GAMEOVER` 应用结果并标记脏状态在此前提交 `83cbbf7` 已完成。）
 2. **延迟关闭**（`src/net/net_server.c`）：新增 `closing` 标志与
-   `connection_close_pending`，在 poll 末尾统一关闭；先刷新排队输出，
-   保证 `rate_limited` 等错误送达；广播期间的发送失败不再重入房间。
+   `connection_close_pending`，在 poll 末尾统一关闭；正常可写时先刷新
+   排队输出，使 `rate_limited` 等错误送达（socket 持续不可写时仍可能
+   丢弃，见 §5）；广播期间的发送失败不再重入房间。
 3. **结束原因**：`ServerRoom.finish_status` 记录真实原因，重连快照回放
    正确的 `status`。
 4. **Web 状态序号**：`_Static_assert` 锁定 `NetClientStatus` 序号。
@@ -85,7 +86,7 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 6. **测试**：新增终局快照协议用例；限速（45 条突发 → `rate_limited`
    先送达）、重连到期判负、第三名玩家 `room_full`、重连进已结束房间
    （`finished` + 真实 `resign` 原因）用例。计数：`net.protocol` 28→33，
-   `net.server` 663→709。
+   `net.server` 663→713（另含重连到期后用旧令牌重连被拒、限速后连接关闭）。
 
 未做的重构：重复的 `now_ms`/三元式/测试 sleep、CMake 测试块合并、
 `NetMessage` 数据团块。均记录为可维护性事项，不改变行为。
@@ -105,12 +106,13 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | GitHub Actions | 运行 `40452178342`（提交 `abf182d`） | 9/9 作业 PASS：Linux/Windows/macOS Debug 26/26；ASan+UBSan 26/26 与 Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 
 断言计数（本机实跑）：`core.match` 1011、`net.protocol` 33、
-`net.ws` 20,026、`net.server` 709、`net.client` 26、`net.session` 29。
+`net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 29。
 
 关键证据：
 
 - 回滚超时判负到旧逻辑，新增用例失败（2 项），恢复后 PASS——测试非假阳性。
-- 限速用例验证错误在连接关闭前送达（延迟关闭修复的直接证据）。
+- 限速用例验证错误在连接关闭前送达，并断言随后连接被关闭（延迟关闭
+  修复的直接证据；仅覆盖 socket 可写的正常路径）。
 - 重连进已结束房间收到 `room status=finished`、终局 `state` 与
   `gameover status=resign`。
 
@@ -140,13 +142,19 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 4. **公网部署/DoS/NAT/防火墙**：未部署、未测试（按约束禁止）。
 5. **服务端资源边界**：连接上限（`server_full`）、握手超时、空闲超时、
    房间 TTL 未写成自动化测试 —— NOT TESTED（逻辑实读，未执行边界）。
+   重连窗口到期判负与旧令牌拒绝已测；重连成功的客户端路径由
+   `net.client` 覆盖；会话层重连见 `net.session` 的断线恢复逻辑（无独立用例）。
 6. **并发**：TSan 仅本机手动运行 net.client/net.session，未进 CI；
    服务端单线程无共享状态，但长时间抖动未压测。
 7. **`message_too_large`** 分支不可达：WS 帧上限 = 消息上限，超长帧直接
    触发 WS 错误并关闭；协议错误码保留但永不发送。
-8. **UI 交互自动化**：大厅/网络 HUD 仅渲染冒烟，无点击回归。
-9. **在线终局导入 Lab** 未实现。
-10. **日志**：stderr 无轮转/结构化；令牌未记录（代码审查确认）。
+8. **重入修复未被饱和测试**：16 KB 发送队列溢出路径没有自动化用例
+   （测试会污染后续状态），只靠代码审查与延迟关闭的单元行为验证。
+9. **在线终局入屏无自动化测试**：`app_build_net_match` 成功门控依赖 GUI
+   交互，`app.net` 仅渲染大厅；协议/会话/匹配层有单测。
+10. **UI 交互自动化**：大厅/网络 HUD 仅渲染冒烟，无点击回归。
+11. **在线终局导入 Lab** 未实现。
+12. **日志**：stderr 无轮转/结构化；令牌未记录（代码审查确认）。
 
 ## 6. 是否达到验收标准
 

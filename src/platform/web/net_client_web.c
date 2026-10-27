@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The EM_JS callbacks pass NetClientStatus ordinals as 2/3/4/5. */
+/* The EM_JS callbacks pass Connect/Disconnected/Failed as 2/3/4. */
 _Static_assert(NET_CLIENT_CONNECTING == 1, "web status ordinals changed");
 _Static_assert(NET_CLIENT_CONNECTED == 2, "web status ordinals changed");
 _Static_assert(NET_CLIENT_DISCONNECTED == 3, "web status ordinals changed");

@@ -40,6 +40,7 @@ typedef struct TestClient {
     NetWsParser parser;
     uint8_t input[8192];
     size_t input_length;
+    bool closed;
     uint64_t rng;
     char token[REVERSI_NET_TOKEN_LEN + 1];
 } TestClient;
@@ -160,7 +161,11 @@ static void test_read_available(TestClient *client)
     for (;;) {
         const int read = (int)recv(client->socket, (char *)buffer,
                                    (int)sizeof(buffer), 0);
-        if (read <= 0) {
+        if (read == 0) {
+            client->closed = true;
+            return;
+        }
+        if (read < 0) {
             return;
         }
         if (client->input_length + (size_t)read > sizeof(client->input)) {
@@ -222,6 +227,26 @@ static bool client_next(NetServer *server, TestClient *client,
         }
     }
     return false;
+}
+
+static bool test_wait_closed(NetServer *server, TestClient *client,
+                             int timeout_ms)
+{
+    for (int elapsed = 0; elapsed < timeout_ms; elapsed += 2) {
+        net_server_poll(server, 1);
+        if (client->closed) {
+            return true;
+        }
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(client->socket, &read_set);
+        struct timeval timeout = {.tv_sec = 0, .tv_usec = 2000};
+        if (select((int)client->socket + 1, &read_set, NULL, NULL,
+                   &timeout) > 0) {
+            test_read_available(client);
+        }
+    }
+    return client->closed;
 }
 
 static bool client_expect(NetServer *server, TestClient *client,
@@ -764,6 +789,7 @@ static void test_rate_limit(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ERROR,
                                              &message, 2000));
     REVERSI_TEST_ASSERT(stats, strcmp(message.error, "rate_limited") == 0);
+    REVERSI_TEST_ASSERT(stats, test_wait_closed(server, &a, 2000));
     test_close(&a);
     net_server_destroy(server);
 }
@@ -787,6 +813,8 @@ static void test_rejoin_timeout(TestStats *stats)
     test_send(&a, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_WELCOME,
                                              &message, 2000));
+    char token[REVERSI_NET_TOKEN_LEN + 1];
+    snprintf(token, sizeof(token), "%s", message.token);
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOM,
                                              &message, 2000));
     NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
@@ -813,6 +841,17 @@ static void test_rejoin_timeout(TestStats *stats)
                                              &over, 3000));
     REVERSI_TEST_ASSERT(stats, over.result == GAME_RESULT_WHITE_WIN);
     REVERSI_TEST_ASSERT(stats, strcmp(over.status, "disconnect") == 0);
+
+    /* After the window closes the old token must be rejected. */
+    TestClient a2;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a2, port));
+    NetMessage rejoin = {.type = NET_MSG_REJOIN};
+    snprintf(rejoin.token, sizeof(rejoin.token), "%s", token);
+    test_send(&a2, &rejoin);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a2, NET_MSG_ERROR,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.error, "rejoin_failed") == 0);
+    test_close(&a2);
 
     test_close(&b);
     net_server_destroy(server);
@@ -858,7 +897,7 @@ static void test_rejoin_finished(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
                               .move_timeout_ms = 30000,
-                              .reconnect_timeout_ms = 2000, .quiet = true};
+                              .reconnect_timeout_ms = 5000, .quiet = true};
     NetServer *server = net_server_create(&config);
     char error[128];
     REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));

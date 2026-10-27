@@ -55,7 +55,7 @@ ARCHITECTURE/TESTING。
 | GitHub Actions `40452178342` | 9/9 作业 PASS：Linux/Windows（MSVC）/macOS Debug 各 26/26；ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 | `net.protocol` | 33 次断言：字段/版本/方向/棋盘/错误/终局快照 |
 | `net.ws` | 20,026 次断言：握手、掩码、长度、分片、ping、20k 随机帧 |
-| `net.server` | 709 次断言：完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速、重连超时、满房、终局重连、模糊 |
+| `net.server` | 713 次断言：完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 |
 | `net.client` | 26 次断言：连接、创建/加入/ready/落子、断线重连 |
 | `net.session` | 29 次断言：会话相位、颜色、seq、回合、落子、投降终局 |
 | Emscripten Release | 构建通过（主 wasm 385 KB） |
@@ -78,9 +78,9 @@ ARCHITECTURE/TESTING。
 - 断线重连：座位保留、令牌轮换、对手收到 disconnected/reconnected。
 - 服务端重启：旧房间不存在，新客户端收到 `room_not_found`。
 - 模糊：20k 随机帧不崩溃；ASan 无报告。
-- 限速：突发 45 条消息触发 `rate_limited`，错误先送达再关闭连接。
-- 重连超时：座位保留窗口到期后对手获胜（`status=disconnect`）；重连到已结束
-  房间收到 `finished` 快照与真实结束原因。
+- 限速：突发 45 条消息触发 `rate_limited`，错误送达后连接关闭。
+- 重连超时：座位保留窗口到期后对手获胜（`status=disconnect`），旧令牌重连
+  被拒；重连到已结束房间收到 `finished` 快照与真实结束原因。
 - 满房：第三名玩家加入双人等待房间收到 `room_full`。
 
 ## 6. 已知限制

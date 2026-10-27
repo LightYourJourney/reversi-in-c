@@ -49,7 +49,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
 | net.protocol | reversi_net_protocol_tests | 33 | 协议字段/版本/方向/棋盘/错误/终局快照 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
-| net.server | reversi_net_server_tests | 709 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速、重连超时、满房、终局重连、模糊 | PASS |
+| net.server | reversi_net_server_tests | 713 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 | PASS |
 | net.client | reversi_net_client_tests | 26 | 连接、创建/加入/ready/落子、断线重连 | PASS |
 | net.session | reversi_net_session_tests | 29 | 会话相位、颜色、seq、回合、落子、投降终局 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
@@ -310,7 +310,9 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
 - `net.protocol` / `net.ws`：字段与帧的严格解析、掩码方向、分片、长度上限、
   20k 随机帧模糊。
 - `net.server`：两名独立 TCP 客户端完成整局；非法/重复/越权；断线重连；
-  房主离开；多房间并发；服务端重启；随机帧不崩溃。
+  房主离开；多房间并发；服务端重启；双向落子超时；限速（错误先送达后
+  关闭）；重连到期判负与旧令牌拒绝；满房；重连进已结束房间（finished +
+  真实结束原因）；随机帧不崩溃。
 - `net.client` / `net.session`：桌面线程客户端与浏览器共用会话逻辑；创建/
   加入/ready/落子/seq。
 - `app.net`：Online 大厅渲染 20 帧。
