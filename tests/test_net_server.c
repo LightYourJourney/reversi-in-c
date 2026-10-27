@@ -636,7 +636,7 @@ static void test_server_restart(TestStats *stats)
 static void test_move_timeout(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
-                              .move_timeout_ms = 100,
+                              .move_timeout_ms = 300,
                               .reconnect_timeout_ms = 5000, .quiet = true};
     NetServer *server = net_server_create(&config);
     char error[128];
@@ -731,6 +731,12 @@ static void test_move_timeout(TestStats *stats)
     NetMessage late_d;
     REVERSI_TEST_ASSERT(stats, pump_both(server, &c, &d, &late_c, &late_d,
                                          NET_MSG_GAMEOVER, 3000));
+    if (late_c.result != GAME_RESULT_BLACK_WIN
+        || late_d.result != GAME_RESULT_BLACK_WIN) {
+        fprintf(stderr, "white-stall timeout: c=%d/%s d=%d/%s\n",
+                (int)late_c.result, late_c.status,
+                (int)late_d.result, late_d.status);
+    }
     REVERSI_TEST_ASSERT(stats, late_c.result == GAME_RESULT_BLACK_WIN);
     REVERSI_TEST_ASSERT(stats, late_d.result == GAME_RESULT_BLACK_WIN);
 
