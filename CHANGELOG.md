@@ -51,7 +51,7 @@
 ### Verified
 
 - Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
-- GitHub Actions `40452178342`：三平台 Debug 各 26/26，ASan+UBSan
+- GitHub Actions `40479705658`：三平台 Debug 各 26/26，ASan+UBSan
   26/26，Xvfb GUI 4/4，三平台打包与 Linux 包验收全部通过。
 - 两名独立客户端完成整局，服务端与本地重放状态一致；非法、重复、断线
   重连、多房间、服务端重启与 20k 随机帧通过。

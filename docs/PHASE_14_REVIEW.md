@@ -103,7 +103,7 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | TSan（会话） | `clang -fsanitize=thread ... test_net_session.c` | PASS，无数据竞争报告 |
 | TSan（客户端） | 同上，`test_net_client.c` ×5 | PASS |
 | Web | `cmake --build build-web` | PASS（`reversi.wasm` 394,629 B） |
-| GitHub Actions | 运行 `40452178342`（提交 `abf182d`） | 9/9 作业 PASS：Linux/Windows/macOS Debug 26/26；ASan+UBSan 26/26 与 Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
+| GitHub Actions | 运行 `40479705658`（提交 `37d219d`） | 9/9 作业 PASS：Linux/Windows/macOS Debug 26/26；ASan+UBSan 26/26 与 Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 
 断言计数（本机实跑）：`core.match` 1011、`net.protocol` 33、
 `net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 29。
