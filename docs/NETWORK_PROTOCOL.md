@@ -64,7 +64,8 @@ S: state seq=1 turn=W board=<64> last=d3 pass=0 result=O
 - 重复/乱序请求返回 `stale_state`（或 `not_your_turn`）；客户端必须以
   服务端 `state` 为准，不做本地胜负判定。
 - 落子导致对手无着法时，`state.pass=1`；终局时 `state.result` 非 `O`，
-  随后发送 `gameover`。
+  随后发送 `gameover`。超时/投降的终局棋盘可能仍有可落子点，客户端接受
+  服务端的终局结果，不以本地一致性规则拒绝。
 - 每步 120 秒超时；超时方判负。
 
 ## 5. 断线、重连与结束

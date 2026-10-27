@@ -11,6 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The EM_JS callbacks pass NetClientStatus ordinals as 2/3/4/5. */
+_Static_assert(NET_CLIENT_CONNECTING == 1, "web status ordinals changed");
+_Static_assert(NET_CLIENT_CONNECTED == 2, "web status ordinals changed");
+_Static_assert(NET_CLIENT_DISCONNECTED == 3, "web status ordinals changed");
+_Static_assert(NET_CLIENT_FAILED == 4, "web status ordinals changed");
+
 #define REVERSI_NET_WEB_QUEUE 32
 
 typedef struct WebQueueEntry {

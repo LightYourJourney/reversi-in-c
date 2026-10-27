@@ -747,6 +747,186 @@ static void test_move_timeout(TestStats *stats)
     net_server_destroy(server);
 }
 
+static void test_rate_limit(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    TestClient a;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a,
+                                            net_server_port(server)));
+    for (int i = 0; i < 45; ++i) {
+        test_send(&a, &(NetMessage){.type = NET_MSG_PING});
+    }
+    NetMessage message;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ERROR,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.error, "rate_limited") == 0);
+    test_close(&a);
+    net_server_destroy(server);
+}
+
+static void test_rejoin_timeout(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .move_timeout_ms = 30000,
+                              .reconnect_timeout_ms = 100, .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    TestClient a;
+    TestClient b;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a, port));
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &b, port));
+
+    NetMessage message;
+    test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&a, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_WELCOME,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOM,
+                                             &message, 2000));
+    NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
+    snprintf(join.code, sizeof(join.code), "%s", message.code);
+    test_send(&b, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&b, &join);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_WELCOME,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_ROOM,
+                                             &message, 2000));
+    test_send(&a, &(NetMessage){.type = NET_MSG_READY});
+    test_send(&b, &(NetMessage){.type = NET_MSG_READY});
+    NetMessage start_a;
+    NetMessage start_b;
+    REVERSI_TEST_ASSERT(stats, pump_both(server, &a, &b, &start_a, &start_b,
+                                         NET_MSG_START, 3000));
+
+    test_close(&a);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_OPPONENT,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.status, "disconnected") == 0);
+    NetMessage over;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_GAMEOVER,
+                                             &over, 3000));
+    REVERSI_TEST_ASSERT(stats, over.result == GAME_RESULT_WHITE_WIN);
+    REVERSI_TEST_ASSERT(stats, strcmp(over.status, "disconnect") == 0);
+
+    test_close(&b);
+    net_server_destroy(server);
+}
+
+static void test_room_full(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    TestClient a;
+    TestClient b;
+    TestClient c;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a, port));
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &b, port));
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &c, port));
+
+    NetMessage message;
+    test_send(&a, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOM,
+                                             &message, 2000));
+    NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
+    snprintf(join.code, sizeof(join.code), "%s", message.code);
+    test_send(&b, &join);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_ROOM,
+                                             &message, 2000));
+    join.color = STONE_BLACK;
+    test_send(&c, &join);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &c, NET_MSG_ERROR,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.error, "room_full") == 0);
+
+    test_close(&a);
+    test_close(&b);
+    test_close(&c);
+    net_server_destroy(server);
+}
+
+static void test_rejoin_finished(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .move_timeout_ms = 30000,
+                              .reconnect_timeout_ms = 2000, .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    TestClient a;
+    TestClient b;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a, port));
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &b, port));
+
+    NetMessage message;
+    test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&a, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_WELCOME,
+                                             &message, 2000));
+    char token[REVERSI_NET_TOKEN_LEN + 1];
+    snprintf(token, sizeof(token), "%s", message.token);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOM,
+                                             &message, 2000));
+    NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
+    snprintf(join.code, sizeof(join.code), "%s", message.code);
+    test_send(&b, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&b, &join);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_WELCOME,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_ROOM,
+                                             &message, 2000));
+    test_send(&a, &(NetMessage){.type = NET_MSG_READY});
+    test_send(&b, &(NetMessage){.type = NET_MSG_READY});
+    NetMessage start_a;
+    NetMessage start_b;
+    REVERSI_TEST_ASSERT(stats, pump_both(server, &a, &b, &start_a, &start_b,
+                                         NET_MSG_START, 3000));
+
+    test_close(&a);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_OPPONENT,
+                                             &message, 2000));
+    test_send(&b, &(NetMessage){.type = NET_MSG_RESIGN});
+    NetMessage over_b;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_GAMEOVER,
+                                             &over_b, 2000));
+    REVERSI_TEST_ASSERT(stats, over_b.result == GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, strcmp(over_b.status, "resign") == 0);
+
+    TestClient a2;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a2, port));
+    NetMessage rejoin = {.type = NET_MSG_REJOIN};
+    snprintf(rejoin.token, sizeof(rejoin.token), "%s", token);
+    test_send(&a2, &rejoin);
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a2, NET_MSG_WELCOME,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a2, NET_MSG_ROOM,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.status, "finished") == 0);
+    NetMessage state;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a2, NET_MSG_STATE,
+                                             &state, 2000));
+    REVERSI_TEST_ASSERT(stats, state.result == GAME_RESULT_BLACK_WIN);
+    NetMessage over;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a2, NET_MSG_GAMEOVER,
+                                             &over, 2000));
+    REVERSI_TEST_ASSERT(stats, over.result == GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, strcmp(over.status, "resign") == 0);
+
+    test_close(&a2);
+    test_close(&b);
+    net_server_destroy(server);
+}
+
 int main(void)
 {
 #if !defined(_WIN32)
@@ -759,6 +939,10 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_multi_room);
     REVERSI_RUN_TEST(&stats, test_server_restart);
     REVERSI_RUN_TEST(&stats, test_move_timeout);
+    REVERSI_RUN_TEST(&stats, test_rate_limit);
+    REVERSI_RUN_TEST(&stats, test_rejoin_timeout);
+    REVERSI_RUN_TEST(&stats, test_room_full);
+    REVERSI_RUN_TEST(&stats, test_rejoin_finished);
     REVERSI_RUN_TEST(&stats, test_fuzz_survives);
     return reversi_test_summary(&stats, "net.server");
 }

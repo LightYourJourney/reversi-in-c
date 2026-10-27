@@ -100,6 +100,20 @@ static void test_board_validation(TestStats *stats)
     board[0] = '0';
     REVERSI_TEST_ASSERT(stats, !net_protocol_state_from_board(
         board, STONE_EMPTY, GAME_RESULT_ONGOING, &state));
+
+    /* An authoritative final may still have moves on the board. */
+    GameState live;
+    game_init(&live);
+    REVERSI_TEST_ASSERT(stats, game_apply_move(&live, (Move){5, 3}));
+    char live_board[REVERSI_BOARD_CELL_COUNT + 1];
+    REVERSI_TEST_ASSERT(stats, net_protocol_board_from_state(
+        &live, live_board));
+    GameState terminal;
+    REVERSI_TEST_ASSERT(stats, net_protocol_state_from_board(
+        live_board, live.current_player, GAME_RESULT_BLACK_WIN, &terminal));
+    REVERSI_TEST_ASSERT(stats, terminal.result == GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, !net_protocol_state_from_board(
+        live_board, live.current_player, (GameResult)99, &terminal));
 }
 
 int main(void)

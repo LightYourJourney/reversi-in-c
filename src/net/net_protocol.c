@@ -548,9 +548,17 @@ bool net_protocol_state_from_board(const char *board, Stone turn,
     }
     state.current_player = turn;
     state.result = result;
-    if (!game_is_consistent(&state)) {
+    if (result == GAME_RESULT_ONGOING) {
+        if (!game_is_consistent(&state)) {
+            return false;
+        }
+    } else if (result != GAME_RESULT_BLACK_WIN
+               && result != GAME_RESULT_WHITE_WIN
+               && result != GAME_RESULT_DRAW) {
         return false;
     }
+    /* Timeout and resignation end the game with moves still on the board,
+     * so terminal snapshots are accepted on the server's authority. */
     *out = state;
     return true;
 }

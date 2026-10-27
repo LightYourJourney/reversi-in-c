@@ -60,6 +60,7 @@ typedef enum ConnectionState {
 
 typedef struct ServerConnection {
     ConnectionState state;
+    bool closing;
     NetSocket socket;
     uint8_t input[REVERSI_NET_SERVER_READ_CAP];
     size_t input_length;
@@ -95,6 +96,7 @@ typedef struct ServerRoom {
     bool has_last;
     bool pass;
     GameResult result;
+    char finish_status[16];
     uint64_t move_deadline;
     uint64_t expires;
 } ServerRoom;
@@ -194,7 +196,7 @@ static int socket_read(NetSocket socket, uint8_t *buffer, size_t capacity)
     const int error = WSAGetLastError();
     return (error == WSAEWOULDBLOCK) ? -1 : 0;
 #else
-    return (errno == EAGAIN || errno == EWOULDBLOCK) ? -1 : 0;
+    return (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? -1 : 0;
 #endif
 }
 
@@ -220,12 +222,13 @@ static int socket_write(NetSocket socket, const uint8_t *data, size_t length)
 static void detach_player(NetServer *server, int room_index, int seat,
                           const char *status, bool forfeit);
 
-static void connection_schedule_close(NetServer *server, int index)
+static void connection_close_now(NetServer *server, int index)
 {
     ServerConnection *connection = &server->connections[index];
     if (connection->state == CONNECTION_FREE) {
         return;
     }
+    connection->closing = false;
     if (connection->room >= 0) {
         ServerRoom *room = &server->rooms[connection->room];
         if (room->used && connection->seat >= 0
@@ -246,6 +249,27 @@ static void connection_schedule_close(NetServer *server, int index)
     connection->output_length = 0;
     connection->room = -1;
     connection->seat = -1;
+}
+
+/* Defers the close to the end of the poll so a failed send mid-broadcast
+ * cannot close the room while its sender is still iterating over it. */
+static void connection_schedule_close(NetServer *server, int index)
+{
+    ServerConnection *connection = &server->connections[index];
+    if (connection->state == CONNECTION_FREE || connection->closing) {
+        return;
+    }
+    connection->closing = true;
+}
+
+static void connection_close_pending(NetServer *server)
+{
+    for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
+        if (server->connections[i].state != CONNECTION_FREE
+            && server->connections[i].closing) {
+            connection_close_now(server, i);
+        }
+    }
 }
 
 static bool connection_queue(NetServer *server, int index,
@@ -440,6 +464,7 @@ static void room_finish(NetServer *server, int room_index, GameResult result,
     room->finished = true;
     room->result = result;
     room->game.result = result;
+    snprintf(room->finish_status, sizeof(room->finish_status), "%s", status);
     room->expires = now_ms() + REVERSI_NET_SERVER_ROOM_DONE_MS;
     room_send_state(server, room, false);
     NetMessage over = {.type = NET_MSG_GAMEOVER, .result = result};
@@ -570,7 +595,9 @@ static void send_room_snapshot(NetServer *server, ServerRoom *room, int seat)
         if (room->finished) {
             NetMessage over = {.type = NET_MSG_GAMEOVER,
                                .result = room->result};
-            snprintf(over.status, sizeof(over.status), "normal");
+            snprintf(over.status, sizeof(over.status), "%s",
+                     room->finish_status[0] != '\0'
+                         ? room->finish_status : "normal");
             send_message(server, room->players[seat].connection, &over);
         }
     }
@@ -816,7 +843,7 @@ static void dispatch(NetServer *server, int connection, NetMessage *message)
 static void process_frames(NetServer *server, int index)
 {
     ServerConnection *connection = &server->connections[index];
-    while (connection->state == CONNECTION_OPEN
+    while (connection->state == CONNECTION_OPEN && !connection->closing
            && connection->input_length > 0) {
         NetWsFrame frame;
         size_t consumed = 0;
@@ -862,6 +889,9 @@ static void process_frames(NetServer *server, int index)
                 } else {
                     dispatch(server, index, &message);
                 }
+            }
+            if (connection->closing) {
+                return;
             }
         } else if (result == NET_WS_PING) {
             uint8_t pong[160];
@@ -958,7 +988,7 @@ static void read_connection(NetServer *server, int index)
         } else {
             process_frames(server, index);
         }
-        if (connection->state == CONNECTION_FREE) {
+        if (connection->state == CONNECTION_FREE || connection->closing) {
             return;
         }
         if (connection->input_length == sizeof(connection->input)) {
@@ -1180,7 +1210,7 @@ void net_server_poll(NetServer *server, int timeout_ms)
     NetSocket maximum = server->listener;
     for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
         ServerConnection *connection = &server->connections[i];
-        if (connection->state == CONNECTION_FREE) {
+        if (connection->state == CONNECTION_FREE || connection->closing) {
             continue;
         }
         FD_SET(connection->socket, &read_set);
@@ -1203,7 +1233,7 @@ void net_server_poll(NetServer *server, int timeout_ms)
         }
         for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
             ServerConnection *connection = &server->connections[i];
-            if (connection->state == CONNECTION_FREE) {
+            if (connection->state == CONNECTION_FREE || connection->closing) {
                 continue;
             }
             if (FD_ISSET(connection->socket, &read_set)) {
@@ -1221,6 +1251,7 @@ void net_server_poll(NetServer *server, int timeout_ms)
         }
     }
     server_timers(server);
+    connection_close_pending(server);
 }
 
 void net_server_destroy(NetServer *server)

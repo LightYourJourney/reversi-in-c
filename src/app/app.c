@@ -167,7 +167,7 @@ static void app_handle_saves_action(App *app, SavesAction action);
 static void app_maybe_record_result(App *app);
 static void app_play_result_sound(const App *app);
 static void app_handle_net_action(App *app, NetViewAction action);
-static void app_build_net_match(App *app);
+static bool app_build_net_match(App *app);
 static void app_update_net_game(App *app, const UiInput *input, float dt);
 static void app_draw_net_hud(const App *app);
 
@@ -1145,7 +1145,7 @@ static void app_handle_net_action(App *app, NetViewAction action)
     }
 }
 
-static void app_build_net_match(App *app)
+static bool app_build_net_match(App *app)
 {
     NetSession *net = app->net;
     MatchConfig config = {
@@ -1155,7 +1155,7 @@ static void app_build_net_match(App *app)
     };
     if (!match_sync_network(&app->match, &config, &net->game, net->last,
                             net->has_last, net->pass)) {
-        return;
+        return false;
     }
     app->stats_recorded = true;
     app->last_move_age = 0.0f;
@@ -1163,6 +1163,7 @@ static void app_build_net_match(App *app)
     app->net_move_pending = false;
     net->state_dirty = false;
     ui_animation_reset(&app->animation);
+    return true;
 }
 
 static void app_update_net_game(App *app, const UiInput *input, float dt)
@@ -1183,8 +1184,7 @@ static void app_update_net_game(App *app, const UiInput *input, float dt)
     }
     if (net->state_dirty || net->seq != app->net_state_seq) {
         const int previous = app->net_state_seq;
-        app_build_net_match(app);
-        if (previous >= 0 && net->seq > previous) {
+        if (app_build_net_match(app) && previous >= 0 && net->seq > previous) {
             audio_play(AUDIO_CUE_PLACE);
         }
     }
@@ -1706,9 +1706,10 @@ static void app_update(App *app, const UiInput *input, float dt)
             && (app->net->phase == NET_SESSION_PLAYING
                 || app->net->phase == NET_SESSION_FINISHED)
             && !app->net_mode) {
-            app_build_net_match(app);
-            app->net_mode = true;
-            app_request_screen(app, APP_SCREEN_GAME);
+            if (app_build_net_match(app)) {
+                app->net_mode = true;
+                app_request_screen(app, APP_SCREEN_GAME);
+            }
         }
         break;
     }
