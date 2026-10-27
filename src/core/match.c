@@ -138,9 +138,31 @@ bool match_sync_network(Match *match, const MatchConfig *config,
                         const GameState *state, Move last, bool has_last,
                         bool pass)
 {
-    Match synced;
-    if (match == NULL || !match_initialize(&synced, config, state)) {
+    if (match == NULL || state == NULL || !config_is_valid(config)
+        || !board_is_valid(&state->board)
+        || !stone_is_player(state->current_player)
+        || (pass && !has_last)) {
         return false;
+    }
+    Match synced;
+    if (state->result == GAME_RESULT_ONGOING) {
+        if (!match_initialize(&synced, config, state)) {
+            return false;
+        }
+    } else {
+        /* A timeout or resignation ends the game without filling the board,
+         * so the local consistency rule does not apply; the server is the
+         * authority for the result. */
+        if (state->result != GAME_RESULT_BLACK_WIN
+            && state->result != GAME_RESULT_WHITE_WIN
+            && state->result != GAME_RESULT_DRAW) {
+            return false;
+        }
+        synced = (Match){0};
+        synced.config = *config;
+        synced.state = *state;
+        synced.phase = MATCH_PHASE_GAME_OVER;
+        history_init(&synced.history, state);
     }
     synced.last_move = has_last ? last : (Move){0, 0};
     synced.has_last_move = has_last;

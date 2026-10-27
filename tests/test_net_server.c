@@ -688,8 +688,56 @@ static void test_move_timeout(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, strcmp(over_a.status, "timeout") == 0);
     REVERSI_TEST_ASSERT(stats, strcmp(over_b.status, "timeout") == 0);
 
+    /* White (seat 1) stalls after Black's move: Black must win. */
+    TestClient c;
+    TestClient d;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &c, port));
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &d, port));
+    REVERSI_TEST_ASSERT(stats, test_send(&c, &(NetMessage){
+        .type = NET_MSG_HELLO, .version = 1}));
+    REVERSI_TEST_ASSERT(stats, test_send(&c, &(NetMessage){
+        .type = NET_MSG_CREATE, .color = STONE_BLACK}));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &c, NET_MSG_WELCOME,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &c, NET_MSG_ROOM,
+                                             &message, 2000));
+    NetMessage join2 = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
+    snprintf(join2.code, sizeof(join2.code), "%s", message.code);
+    REVERSI_TEST_ASSERT(stats, test_send(&d, &(NetMessage){
+        .type = NET_MSG_HELLO, .version = 1}));
+    REVERSI_TEST_ASSERT(stats, test_send(&d, &join2));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &d, NET_MSG_WELCOME,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &d, NET_MSG_ROOM,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, test_send(&c, &(NetMessage){
+        .type = NET_MSG_READY}));
+    REVERSI_TEST_ASSERT(stats, test_send(&d, &(NetMessage){
+        .type = NET_MSG_READY}));
+    NetMessage start_c;
+    NetMessage start_d;
+    REVERSI_TEST_ASSERT(stats, pump_both(server, &c, &d, &start_c, &start_d,
+                                         NET_MSG_START, 3000));
+    const NetMessage move = {.type = NET_MSG_MOVE, .seq = 0,
+                             .last = {5, 3}, .has_last = true};
+    REVERSI_TEST_ASSERT(stats, test_send(&c, &move));
+    NetMessage state_c;
+    NetMessage state_d;
+    REVERSI_TEST_ASSERT(stats, pump_both(server, &c, &d, &state_c, &state_d,
+                                         NET_MSG_STATE, 3000));
+    net_server_poll(server, 200);
+    net_server_poll(server, 200);
+    NetMessage late_c;
+    NetMessage late_d;
+    REVERSI_TEST_ASSERT(stats, pump_both(server, &c, &d, &late_c, &late_d,
+                                         NET_MSG_GAMEOVER, 3000));
+    REVERSI_TEST_ASSERT(stats, late_c.result == GAME_RESULT_BLACK_WIN);
+    REVERSI_TEST_ASSERT(stats, late_d.result == GAME_RESULT_BLACK_WIN);
+
     test_close(&a);
     test_close(&b);
+    test_close(&c);
+    test_close(&d);
     net_server_destroy(server);
 }
 

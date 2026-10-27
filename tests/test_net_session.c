@@ -98,6 +98,14 @@ static void test_session_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, b->seq == 1);
     REVERSI_TEST_ASSERT(stats, b->game.current_player == b->color);
 
+    REVERSI_TEST_ASSERT(stats, net_session_resign(a));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, b,
+                                           NET_SESSION_FINISHED, 3000));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, b, a,
+                                           NET_SESSION_FINISHED, 3000));
+    REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_WHITE_WIN);
+    REVERSI_TEST_ASSERT(stats, b->game.result == GAME_RESULT_WHITE_WIN);
+
     net_session_destroy(a);
     net_session_destroy(b);
     net_server_destroy(server);

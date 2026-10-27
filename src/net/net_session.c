@@ -137,6 +137,8 @@ static void on_message(void *context, const NetMessage *message)
         break;
     case NET_MSG_GAMEOVER:
         session->result = message->result;
+        session->game.result = message->result;
+        session->state_dirty = true;
         snprintf(session->reason, sizeof(session->reason), "%s",
                  message->status);
         session->phase = NET_SESSION_FINISHED;

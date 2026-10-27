@@ -1150,12 +1150,10 @@ static void server_timers(NetServer *server)
             if (!connected0 && !connected1) {
                 room_close(server, r, "abandoned");
             } else {
-                /* The player to move loses on the clock; when only one seat
-                 * is connected the absent opponent forfeits. */
+                /* The player to move loses on the clock. */
                 const int to_move =
                     room->players[0].color == room->game.current_player ? 0 : 1;
-                const int winner = connected0 && connected1 ? 1 - to_move
-                    : connected0 ? 0 : 1;
+                const int winner = 1 - to_move;
                 room_finish(server, r,
                             room->players[winner].color == STONE_BLACK
                                 ? GAME_RESULT_BLACK_WIN

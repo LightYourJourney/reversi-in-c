@@ -41,7 +41,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | core.game | reversi_game_tests | 115 | 合法/非法落子、自动 Pass、主动 Pass 限制、终局 | PASS |
 | core.random | reversi_random_tests | 557,924 | 500 局随机对局 + 独立合法性 oracle、不变量 | PASS |
 | core.history | reversi_history_tests | 124 | 快照、撤销/重做、分支截断、Pass/终局 | PASS |
-| core.match | reversi_match_tests | 999 | 状态机、暂停、重开、AI 回合、撤销/重做、恢复 | PASS |
+| core.match | reversi_match_tests | 1011 | 状态机、暂停、重开、AI 回合、撤销/重做、恢复 | PASS |
 | ai.core | reversi_ai_tests | 2,988 | 评估、搜索合法性、TT 一致性、取消、确定性、自动对局 | PASS |
 | ai.endgame | reversi_endgame_tests | 70 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
@@ -49,9 +49,9 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
 | net.protocol | reversi_net_protocol_tests | 28 | 协议字段/版本/方向/棋盘/错误 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
-| net.server | reversi_net_server_tests | 645 | 完整对局、非法、重复、重连、离开、多房间、重启、落子超时、模糊 | PASS |
+| net.server | reversi_net_server_tests | 663 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、模糊 | PASS |
 | net.client | reversi_net_client_tests | 26 | 连接、创建/加入/ready/落子、断线重连 | PASS |
-| net.session | reversi_net_session_tests | 24 | 会话相位、颜色、seq、回合、落子 | PASS |
+| net.session | reversi_net_session_tests | 29 | 会话相位、颜色、seq、回合、落子、投降终局 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |

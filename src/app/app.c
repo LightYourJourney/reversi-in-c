@@ -1212,9 +1212,12 @@ static void app_update_net_game(App *app, const UiInput *input, float dt)
         return;
     }
 
-    const GameViewAction action = game_view_update(
+    GameViewAction action = game_view_update(
         &app->game_view, &app->match, input, true, dt);
     /* The server owns the online game: no local pause or restart. */
+    if (action.type == GAME_VIEW_PAUSE || action.type == GAME_VIEW_RESTART) {
+        action.type = GAME_VIEW_NONE;
+    }
     app->game_view.pause.enabled = false;
     app->game_view.restart.enabled = false;
     if (action.type == GAME_VIEW_MOVE && !app->net_move_pending

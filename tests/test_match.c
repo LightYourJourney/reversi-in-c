@@ -595,6 +595,31 @@ static void test_sync_network(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, synced.last_mover == STONE_BLACK);
     REVERSI_TEST_ASSERT(stats, synced.last_pass.occurred);
     REVERSI_TEST_ASSERT(stats, synced.last_pass.player == STONE_WHITE);
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&synced));
+
+    Match opening;
+    REVERSI_TEST_ASSERT(stats, match_start(&opening, &config));
+    REVERSI_TEST_ASSERT(stats, match_sync_network(&synced, &config,
+                                                 &opening.state, (Move){0, 0},
+                                                 false, false));
+    REVERSI_TEST_ASSERT(stats, !synced.has_last_move);
+    REVERSI_TEST_ASSERT(stats, synced.last_mover == STONE_EMPTY);
+    REVERSI_TEST_ASSERT(stats, match_is_consistent(&synced));
+
+    /* Timeout/resign finals keep the board as it was; accept the result. */
+    GameState terminal = after;
+    terminal.result = GAME_RESULT_BLACK_WIN;
+    REVERSI_TEST_ASSERT(stats, match_sync_network(&synced, &config, &terminal,
+                                                 (Move){5, 3}, true, false));
+    REVERSI_TEST_ASSERT(stats, synced.phase == MATCH_PHASE_GAME_OVER);
+    REVERSI_TEST_ASSERT(stats, synced.state.result == GAME_RESULT_BLACK_WIN);
+
+    const Match before_invalid = synced;
+    REVERSI_TEST_ASSERT(stats, !match_sync_network(&synced, &config, &after,
+                                                   (Move){5, 3}, false, true));
+    REVERSI_TEST_ASSERT(stats,
+        game_state_equal(&synced.state, &before_invalid.state));
+    REVERSI_TEST_ASSERT(stats, synced.phase == before_invalid.phase);
 
     REVERSI_TEST_ASSERT(stats, !match_sync_network(NULL, &config, &after,
                                                    (Move){0, 0}, false, false));

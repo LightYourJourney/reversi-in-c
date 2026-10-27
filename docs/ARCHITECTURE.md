@@ -20,15 +20,19 @@
                               main
                                 │
                                app
-      ┌────────┬────────┬───────┼────────┬──────────┐
-      ▼        ▼        ▼       ▼        ▼          ▼
-     ui       ai     storage  settings  audio      core
-      │        │        │        │        │      (board/rules/game/
-      ▼        │        ▼        ▼        ▼       history/match)
+      ┌────────┬────────┬───────┼────────┬──────────┬────────┐
+      ▼        ▼        ▼       ▼        ▼          ▼        ▼
+     ui       ai     storage  settings  audio      core     net
+      │        │        │        │        │      (board/...)  │
+      │        │        │        │        │          ▲        │
+      ▼        │        ▼        ▼        ▼          └────────┘
    raylib      │       core    storage  raylib
                └────────┴────────┴────────┴──────────┘
                  （只依赖 core 的只读接口或数据结构）
 ```
+
+`ui` 只读 `NetSession` 状态（大厅与网络 HUD）；落子、离开等动作仍由 `app`
+调用 `net_session_*` 完成。
 
 强制规则：
 
@@ -41,8 +45,9 @@
    全部降级为空操作。
 6. **app 是唯一的组装根（composition root）**：负责创建、连接、销毁所有模块。
 7. 依赖关系只允许沿上图向下，不允许反向引用或跨层回调环。
-8. `ui` 只在编译期引用 `settings` 与 `storage/stats` 的数据结构（不链接持久化
-   库），用于绘制设置值与统计表；文件读写仍由 `app` 完成。
+8. `ui` 只在编译期引用 `settings`、`storage/stats` 的数据结构与 `NetSession`
+   只读状态（不链接持久化库、不发送网络消息），用于绘制设置值、统计表与
+   在线大厅；文件读写与网络动作仍由 `app` 完成。
 9. **对局状态只有一条写路径**：`match_*` 是唯一会改动 `Match`（含棋盘）的
    接口；UI 层只拿到 `const Match *`，无法直接写棋盘。
 
