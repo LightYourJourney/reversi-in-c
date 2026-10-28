@@ -56,7 +56,7 @@
 ### Verified
 
 - Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
-- GitHub Actions `40479705658`：三平台 Debug 各 26/26，ASan+UBSan
+- GitHub Actions `40667882210`：三平台 Debug 各 26/26，ASan+UBSan
   26/26，Xvfb GUI 4/4，三平台打包与 Linux 包验收全部通过。
 - 浏览器：两个隔离 Chromium 上下文经本地 HTTPS/WSS 完成建房/加入/落子/
   投降，双方进入 GAME/PLAYING/FINISHED 并一致判定黑胜。
