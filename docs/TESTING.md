@@ -316,5 +316,10 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
 - `net.client` / `net.session`：桌面线程客户端与浏览器共用会话逻辑；创建/
   加入/ready/落子/seq。
 - `app.net`：Online 大厅渲染 20 帧。
-- **未覆盖**：浏览器双客户端 E2E、真实网络延迟/丢包、TLS/WSS、公网部署、
-  在线终局导入 Lab 复盘。
+- 浏览器双客户端（本地）：两个隔离 Chromium 上下文经 nginx HTTPS/WSS
+  完成建房/加入/落子/投降；步骤与证据见
+  `docs/WEB_ONLINE_TESTING.md`。
+- 本地 TLS/WSS：nginx 自签证书 TLSv1.3 终止，`openssl s_client` 手工升级
+  与浏览器均收到 `101`。
+- **未覆盖**：真实网络延迟/丢包、Safari/Firefox、可信证书链与生产代理、
+  公网部署、在线终局导入 Lab 复盘。

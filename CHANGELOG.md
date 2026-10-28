@@ -47,12 +47,21 @@
 - 服务端发送失败会同步关闭连接，可能在房间广播途中重置房间并丢失
   `gameover`；改为本轮 poll 末尾关闭，排队中的错误也能先送达。
 - 重连已结束房间的 `gameover` 状态固定为 `normal`；现保留真实原因。
+- 在线会话只在页面转场期间轮询，稳定态大厅/对局不更新、界面停在
+  Offline；现每帧轮询一次。
+- 在线终局 HUD 的结果与原因缺少分隔（`Black winsresign`）；现为
+  `Black wins (resign)`。
+- Web 壳页仍写着“无账号、无网络同步”；现说明在线需要自托管服务器。
 
 ### Verified
 
 - Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
 - GitHub Actions `40479705658`：三平台 Debug 各 26/26，ASan+UBSan
   26/26，Xvfb GUI 4/4，三平台打包与 Linux 包验收全部通过。
+- 浏览器：两个隔离 Chromium 上下文经本地 HTTPS/WSS 完成建房/加入/落子/
+  投降，双方进入 GAME/PLAYING/FINISHED 并一致判定黑胜。
+- 本地 TLS/WSS：nginx 自签证书 TLSv1.3，`openssl s_client` 与浏览器均
+  收到 `101`；生产证书与公网未验证。
 - 两名独立客户端完成整局，服务端与本地重放状态一致；非法、重复、断线
   重连、多房间、服务端重启与 20k 随机帧通过。
 - Emscripten Release 构建通过（wasm 385 KB）。

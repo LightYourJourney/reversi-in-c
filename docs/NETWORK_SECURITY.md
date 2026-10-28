@@ -29,7 +29,12 @@
 
 - 进程内**不实现 TLS**。本地测试只绑定 `127.0.0.1`，使用 `ws://`。
 - 生产必须在反向代理（nginx/Caddy）终止 TLS，并把 `wss://` 转发到本地
-  回环端口；证书、HSTS、代理超时不在本阶段验证。
+  回环端口。
+- **本地实测（2026-10-28）**：nginx 自签证书（CN/SAN `localhost`）终止
+  TLSv1.3，静态页 `https://localhost:8443`、WSS 代理 `8444 → 8080`；
+  `openssl s_client` 手工升级与两个 HeadlessChrome 客户端均收到
+  `101 Switching Protocols`，并完成一局。见 `WEB_ONLINE_TESTING.md`。
+- 生产证书链、HSTS、代理超时、公网握手仍 **NOT TESTED**。
 - 不提供公网部署脚本；`reversi_server` 默认只绑定回环地址。
 
 ## 4. 已知限制与 NOT TESTED

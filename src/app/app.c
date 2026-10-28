@@ -821,10 +821,6 @@ static void app_update_transition(App *app, float dt)
 static void app_update_passive(App *app, float dt)
 {
     const UiInput input = {.reduce_motion = !app->settings.animations};
-    if (app->net != NULL) {
-        net_session_update(app->net, dt);
-    }
-
     switch (app->screen) {
     case APP_SCREEN_MENU:
         (void)menu_view_update(&app->menu, &input, false, dt,
@@ -1263,9 +1259,13 @@ static void app_draw_net_hud(const App *app)
                              REVERSI_UI_COLOR_DANGER, UI_ALIGN_LEFT);
     } else if (net->phase == NET_SESSION_FINISHED) {
         char result[128];
-        snprintf(result, sizeof(result), "Game over: %s%s",
-                 ui_result_title(net->result),
-                 net->reason[0] != '\0' ? net->reason : "");
+        if (net->reason[0] != '\0') {
+            snprintf(result, sizeof(result), "Game over: %s (%s)",
+                     ui_result_title(net->result), net->reason);
+        } else {
+            snprintf(result, sizeof(result), "Game over: %s",
+                     ui_result_title(net->result));
+        }
         ui_draw_text_clipped(&app->fonts, UI_TEXT_REGULAR, result,
                              (Rectangle){panel.x + 12.0f, panel.y + 24.0f,
                                          panel.width - 240.0f, 18.0f},
@@ -1579,6 +1579,11 @@ static void app_handle_saves_action(App *app, SavesAction action)
 static void app_update(App *app, const UiInput *input, float dt)
 {
     app_update_notice(app, dt);
+    /* The session must be polled every frame, including steady lobby/game
+     * screens; polling only during transitions leaves the UI offline. */
+    if (app->net != NULL) {
+        net_session_update(app->net, dt);
+    }
     if (app->transition.active) {
         app_update_transition(app, app_motion_dt(app, dt));
         return;
@@ -1920,6 +1925,8 @@ void reversi_web_debug_autoplay(unsigned seed);
 int reversi_web_game_over(void);
 int reversi_web_result(void);
 int reversi_web_screen_index(void);
+const char *reversi_web_net_code(void);
+int reversi_web_net_phase(void);
 int reversi_web_ai_active(void);
 int reversi_web_match_mode(void);
 void reversi_web_cancel_ai_test(void);
@@ -1999,6 +2006,21 @@ EMSCRIPTEN_KEEPALIVE
 int reversi_web_screen_index(void)
 {
     return (int)g_web_run.app.screen;
+}
+
+/* Read-only accessors for browser automation (see web/app.js). */
+EMSCRIPTEN_KEEPALIVE
+const char *reversi_web_net_code(void)
+{
+    const NetSession *session = g_web_run.app.net;
+    return session != NULL ? session->code : "";
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_net_phase(void)
+{
+    const NetSession *session = g_web_run.app.net;
+    return session != NULL ? (int)session->phase : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE

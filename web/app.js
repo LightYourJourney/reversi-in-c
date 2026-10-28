@@ -271,6 +271,13 @@
       return module && module._reversi_web_screen_index
         ? module._reversi_web_screen_index() : -1;
     },
+    netCode: function () {
+      return module ? module.ccall('reversi_web_net_code', 'string', [], []) : '';
+    },
+    netPhase: function () {
+      return module && module.ccall
+        ? module.ccall('reversi_web_net_phase', 'number', [], []) : -1;
+    },
     aiActive: function () {
       return !!(module && module._reversi_web_ai_active
         && module._reversi_web_ai_active());

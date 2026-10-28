@@ -13,10 +13,10 @@ AppleClang 21，CMake 4.4.4，Emscripten 6.0.13
 | 1. 网络架构 | `net_protocol` / `net_ws` / `net_server` / `net_client` / `net_session`；服务端权威；复用 `core` | PASS |
 | 2. 房间系统 | 创建/加入/代码分享/颜色/ready/开始/房主离开/退出/关闭；明确生命周期 | PASS |
 | 3. 网络对局 | 落子请求、合法性、状态同步、回合、Pass、终局、120 s 超时、断线、重连、seq 防重复 | PASS（协议/客户端层） |
-| 4. 安全设计 | 输入校验、大小/频率限制、权限、令牌、重放防护、资源上限、日志脱敏；TLS 由代理终止 | PARTIAL（TLS/WSS 未在进程内实现，未测试） |
+| 4. 安全设计 | 输入校验、大小/频率限制、权限、令牌、重放防护、资源上限、日志脱敏；TLS 由代理终止 | PARTIAL（本地 nginx 终止 TLS 已实测；生产证书/HSTS 未测） |
 | 5. 联网体验 | 对手状态、延迟、掉线/重连提示、投降、终局；复盘未接入在线流程 | PARTIAL |
-| 6. 跨平台 | 桌面与 Web 构建；本地双人/AI 未改；协议 v1 | PARTIAL（Web 浏览器双客户端 E2E **NOT TESTED**） |
-| 7. 测试 | 正常对局、非法、重复、断线重连、离开、多房间、服务端重启、模糊、ASan | PARTIAL（真实网络延迟与浏览器 E2E **NOT TESTED**） |
+| 6. 跨平台 | 桌面与 Web 构建；本地双人/AI 未改；协议 v1 | PASS（本地 HTTPS/WSS 双浏览器完成一局）；Safari/Firefox **NOT TESTED** |
+| 7. 测试 | 正常对局、非法、重复、断线重连、离开、多房间、服务端重启、模糊、ASan、浏览器 E2E | PARTIAL（真实网络延迟 **NOT TESTED**） |
 
 ## 2. 架构与审计
 
@@ -39,7 +39,9 @@ AppleClang 21，CMake 4.4.4，Emscripten 6.0.13
 - `tests/test_net_protocol.c`、`test_net_ws.c`、`test_net_server.c`、
   `test_net_client.c`、`test_net_session.c`
 - `docs/NETWORK_ARCHITECTURE.md`、`NETWORK_PROTOCOL.md`、
-  `NETWORK_SECURITY.md`、本报告
+  `NETWORK_SECURITY.md`、`WEB_ONLINE_TESTING.md`、本报告
+- Web 自动化只读访问器：`reversi_web_net_code` / `reversi_web_net_phase`
+  （`web/app.js` 的 `__reversiTest.netCode/netPhase`）
 
 修改：菜单 9 项、CMake 目标、`VERSION`/`CHANGELOG`/README/ROADMAP/
 ARCHITECTURE/TESTING。
@@ -58,10 +60,11 @@ ARCHITECTURE/TESTING。
 | `net.server` | 713 次断言：完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 |
 | `net.client` | 26 次断言：连接、创建/加入/ready/落子、断线重连 |
 | `net.session` | 29 次断言：会话相位、颜色、seq、回合、落子、投降终局 |
-| Emscripten Release | 构建通过（主 wasm 385 KB） |
-| 浏览器在线双客户端 | **NOT TESTED**：未做 Playwright 双页面联机 |
-| 真实网络延迟/丢包 | **NOT TESTED**；只在回环上测试 |
-| 公网/TLS/WSS | **NOT TESTED**；未部署、未购买资源 |
+| Emscripten Release | 构建通过（主 wasm 394,765 B） |
+| 浏览器在线双客户端 | PASS：两个独立 Chromium 上下文经 HTTPS/WSS 建房/加入/落子/投降完成一局（房间 `MGQW82`，双方 GAME、PLAYING、终局 BLACK_WIN） |
+| 真实网络延迟/丢包 | **NOT TESTED**；只在回环与本地代理上测试 |
+| 本地 TLS/WSS（自签） | PASS：nginx TLSv1.3 终止，静态 HTTPS + WSS 代理；`s_client` 与浏览器均收到 `101` |
+| 公网/TLS 证书链/HSTS | **NOT TESTED**；未部署、未购买资源 |
 
 首次跨平台 CI（`40298668533`、`40299103857`）暴露并修正了三处问题：
 测试在 Windows 缺少 `windows.h`；`net.session` 只等本方 `seq` 造成 Linux
@@ -82,12 +85,20 @@ ARCHITECTURE/TESTING。
 - 重连超时：座位保留窗口到期后对手获胜（`status=disconnect`），旧令牌重连
   被拒；重连到已结束房间收到 `finished` 快照与真实结束原因。
 - 满房：第三名玩家加入双人等待房间收到 `room_full`。
+- 浏览器 E2E：两个隔离 Chromium 上下文经 `https://localhost:8443` 加载页面、
+  `wss://localhost:8444` 连接；建房/加入/双方 ready/黑方 d3/白方投降，
+  双方相位 LOBBY→WAITING→PLAYING→FINISHED，终局双方 `BLACK_WIN`。
+- TLS：nginx 自签证书 `CN=localhost`，TLSv1.3；`openssl s_client` 手工升级
+  收到 `HTTP/1.1 101`；access log 记录两次 HeadlessChrome 的 WSS 升级。
+- 浏览器验证同时修复：在线会话此前只在转场期间轮询，稳定态大厅/对局不更新；
+  终局 HUD 结果与原因缺少分隔符；Web 壳页仍写着“无网络同步”。
 
 ## 6. 已知限制
 
-1. **浏览器双客户端与真实网络未测**：Web 构建通过，但未在浏览器中完成
-   一局；延迟/丢包/乱序只在回环上模拟。
-2. **TLS/WSS**：进程内不实现；生产必须由反向代理终止 TLS，未验证。
+1. **真实网络未测**：浏览器双客户端已在本地 HTTPS/WSS 完成一局，但延迟/
+   丢包/乱序只在回环与本地代理上模拟；Safari/Firefox 未测。
+2. **TLS/WSS**：进程内不实现；本地 nginx 终止 TLS 已实测（自签、浏览器
+   `ignoreHTTPSErrors`）；生产证书链、HSTS、代理超时未验证。
 3. **复盘**：在线终局可查看棋盘，但未把网络对局导入 Reversi Lab 复盘。
 4. **账号/排位/Elo/观战**：明确不属于本阶段。
 5. **房间持久化**：服务端重启丢失全部房间；无磁盘会话。

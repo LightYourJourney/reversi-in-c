@@ -26,6 +26,14 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 
 ## 2. 发现的问题（按严重程度）
 
+### 高 0（浏览器 E2E 追加发现）：在线会话只在转场期间轮询
+
+`net_session_update` 原先只从 `app_update_passive` 调用，而该函数只在页面
+转场时执行。进入大厅或对局稳定态后，桌面/Web 客户端不再轮询 socket，
+状态回调与消息永远不处理，界面停留在 “Offline”；浏览器实测中 WSS 已
+升级（nginx `101`）但 `NetSession` 相位始终为 IDLE。该缺陷使 GUI 在线
+流程实际不可用，此前的冒烟/单元测试均未覆盖。
+
 ### 高 1：客户端拒绝服务端的权威终局快照
 
 `net_protocol_state_from_board` 调用 `game_is_consistent`，而超时/投降终局
@@ -71,6 +79,9 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 
 ## 3. 修复的内容
 
+0. **每帧轮询会话**（`src/app/app.c`）：`net_session_update` 移到
+   `app_update` 顶部，每帧一次；浏览器 E2E 验证 LOBBY→WAITING→PLAYING→
+   FINISHED 全流程。
 1. **终局快照**（`src/net/net_protocol.c`）：`result != O` 时只校验棋盘
    合法性、回合与结果枚举，由服务端权威决定胜负；`ongoing` 仍要求本地
    一致性。`app_build_net_match` 返回 `bool`，仅在同步成功时进入对局。
@@ -135,9 +146,11 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 
 ## 5. 仍未解决的风险
 
-1. **浏览器双客户端 E2E NOT TESTED**：Web 构建可用，但未在真实浏览器
-   完成一局（无 Playwright 双页面联机）。
-2. **TLS/WSS NOT TESTED**：进程内不实现 TLS，代理终止方案未实测。
+1. **浏览器覆盖有限**：本地 Headless Chrome 双客户端已完成一局
+   （HTTPS/WSS），但 Safari/Firefox、移动端、可信证书链与生产代理配置
+   仍 NOT TESTED。
+2. **TLS 仅本地实测**：nginx 自签证书 + `ignoreHTTPSErrors`；HSTS、
+   证书轮换、代理超时与公网握手 NOT TESTED。
 3. **真实网络延迟/丢包/乱序 NOT TESTED**：只在回环。
 4. **公网部署/DoS/NAT/防火墙**：未部署、未测试（按约束禁止）。
 5. **服务端资源边界**：连接上限（`server_full`）、握手超时、空闲超时、
@@ -163,12 +176,13 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | 网络架构（独立层、权威服务端） | PASS | 模块边界、服务端重算、测试通过 |
 | 房间系统 | PASS | 创建/加入/颜色/ready/满房/离开/重连/终局重连 |
 | 网络对局 | PASS | 完整对局、非法/重复、Pass、双向超时、投降、seq |
-| 安全设计 | PARTIAL | 限速、重放、令牌、资源上限有实现与部分测试；TLS/WSS NOT TESTED |
+| 安全设计 | PARTIAL | 限速、重放、令牌、资源上限有实现与部分测试；本地 TLS 终止 PASS，生产配置 NOT TESTED |
 | 联网体验 | PARTIAL | 大厅/HUD/重连/投降/终局 PASS；Lab 复盘未接入 |
-| 跨平台 | PARTIAL | 桌面三平台 CI PASS、Web 构建 PASS；浏览器联机 NOT TESTED |
-| 测试 | PARTIAL | 服务端/协议/客户端/会话覆盖充分；真实网络与浏览器 E2E NOT TESTED |
+| 跨平台 | PARTIAL | 桌面三平台 CI PASS；Chrome 双客户端 HTTPS/WSS PASS；Safari/Firefox NOT TESTED |
+| 测试 | PARTIAL | 服务端/协议/客户端/会话与浏览器 E2E 覆盖；真实网络延迟 NOT TESTED |
 
-**结论：核心在线对战验收 PASS；原始阶段验收 PARTIAL。**
+**结论：核心在线对战验收 PASS；浏览器双客户端与本地 TLS 已补测
+PASS；原始阶段验收仍为 PARTIAL（生产网络/Safari/Firefox 未测）。**
 未达成的部分全部是“真实部署/浏览器/网络环境”类验证，按本阶段约束
 （不部署、不开放公网）无法在本机补齐，不得声称完整通过。
 
@@ -177,8 +191,9 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 **建议可以进入下一 Phase 的功能开发**，但附三点约束：
 
 1. 不得把 Reversi Online 标记为“公网可用/生产就绪”；
-2. 若下一阶段涉及部署或公开服务，必须先补：浏览器双客户端 E2E、
-   反向代理 TLS/WSS 实测、真实网络延迟/丢包验证，并取得用户明确授权；
+2. 浏览器双客户端（Headless Chrome）与本地 nginx TLS/WSS 已补测；若下
+   一阶段涉及部署或公开服务，仍需补 Safari/Firefox、可信证书链、真实
+   网络延迟/丢包验证，并取得用户明确授权；
 3. 把本报告第 5 节的 NOT TESTED 项带入后续阶段待办，不得在文档中改写
    为 PASS。
 
