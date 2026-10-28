@@ -1,106 +1,84 @@
-# Phase 14 独立验收与代码质量审计：Reversi Online
+# Phase 14 独立验收与代码质量审计（第二次）
 
-日期：2026-10-27  
-审查范围：Phase 14（在线对战）全部改动  
-审计前 HEAD：`dfe2d33`；基线：`be5b90d`（Phase 14 起点）  
-审计环境：macOS 26.6.2 arm64，Apple clang 21.0.0（工程构建），
-Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13  
+日期：2026-10-28  
+审查对象：Phase 14 Reversi Online；基线 `be5b90d`；审计前 HEAD `e8bf9ff`  
+历史版本：2026-10-27 的首次审计见 git 历史  
+环境：macOS 26.6.2 arm64，Apple clang 21.0.0，Homebrew clang 23.1.4（TSan），
+CMake 4.4.4，Emscripten 6.0.13，nginx 1.31.8，Chrome 155（Headless）  
 状态标记：PASS / FAIL / PARTIAL / NOT TESTED
 
-本审计不采信 `docs/PHASE_14_REPORT.md` 的既有结论，重新阅读需求、diff、
-源码、测试与架构文档，并重跑测试。
+本次审计不采信既有报告，重新核对需求、diff、源码、测试与文档，并重跑
+全部可复现测试。上一轮之后新增了浏览器联机、桌面↔Web 与本地 TLS 验证，
+本次重点复核这些路径及其后续修复。
 
 ## 1. 审查范围
 
-- 需求与设计：用户 Phase 14 任务（网络层、权威服务端、房间、重连、安全、
-  大厅、桌面/Web、版本化协议、测试与报告）；`NETWORK_ARCHITECTURE.md`、
-  `NETWORK_PROTOCOL.md`、`NETWORK_SECURITY.md`、`ARCHITECTURE.md`、
-  `TESTING.md`。
-- 代码：`git diff be5b90d...dfe2d33`（38 个文件，+6544/−36，审计前）；
+- 需求：用户 Phase 14 任务（独立网络层、权威服务端、房间、重连、安全、
+  大厅、桌面 + Web、版本化协议、测试与报告、禁止未经授权部署）。
+- 文档：`NETWORK_ARCHITECTURE`、`NETWORK_PROTOCOL`、`NETWORK_SECURITY`、
+  `WEB_ONLINE_TESTING`、`PHASE_14_REPORT`、`ARCHITECTURE`、`TESTING`、
+  `ROADMAP`、README、CHANGELOG。
+- 代码：`git diff be5b90d...HEAD`（38 文件，约 +6.6k 行）；重点
   `src/net/*`、`server/main.c`、`src/platform/web/net_client_web.c`、
-  `src/ui/net_view.*`、`src/app/app.c` 网络路径、`src/core/match.*`、
-  `CMakeLists.txt`、`.github/workflows/ci.yml`。
-- 测试：`tests/test_net_{protocol,ws,server,client,session}.c`、
-  `tests/test_match.c`、`app.net` 冒烟。
-- 不审查：Phase 1–13 既有规则/AI/Lab/实验平台实现（仅做回归）。
+  `src/ui/net_view.*`、`src/app/app.c`、`src/core/match.*`、CMake 与 CI。
+- 测试：`tests/test_net_*`、`tests/test_match.c`、`app.net`、
+  `scripts/web-online-e2e.mjs`，以及桌面↔Web 的主机自动化流程。
+- 不审查：Phase 1–13 的规则/AI/Lab/实验平台实现（仅回归）。
 
 ## 2. 发现的问题（按严重程度）
 
-### 高 0（浏览器 E2E 追加发现）：在线会话只在转场期间轮询
+### 高 1：保留结算时，房间关闭消息覆盖真实结束原因
 
-`net_session_update` 原先只从 `app_update_passive` 调用，而该函数只在页面
-转场时执行。进入大厅或对局稳定态后，桌面/Web 客户端不再轮询 socket，
-状态回调与消息永远不处理，界面停留在 “Offline”；浏览器实测中 WSS 已
-升级（nginx `101`）但 `NetSession` 相位始终为 IDLE。该缺陷使 GUI 在线
-流程实际不可用，此前的冒烟/单元测试均未覆盖。
+上一轮修复在 `ROOMCLOSED` 时保留 FINISHED，但仍把房间生命周期状态写入
+`reason`。对手离开或房间到期后，HUD 会把 `resign` 显示成
+`disconnected`/`expired`，与“结束原因真实”的既有修复和协议语义矛盾。
 
-### 高 1：客户端拒绝服务端的权威终局快照
+### 高 2：终局后 socket 断开仍会丢弃结果
 
-`net_protocol_state_from_board` 调用 `game_is_consistent`，而超时/投降终局
-棋盘未满且仍有合法着法，必然判为“不一致”。服务端 `room_finish` 先广播
-`state` 再发 `gameover`；客户端静默丢弃该 `state`。重连到已结束房间时
-（此前没有棋盘）`NetSession.game` 保持全零，`app_build_net_match` 同步
-失败，但 `APP_SCREEN_NET` 仍切换到对局页，留下无效/陈旧棋盘。违反
-`NETWORK_PROTOCOL.md` “客户端必须以服务端 state 为准”。
+`FINISHED` + `active=false` 后，任何 socket 断开都会进入
+`DISCONNECTED`/`FAILED` 分支并回落到 LOBBY/FAILED，结算画面消失，
+与 CHANGELOG“保留直到玩家自行离开”不符（服务端重启即可触发）。
 
-### 高 2：服务端发送失败可递归关闭房间并丢失终局消息
+### 中 3：保留画面显示过期 HUD
 
-`connection_schedule_close` 会立即 detach/close。`room_finish` 先把
-`playing` 置 false，再广播 `state`；若某连接发送队列溢出，`send_message`
-同步关闭该连接 → `detach_player` 见非对局状态 → `room_close` 重置房间，
-随后 `room_finish` 继续对已重置房间发 `gameover`，对手只收到
-`roomclosed`。同类重入也存在于 `room_close` 广播期间。另一个副作用：
-`rate_limited` 等错误先入队、随即关 socket，**错误消息从未送达**。
+房间关闭后 `code` 已被清空，HUD 仍渲染 “Online room   you … opponent
+connected”，房间已不存在但界面显示仍连接。
 
-### 中 3：同步失败仍进入在线对局
+### 中 4：验收口径与数字不一致
 
-`app_build_net_match` 无返回值，调用方无条件 `net_mode = true` 并切屏，
-掩盖状态同步失败。
+- 任务 6 标 PASS 但同格仍写 Safari/Firefox NOT TESTED，审查结论仍称
+  因 Safari 而 PARTIAL；
+- `ROADMAP`/审查报告的 wasm 大小滞后（394,855/394,629）；
+- `WEB_ONLINE_TESTING` 自相矛盾（“不切换前台” vs “必须在前台”），
+  两局房间码未说明用途；
+- `TESTING` 的 CI 段落漏记 `net.session` 计数。
 
-### 中 4：重连已结束房间时结束原因失真
+### 低/遗留
 
-`send_room_snapshot` 固定发送 `gameover status=normal`，即使房间因
-`timeout`/`resign`/`disconnect` 结束。
-
-### 中 5：安全与生命周期测试缺口被报告掩盖
-
-报告声称“输入校验、大小/频率限制、权限、重连”等已实现且测试覆盖；
-实际没有限速、重连到期、满房、终局重连的测试，`message_too_large`
-分支因 WS 帧上限等于消息上限而不可达。
-
-### 低
-
-- Web 客户端把 `NetClientStatus` 序号 `2/3/4` 硬编码进 JS，枚举重排会
-  静默破坏浏览器构建。
-- 服务端 `socket_read` 把 `EINTR` 当作有序关闭。
-- `now_ms()`、`GameResult`→字符串三元式、`test_sleep_ms` 重复；CMake 五个
-  网络测试块未复用辅助函数（可维护性，非缺陷）。
-- `net_protocol` 存在 `message_too_large` 死分支（见中 5）。
+- `message_too_large` 分支不可达（WS 帧上限等于消息上限）；
+- Web 队列溢出静默丢弃，桌面端则置 FAILED，两端策略不一致；
+- `now_ms()`、测试 pump 循环、结果→`GameResult` 三元式重复；
+- TSan 仅本机手动运行，未进 CI；桌面↔Web 自动化依赖 macOS 窗口事件；
+- 连接上限、握手/空闲超时、房间 TTL 未写成测试；性能无基准。
 
 ## 3. 修复的内容
 
-0. **每帧轮询会话**（`src/app/app.c`）：`net_session_update` 移到
-   `app_update` 顶部，每帧一次；浏览器 E2E 验证 LOBBY→WAITING→PLAYING→
-   FINISHED 全流程。
-1. **终局快照**（`src/net/net_protocol.c`）：`result != O` 时只校验棋盘
-   合法性、回合与结果枚举，由服务端权威决定胜负；`ongoing` 仍要求本地
-   一致性。`app_build_net_match` 返回 `bool`，仅在同步成功时进入对局。
-   （`GAMEOVER` 应用结果并标记脏状态在此前提交 `83cbbf7` 已完成。）
-2. **延迟关闭**（`src/net/net_server.c`）：新增 `closing` 标志与
-   `connection_close_pending`，在 poll 末尾统一关闭；正常可写时先刷新
-   排队输出，使 `rate_limited` 等错误送达（socket 持续不可写时仍可能
-   丢弃，见 §5）；广播期间的发送失败不再重入房间。
-3. **结束原因**：`ServerRoom.finish_status` 记录真实原因，重连快照回放
-   正确的 `status`。
-4. **Web 状态序号**：`_Static_assert` 锁定 `NetClientStatus` 序号。
-5. **EINTR**：服务端读取将 `EINTR` 视为暂时无数据。
-6. **测试**：新增终局快照协议用例；限速（45 条突发 → `rate_limited`
-   先送达）、重连到期判负、第三名玩家 `room_full`、重连进已结束房间
-   （`finished` + 真实 `resign` 原因）用例。计数：`net.protocol` 28→33，
-   `net.server` 663→713（另含重连到期后用旧令牌重连被拒、限速后连接关闭）。
+1. `ROOMCLOSED` 仅在未结束时更新 `reason`；保留 FINISHED 与真实原因
+   （`src/net/net_session.c`）。
+2. `NET_CLIENT_DISCONNECTED` / `NET_CLIENT_FAILED` 遇到 FINISHED 不再改
+   相位，服务端重启后结果仍在。
+3. HUD 在房间关闭后显示 `room closed / opponent left`，不再显示空房间码
+   与过期对手状态（`src/app/app.c`）。
+4. 会话测试改为 LEAVE 路径，断言 `reason=resign`、`active=false`，追加
+   “服务端关闭后仍保留 FINISHED”用例（`net.session` 32→37）。
+5. 浏览器 E2E 脚本增加“对手关闭后本方保留结果”的断言；桌面↔Web 以
+   浏览器立即关闭复验，桌面仍显示结算。
+6. 文档一致性：任务 6 验收范围明确为桌面 + Chrome Web；Safari/Firefox
+   未测但不属本阶段验收；统一 wasm 394,922 B、会话 37 断言与 CI 运行号；
+   修正 Web 验证方法的矛盾表述并说明两局用途。
 
-未做的重构：重复的 `now_ms`/三元式/测试 sleep、CMake 测试块合并、
-`NetMessage` 数据团块。均记录为可维护性事项，不改变行为。
+未做的重构：重复工具函数、测试 pump 循环、协议/结果映射表、CMake 测试
+块合并。均为可维护性事项，不改变行为。
 
 ## 4. 实际执行的测试
 
@@ -108,109 +86,88 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 |---|---|---|
 | Debug 无窗口 | `ctest --test-dir build` | 26/26 PASS |
 | Release 无窗口 | `ctest --test-dir build-release` | 26/26 PASS |
-| ASan+UBSan | `ctest --test-dir build-sanitize -E "app.smoke\|app.autoplay\|app.lab\|app.net"` | 26/26 PASS，无 Sanitizer 报告 |
+| ASan+UBSan | `ctest --test-dir build-sanitize -E "app.smoke\|app.autoplay\|app.lab\|app.net"` | 26/26 PASS |
 | Debug + GUI | `ctest --test-dir build-gui` | 30/30 PASS（含 `app.net`） |
-| 网络压力 | `reversi_net_{server,session,client}_tests` 各 40 次 | 120/120 PASS |
-| TSan（会话） | `clang -fsanitize=thread ... test_net_session.c` | PASS，无数据竞争报告 |
-| TSan（客户端） | 同上，`test_net_client.c` ×5 | PASS |
-| Web | `cmake --build build-web` | PASS（`reversi.wasm` 394,922 B） |
-| GitHub Actions | 运行 `40479705658`（提交 `37d219d`） | 9/9 作业 PASS：Linux/Windows/macOS Debug 26/26；ASan+UBSan 26/26 与 Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
+| TSan（会话） | `clang -fsanitize=thread … test_net_session.c` | PASS（37 断言，无竞争报告） |
+| 浏览器 E2E | `scripts/web-online-e2e.mjs` | PASS（`NZPDPD`：LOBBY→WAITING→PLAYING→seq 1→投降；对手关闭后本方仍 GAME/FINISHED/BLACK_WIN） |
+| 桌面↔Web | 桌面 `ws://` 建房、浏览器 WSS 加入 | PASS（`HVVFKP`：桌面 d3、浏览器 seq 1；投降并关闭浏览器后桌面仍显示 `Game over: Black wins (resign)`，HUD room closed/opponent left） |
+| 本地 TLS/WSS | nginx 自签 TLSv1.3，`openssl s_client` + 浏览器 | PASS（`101`，CN=localhost） |
+| Emscripten | `scripts/build-web.sh` | PASS（wasm 394,922 B） |
 
-断言计数（本机实跑）：`core.match` 1011、`net.protocol` 33、
-`net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 37。
+断言计数（本机实跑）：`core.match` 1011、`net.protocol` 33、`net.ws`
+20,026、`net.server` 713、`net.client` 26、`net.session` 37。
 
-关键证据：
-
-- 回滚超时判负到旧逻辑，新增用例失败（2 项），恢复后 PASS——测试非假阳性。
-- 限速用例验证错误在连接关闭前送达，并断言随后连接被关闭（延迟关闭
-  修复的直接证据；仅覆盖 socket 可写的正常路径）。
-- 重连进已结束房间收到 `room status=finished`、终局 `state` 与
-  `gameover status=resign`。
+假阳性检查：回退“保留结算/原因”改动后新增会话断言失败；历史回退
+（双向超时判负、终局快照）的用例同样失败，旧代码不会通过新断言。
 
 回归：
 
-- 旧功能：全部既有测试通过；本地双人/AI/Lab/实验路径未改（GUI 30/30，
-  实验回归 `experiment.regression` 通过）。
-- 旧存档：`REVERSI_SAVE_FORMAT_VERSION` 仍为 1，Phase 14 diff 未触及
-  `src/storage/`；同版本往返测试通过。**跨版本旧存档 fixture 未实测**
-  ——NOT TESTED。
-- 桌面/Web：桌面三平台 CI 通过（见 CI 记录）；Web 构建通过；本地
-  Web↔Web 与桌面↔Web 联机 PASS（房间 `7SUYW3`/`2N9BLT`）。
-- Debug/Release：两者均跑全部无窗口测试；网络代码无 `NDEBUG` 分支。
+- 旧功能：全部既有测试通过；本地双人/AI/Lab/实验路径未改（GUI 30/30）。
+- 旧存档：`REVERSI_SAVE_FORMAT_VERSION` 仍为 1，Phase 14 未触及
+  `src/storage/`；同版本往返通过。**跨版本 fixture NOT TESTED**。
+- 桌面/Web：桌面三平台 CI 通过；Web 构建与双浏览器/桌面↔Web 本地联机
+  通过；Debug/Release 均跑全部无窗口测试，网络代码无 `NDEBUG` 分支。
 
 性能：
 
-- 无新增性能/强度声明。客户端网络在工作线程/JS 回调，UI 每帧只做
-  `net_session_update`（轮询队列）与状态变化时的棋盘重建；服务端单线程
-  `select` + 48 连接上限。**未做延迟/吞吐/CPU 基准** —— NOT TESTED。
+- 无新增性能/强度声明。UI 每帧一次 `net_session_update`（非阻塞轮询），
+  服务端单线程 `select`；**延迟/吞吐/CPU 基准未执行** —— NOT TESTED。
+
+CI：代码提交 `5125957` 的运行 `40685189666` 与文档提交 `e8bf9ff` 的
+`40685803358` 均 9/9 成功；本次审计修复另见提交后的运行记录。
 
 ## 5. 仍未解决的风险
 
-1. **浏览器/桌面覆盖有限**：本地 Headless Chrome 双客户端与桌面↔Web
-   各完成一局；桌面↔Web 为主机自动化（依赖 macOS 窗口/事件注入），未进
-   CI。Safari/Firefox、移动端、真实网络、可信证书链与生产代理配置仍
-   NOT TESTED。
-2. **TLS 仅本地实测**：nginx 自签证书 + `ignoreHTTPSErrors`；HSTS、
-   证书轮换、代理超时与公网握手 NOT TESTED。
-3. **真实网络延迟/丢包/乱序 NOT TESTED**：只在回环。
-4. **公网部署/DoS/NAT/防火墙**：未部署、未测试（按约束禁止）。
-5. **服务端资源边界**：连接上限（`server_full`）、握手超时、空闲超时、
-   房间 TTL 未写成自动化测试 —— NOT TESTED（逻辑实读，未执行边界）。
-   重连窗口到期判负与旧令牌拒绝已测；重连成功的客户端路径由
-   `net.client` 覆盖；会话层重连见 `net.session` 的断线恢复逻辑（无独立用例）。
-6. **并发**：TSan 仅本机手动运行 net.client/net.session，未进 CI；
-   服务端单线程无共享状态，但长时间抖动未压测。
-7. **`message_too_large`** 分支不可达：WS 帧上限 = 消息上限，超长帧直接
-   触发 WS 错误并关闭；协议错误码保留但永不发送。
-8. **重入修复未被饱和测试**：16 KB 发送队列溢出路径没有自动化用例
-   （测试会污染后续状态），只靠代码审查与延迟关闭的单元行为验证。
-9. **在线终局入屏仅有本地 E2E**：`app_build_net_match` 成功门控依赖 GUI
-   交互；本地浏览器 E2E（投降→GAME_OVER）覆盖，但未进 CI。
-10. **UI 交互自动化**：`app.net` 仅渲染冒烟；大厅/对局点击由本地
-    `scripts/web-online-e2e.mjs` 覆盖，未进 CI。
-11. **在线终局导入 Lab** 未实现。
-12. **日志**：stderr 无轮转/结构化；令牌未记录（代码审查确认）。
+1. **真实网络 NOT TESTED**：延迟/丢包/乱序仅回环与本地代理模拟。
+2. **生产 TLS NOT TESTED**：本地 nginx 自签（浏览器 `ignoreHTTPSErrors`）
+   已测；可信证书链、HSTS、代理超时、公网握手未测。
+3. **Safari/Firefox、移动端 NOT TESTED**（不属本阶段验收范围）。
+4. **服务端边界**：`server_full`、握手超时、空闲超时、房间 TTL 未写成
+   自动化测试；`message_too_large` 分支不可达。
+5. **并发**：TSan 仅本机手动运行，未进 CI；长时间抖动未压测。
+6. **桌面↔Web 自动化**依赖 macOS 窗口/事件注入，未进 CI；成功两局
+   未脚本化。
+7. **Web 队列溢出**静默丢弃，与桌面的 FAILED 策略不一致。
+8. **在线终局导入 Lab** 未实现；大厅/网络 HUD 的点击由浏览器 E2E 覆盖，
+   桌面 GUI 点击仍依赖主机自动化。
+9. **性能**：无网络基准，不能声称吞吐/延迟指标。
 
 ## 6. 是否达到验收标准
 
 | Phase 14 任务 | 结论 | 依据 |
 |---|---|---|
-| 网络架构（独立层、权威服务端） | PASS | 模块边界、服务端重算、测试通过 |
-| 房间系统 | PASS | 创建/加入/颜色/ready/满房/离开/重连/终局重连 |
-| 网络对局 | PASS | 完整对局、非法/重复、Pass、双向超时、投降、seq |
-| 安全设计 | PARTIAL | 限速、重放、令牌、资源上限有实现与部分测试；本地 TLS 终止 PASS，生产配置 NOT TESTED |
-| 联网体验 | PARTIAL | 大厅/HUD/重连/投降/终局 PASS；Lab 复盘未接入 |
-| 跨平台 | PASS | 桌面三平台 CI PASS；桌面↔Web 与 Chrome↔Chrome 本地联机 PASS（验收范围为桌面 + Chrome Web；Safari/Firefox 未测，不属本阶段验收范围） |
-| 测试 | PARTIAL | 服务端/协议/客户端/会话与浏览器 E2E 覆盖；真实网络延迟 NOT TESTED |
+| 1. 网络架构 | PASS | 独立网络层、服务端权威、复用 core |
+| 2. 房间系统 | PASS | 创建/加入/颜色/ready/满房/离开/重连/终局重连 |
+| 3. 网络对局 | PASS | 完整对局、非法/重复、Pass、双向超时、投降、seq |
+| 4. 安全设计 | PARTIAL | 限速/重放/令牌/资源上限已实现并部分测试；本地 TLS 已测，生产 TLS 未测 |
+| 5. 联网体验 | PARTIAL | 大厅/HUD/重连/投降/终局 PASS；Lab 复盘未接入 |
+| 6. 跨平台 | PASS | 桌面↔Chrome Web 本地完成一局；Safari/Firefox 未测但不属本阶段验收 |
+| 7. 测试 | PARTIAL | 单元/集成/浏览器/桌面↔Web 覆盖；真实网络 NOT TESTED |
 
-**结论：核心在线对战验收 PASS；桌面↔Web、Web↔Web 与本地 TLS 已补测
-PASS；原始阶段验收仍为 PARTIAL，仅因真实网络/生产证书与 Lab 复盘；
-Safari/Firefox 未测但不在验收范围。**
-未达成的部分属于“真实部署/网络环境”类验证，按本阶段约束（不部署、
-不开放公网）无法在本机补齐，不得声称完整通过。
+**结论：核心在线对战（权威服务端、房间、桌面 + Chrome Web 联机、本地
+TLS）达到验收；整体仍为 PARTIAL**，原因是真实网络、生产 TLS 与 Lab
+复盘等明确列出的未验证项。不得声称“公网/生产就绪”。
 
 ## 7. 是否建议进入下一 Phase
 
-**建议可以进入下一 Phase 的功能开发**，但附三点约束：
+**建议可以进入下一 Phase 的功能开发**，约束不变：
 
-1. 不得把 Reversi Online 标记为“公网可用/生产就绪”；
-2. 浏览器双客户端（Headless Chrome）与本地 nginx TLS/WSS 已补测；若下
-   一阶段涉及部署或公开服务，仍需补 Safari/Firefox、可信证书链、真实
-   网络延迟/丢包验证，并取得用户明确授权；
-3. 把本报告第 5 节的 NOT TESTED 项带入后续阶段待办，不得在文档中改写
-   为 PASS。
+1. 不得把在线功能标记为公网/生产就绪；
+2. 涉及部署前必须补：可信证书链/HSTS、生产反向代理、真实网络延迟/丢包
+   与 Safari/Firefox 验证，并取得用户明确授权；
+3. 第 5 节 NOT TESTED 项带入后续待办，不得在文档中改写为 PASS。
 
 ## 附：可复现命令
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DREVERSI_FORCE_FETCH_RAYLIB=ON
-cmake --build build -j8 && ctest --test-dir build --output-on-failure
-cmake -S . -B build-gui -DCMAKE_BUILD_TYPE=Debug \
-      -DREVERSI_ENABLE_GUI_TESTS=ON -DREVERSI_FORCE_FETCH_RAYLIB=ON
-cmake --build build-gui -j8 && ctest --test-dir build-gui
+cmake --build build && ctest --test-dir build --output-on-failure
+cmake --build build-gui && ctest --test-dir build-gui
 clang -std=c11 -g -O1 -fsanitize=thread -D_POSIX_C_SOURCE=200809L \
   -Isrc -Itests tests/test_net_session.c src/net/net_client.c \
   src/net/net_server.c src/net/net_protocol.c src/net/net_ws.c \
   src/net/net_session.c src/core/{board,bitboard,rules,game,history}.c \
   -o /tmp/tsan_session && /tmp/tsan_session
+
+# Browser E2E (local nginx TLS + server, see docs/WEB_ONLINE_TESTING.md)
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-online-e2e.mjs
 ```

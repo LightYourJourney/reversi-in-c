@@ -323,7 +323,8 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
 - 本地 TLS/WSS：nginx 自签证书 TLSv1.3 终止，`openssl s_client` 手工升级
   与浏览器均收到 `101`。
 - `scripts/web-online-e2e.mjs`：双浏览器联机脚本（需 Playwright 与本地
-  nginx），断言连接/建房/加入/落子 `seq`/投降终局；未进 CI。
+  nginx），断言连接/建房/加入/落子 `seq`/投降终局/对手关闭后结果保留；
+  未进 CI。
 - 桌面↔Web：桌面 `ws://127.0.0.1:8080` 建房、浏览器 WSS 加入，完成
   落子与投降终局；步骤见 `docs/WEB_ONLINE_TESTING.md`（手工/主机脚本）。
 - **未覆盖**：真实网络延迟/丢包、Safari/Firefox、可信证书链与生产代理、
