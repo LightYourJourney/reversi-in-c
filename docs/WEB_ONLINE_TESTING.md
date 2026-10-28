@@ -192,8 +192,10 @@ NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-queue-overflow-check.mjs \
 # 期望：netPhase 7（FAILED）→ 重新 Connect 后 2（LOBBY）
 ```
 
-三引擎均为 `phaseAfterOverflow=7`、`phaseAfterReconnect=2`，证明浏览器端
-不再静默丢消息，且重连会关闭旧套接字。实现细节与限制见
+三引擎均为 `phaseAfterOverflow=7`、`phaseAfterReconnect=2`（第二次点击
+Connect），证明浏览器端不再静默丢消息，且手动重连会关闭旧套接字。该检查
+运行在大厅（`active=false`），因此断言的是“失败可见 + 手动恢复”；房间内
+（`active=true`）的自动重连由会话层用例覆盖。实现细节与限制见
 `docs/PHASE_15_REPORT.md`。
 
 ## 8. 未覆盖

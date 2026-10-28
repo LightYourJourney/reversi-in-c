@@ -15,27 +15,22 @@
  *     [--browser chrome] [--base https://localhost:9443/index.html] \
  *     [--ws-port 9444]
  */
-import { createRequire } from "node:module";
+import {
+  arg, buttons, clickR, geom, launchBrowser, loadPlaywright, netPhase,
+  screenIndex,
+} from "./web-e2e-lib.mjs";
 
-const require = createRequire(import.meta.url);
-let chromium;
-let firefox;
-let webkit;
 try {
-  ({ chromium, firefox, webkit } = require("playwright"));
+  loadPlaywright();
 } catch {
   console.error("Playwright not found. See scripts/web-online-e2e.mjs.");
   process.exit(2);
 }
 
 const args = process.argv.slice(2);
-function arg(name, fallback) {
-  const index = args.indexOf(name);
-  return index >= 0 && index + 1 < args.length ? args[index + 1] : fallback;
-}
-const baseUrl = arg("--base", "https://localhost:9443/index.html");
-const wsPort = arg("--ws-port", "9444");
-const browserName = arg("--browser", "chrome");
+const baseUrl = arg(args, "--base", "https://localhost:9443/index.html");
+const wsPort = arg(args, "--ws-port", "9444");
+const browserName = arg(args, "--browser", "chrome");
 const viewport = { width: 1100, height: 800 };
 
 const failures = [];
@@ -43,54 +38,10 @@ function check(name, condition, detail) {
   if (!condition) failures.push(detail ? `${name} (${detail})` : name);
 }
 
-async function geom(page) {
-  return page.evaluate(() => {
-    const canvas = document.getElementById("canvas");
-    const rect = canvas.getBoundingClientRect();
-    const screen = window.__reversiTest.screen();
-    return { left: rect.left, top: rect.top, bw: rect.width, bh: rect.height,
-             sw: screen.w, sh: screen.h };
-  });
-}
-
-async function clickR(page, x, y) {
-  const g = await geom(page);
-  await page.mouse.move(g.left + x * (g.bw / g.sw),
-                        g.top + y * (g.bh / g.sh));
-  await page.waitForTimeout(50);
-  await page.mouse.down();
-  await page.waitForTimeout(110);
-  await page.mouse.up();
-  await page.waitForTimeout(200);
-}
-
-const netPhase = (page) => page.evaluate(() => window.__reversiTest.netPhase());
-const screenIndex = (page) =>
-  page.evaluate(() => window.__reversiTest.screenIndex());
-
-function buttons(g) {
-  const panel = Math.min(560, g.sw - 40);
-  const x = (g.sw - panel) / 2;
-  const top = Math.max(80, g.sh * 0.16);
-  const bw = (panel - 16) / 3;
-  return {
-    port: [x + 175, top + 64],
-    connect: [x + bw / 2, top + 259],
-  };
-}
-
 const result = { failures };
 let browser;
 try {
-  const engines = {
-    chrome: { type: chromium, options: { channel: "chrome" } },
-    chromium: { type: chromium, options: {} },
-    firefox: { type: firefox, options: {} },
-    webkit: { type: webkit, options: {} },
-  };
-  const engine = engines[browserName];
-  if (!engine || !engine.type) throw new Error(`unsupported browser ${browserName}`);
-  browser = await engine.type.launch({ headless: true, ...engine.options });
+  browser = await launchBrowser(browserName);
   const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport });
   const page = await context.newPage();
   page.on("pageerror", (error) => failures.push(`pageerror: ${error}`));

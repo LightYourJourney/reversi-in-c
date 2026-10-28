@@ -160,8 +160,12 @@ static void on_message(void *context, const NetMessage *message)
         snprintf(session->error, sizeof(session->error), "%s",
                  message->error);
         if (strcmp(message->error, "rejoin_failed") == 0) {
+            /* The room is gone (restart/expiry); the lobby must not keep
+             * showing its code or the old opponent state. */
             session->active = false;
             session->token[0] = '\0';
+            session->code[0] = '\0';
+            session->opponent_status[0] = '\0';
             session->phase = NET_SESSION_LOBBY;
         }
         break;

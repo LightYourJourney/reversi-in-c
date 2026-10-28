@@ -31,8 +31,8 @@
 4. **安全控制**：消息/帧上限、令牌桶限速、连接/房间上限、握手/空闲/
    房间 TTL、128 位令牌轮换、加入失败上限、日志不记录令牌。
 5. **本阶段加固**（Phase 15）：
-   - 浏览器接收队列溢出不再静默丢弃：报 `FAILED(queue_overflow)`，
-     关闭套接字并由会话重连/重同步；
+   - 浏览器接收队列溢出不再静默丢弃：报 `FAILED(queue_overflow)` 并关闭
+     套接字；房间内自动重连重同步，大厅内需手动重连；
    - 桌面客户端套接字改为非阻塞 + 有界写入（1 s），服务器卡死不会再冻结
      UI 线程；写失败即断开并重连；
    - 等待房间断线保留座位（重连窗口），不再瞬间销毁房间；
@@ -85,31 +85,32 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | ASan+UBSan 无窗口 | PASS 26/26（无报告） | `ctest --test-dir build-sanitize -E "app.*"` |
 | Debug GUI（本机） | NOT TESTED | 当前会话无窗口服务器：`Failed to get primary monitor`；CI 的 Xvfb 作业待推送后验证 |
 | TSan `net.session` / `net.client` | PASS | Homebrew clang 23，无竞争报告 |
-| 网络边界 | PASS | `net.server` 5756 断言：握手/空闲/房间 TTL、连接/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局 |
+| 网络边界 | PASS | `net.server` 5,757 断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局 |
 | 客户端队列溢出 | PASS | `net.client` 32 断言（`queue_overflow`） |
-| 会话重启 | PASS | `net.session` 57 断言（含中途服务端重启） |
-| 旧版本数据 | PASS | `storage.save` 102 / `storage.settings` 68（含 v1.0.1 fixture） |
-| Emscripten 构建 | PASS | `scripts/build-web.sh`，wasm 394,983 B |
-| 浏览器整局（Chrome） | PASS | `scripts/web-online-e2e.mjs`，房间 `38RSUR` / `9J25DT`（生产式代理） |
-| 浏览器整局（Firefox） | PASS | Playwright Firefox 157，房间 `45H8XY` |
-| 浏览器整局（WebKit） | PASS | Playwright WebKit 27.2，房间 `V3U9MB`（**引擎代理，不等于 Safari**） |
-| Web 队列溢出（三引擎） | PASS | `scripts/web-queue-overflow-check.mjs`：FAILED(7) → 重连 LOBBY(2) |
+| 会话重启 | PASS | `net.session` 71 断言（重启后重连回大厅、预算耗尽 FAILED） |
+| 旧版本数据 | PASS | `storage.save` 102 / `storage.settings` 68（v1.0.1 fixture）、`analysis.session` 112（v1.4.0 棋谱 fixture） |
+| Emscripten 构建 | PASS | `scripts/build-web.sh`，wasm 395,038 B |
+| 浏览器整局（Chrome） | PASS | `scripts/web-online-e2e.mjs`，房间 `38RSUR` / `9J25DT`（生产式代理）/ `YDU8UG`（复审后） |
+| 浏览器整局（Firefox） | PASS | Playwright Firefox 157，房间 `45H8XY`、`SYTL45`（复审后） |
+| 浏览器整局（WebKit） | PASS | Playwright WebKit 27.2，房间 `V3U9MB`、`JAZTR3`（复审后；**引擎代理，不等于 Safari**） |
+| Web 队列溢出（三引擎） | PASS | `scripts/web-queue-overflow-check.mjs`：FAILED(7) → 手动 Connect → LOBBY(2) |
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 桌面↔Web 联机 | NOT TESTED（本阶段） | Phase 14 曾 PASS（`HVVFKP`）；需要 macOS 窗口自动化 |
+| 字体渲染 / 音效 | NOT TESTED | 浏览器 smoke 只证明无控制台错误；桌面字体/音效为 Phase 14 GUI 证据，本阶段未复验 |
 | Safari / iOS Safari / Android Chrome | NOT TESTED | 无 Safari WebDriver、无真机/模拟器 |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
 | 可信证书链 / 公网 HSTS | NOT TESTED | 自签证书本地验证，未申请证书/未改 DNS |
 | 代理层限速 | PASS（本地） | 20 次连续升级：前 11 次转发（上游 502），之后 503 |
 | 代理层连接上限 | NOT TESTED | `limit_conn` 已配置、语法通过，未压测 |
-| 10 分钟 ASan soak | PASS | `PASS net.server (897693 checks)`，退出码 0，无报告 |
+| 10 分钟 ASan soak | PASS | `PASS net.server (865909 checks)`，退出码 0，无报告 |
 | 安装包验收 | NOT TESTED（本阶段） | 未重建 CPack 归档；CI 打包作业待推送后运行 |
 | CI（本阶段提交） | NOT RUN | 未推送；HEAD 的既有 CI 为 `40707272332`（9/9） |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,210,298**）：
-`net.protocol` 33、`net.ws` 20,026、`net.server` 5,756、`net.client` 32、
-`net.session` 57、`storage.save` 102、`storage.settings` 68；其余见
-`TESTING.md` §2。
+断言数（本机 Debug，全部无窗口测试合计 **1,210,317**）：
+`net.protocol` 33、`net.ws` 20,026、`net.server` 5,757、`net.client` 32、
+`net.session` 71、`analysis.session` 112、`storage.save` 102、
+`storage.settings` 68；其余见 `TESTING.md` §2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭）
 

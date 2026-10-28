@@ -348,7 +348,6 @@ static void test_atomic_overwrite(TestStats *stats)
     (void)storage_remove(temp);
 }
 
-
 static void test_v101_fixture(TestStats *stats)
 {
     /* Verbatim save_write() output from tag v1.0.1 (compiled from that

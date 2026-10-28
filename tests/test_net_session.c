@@ -136,7 +136,6 @@ static void test_session_flow(TestStats *stats)
     net_session_destroy(b);
 }
 
-
 static void test_session_server_restart(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
@@ -196,8 +195,57 @@ static void test_session_server_restart(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, a->seq == 1);
     REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_ONGOING);
     REVERSI_TEST_ASSERT(stats, a->code[0] != '\0');
+
+    /* Restart on the same port: the client reconnects, the room is gone,
+     * and the session must land back in the lobby without the old code. */
+    NetServerConfig restart = config;
+    restart.port = port;
+    NetServer *again = net_server_create(&restart);
+    REVERSI_TEST_ASSERT(stats, again != NULL);
+    REVERSI_TEST_ASSERT(stats, net_server_start(again, error,
+                                                sizeof(error)));
+    for (int elapsed = 0; elapsed < 5000
+         && a->phase != NET_SESSION_LOBBY; ++elapsed) {
+        net_session_update(a, 2.1f); /* expire the 2 s reconnect timer */
+        net_server_poll(again, 1);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_LOBBY);
+    REVERSI_TEST_ASSERT(stats, !a->active);
+    REVERSI_TEST_ASSERT(stats, a->code[0] == '\0');
+    REVERSI_TEST_ASSERT(stats, a->token[0] == '\0');
+    net_server_destroy(again);
     net_session_destroy(a);
     net_session_destroy(b);
+}
+
+static void test_session_reconnect_budget(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    NetSession *a = net_session_create();
+    REVERSI_TEST_ASSERT(stats, a != NULL);
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1",
+                                                   net_server_port(server)));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_LOBBY, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_create_room(a, STONE_BLACK));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_WAITING, 3000));
+    net_server_destroy(server);
+    /* Five reconnect attempts with no server: the session must stop and
+     * report FAILED instead of retrying forever. */
+    for (int elapsed = 0; elapsed < 10000
+         && a->phase != NET_SESSION_FAILED; ++elapsed) {
+        net_session_update(a, 2.1f);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FAILED);
+    REVERSI_TEST_ASSERT(stats, a->reconnect_attempts == 5);
+    net_session_destroy(a);
 }
 
 int main(void)
@@ -205,5 +253,6 @@ int main(void)
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_session_flow);
     REVERSI_RUN_TEST(&stats, test_session_server_restart);
+    REVERSI_RUN_TEST(&stats, test_session_reconnect_budget);
     return reversi_test_summary(&stats, "net.session");
 }

@@ -160,7 +160,6 @@ static void test_invalid_files(TestStats *stats)
     (void)storage_remove(path);
 }
 
-
 static void test_v101_fixture(TestStats *stats)
 {
     /* Verbatim settings_save_path() output from tag v1.0.1. */

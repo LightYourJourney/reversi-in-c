@@ -31,9 +31,9 @@ int net_server_port(const NetServer *server);
 /* Processes one ready event batch; timeout_ms may be 0 for non-blocking. */
 void net_server_poll(NetServer *server, int timeout_ms);
 
-/* Tells every open room the server is going away and flushes the
- * notification to clients; call before net_server_destroy on a planned
+/* Tells every open room the server is going away ("shutdown") and flushes
+ * the notification to clients; call before net_server_destroy on a planned
  * stop so players are not left waiting on a dead socket. */
-void net_server_shutdown(NetServer *server, const char *status);
+void net_server_shutdown(NetServer *server);
 
 #endif

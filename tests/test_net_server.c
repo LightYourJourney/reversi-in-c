@@ -98,6 +98,26 @@ static void test_close(TestClient *client)
     }
 }
 
+static void test_nonblocking(TestSocket socket_fd)
+{
+#if defined(_WIN32)
+    u_long mode = 1;
+    ioctlsocket(socket_fd, FIONBIO, &mode);
+#else
+    const int flags = fcntl(socket_fd, F_GETFL, 0);
+    fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
+#endif
+}
+
+static void test_close_socket(TestSocket socket_fd)
+{
+#if defined(_WIN32)
+    closesocket(socket_fd);
+#else
+    close(socket_fd);
+#endif
+}
+
 static bool test_connect(NetServer *server, TestClient *client, int port)
 {
     memset(client, 0, sizeof(*client));
@@ -1017,7 +1037,6 @@ static void test_rejoin_finished(TestStats *stats)
     net_server_destroy(server);
 }
 
-
 static TestSocket test_connect_raw(int port)
 {
     TestSocket socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1031,20 +1050,10 @@ static TestSocket test_connect_raw(int port)
     inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
     if (connect(socket_fd, (struct sockaddr *)&address,
                 sizeof(address)) != 0) {
-#if defined(_WIN32)
-        closesocket(socket_fd);
-#else
-        close(socket_fd);
-#endif
+        test_close_socket(socket_fd);
         return TEST_INVALID;
     }
-#if defined(_WIN32)
-    u_long mode = 1;
-    ioctlsocket(socket_fd, FIONBIO, &mode);
-#else
-    const int flags = fcntl(socket_fd, F_GETFL, 0);
-    fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
-#endif
+    test_nonblocking(socket_fd);
     return socket_fd;
 }
 
@@ -1118,11 +1127,7 @@ static void test_handshake_timeout(TestStats *stats)
         test_sleep_ms(5);
     }
     REVERSI_TEST_ASSERT(stats, closed);
-#if defined(_WIN32)
-    closesocket(raw);
-#else
-    close(raw);
-#endif
+    test_close_socket(raw);
     net_server_destroy(server);
 }
 
@@ -1406,6 +1411,28 @@ static void test_connection_cap(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, opened == 48);
     TestClient extra;
     REVERSI_TEST_ASSERT(stats, !test_connect(server, &extra, port));
+    /* The rejected connection gets an HTTP-level 503, not a silent reset. */
+    TestSocket raw = test_connect_raw(port);
+    REVERSI_TEST_ASSERT(stats, raw != TEST_INVALID);
+    uint64_t rng = 0x5151ULL;
+    char key[25];
+    char request[256];
+    if (net_ws_generate_key(&rng, key)
+        && net_ws_build_handshake_request("127.0.0.1", port, key, request)) {
+        (void)send(raw, request, (int)strlen(request), 0);
+    }
+    char response[128] = {0};
+    for (int elapsed = 0; elapsed < 2000 && response[0] == '\0';
+         elapsed += 2) {
+        net_server_poll(server, 1);
+        const int read = (int)recv(raw, response, (int)sizeof(response) - 1, 0);
+        if (read > 0) {
+            response[read] = '\0';
+        }
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, strncmp(response, "HTTP/1.1 503", 12) == 0);
+    test_close_socket(raw);
     /* Existing connections keep working while the cap is in force. */
     NetMessage message;
     test_send(&clients[0], &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
@@ -1500,7 +1527,7 @@ static void test_server_shutdown(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, pump_both(server, &a, &b, &start_a, &start_b,
                                          NET_MSG_START, 3000));
 
-    net_server_shutdown(server, "shutdown");
+    net_server_shutdown(server);
     NetMessage closed_a;
     NetMessage closed_b;
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOMCLOSED,
@@ -1514,6 +1541,8 @@ static void test_server_shutdown(TestStats *stats)
     net_server_destroy(server);
 }
 
+static void play_verified_game(TestStats *stats, NetServer *server,
+                               int port, int timeout_ms);
 
 /* --------------------------------------------------------------------
  * Delayed-network simulation.
@@ -1546,25 +1575,6 @@ typedef struct Proxy {
     ProxyLink links[PROXY_MAX_LINKS];
 } Proxy;
 
-static void test_nonblocking(TestSocket socket_fd)
-{
-#if defined(_WIN32)
-    u_long mode = 1;
-    ioctlsocket(socket_fd, FIONBIO, &mode);
-#else
-    const int flags = fcntl(socket_fd, F_GETFL, 0);
-    fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
-#endif
-}
-
-static void test_close_socket(TestSocket socket_fd)
-{
-#if defined(_WIN32)
-    closesocket(socket_fd);
-#else
-    close(socket_fd);
-#endif
-}
 
 static bool proxy_start(Proxy *proxy, int upstream_port)
 {
@@ -1751,85 +1761,9 @@ static void test_latency_game(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, proxy_port_number > 0);
     g_proxy = &proxy;
     g_pump_hook = proxy_pump_hook;
-
-    TestClient a;
-    TestClient b;
-    REVERSI_TEST_ASSERT(stats, test_connect(server, &a, proxy_port_number));
-    REVERSI_TEST_ASSERT(stats, test_connect(server, &b, proxy_port_number));
-    NetMessage message;
-    test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
-    test_send(&a, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
-    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOM,
-                                             &message, 5000));
-    char code[7];
-    snprintf(code, sizeof(code), "%s", message.code);
-    NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
-    snprintf(join.code, sizeof(join.code), "%s", code);
-    test_send(&b, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
-    test_send(&b, &join);
-    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_ROOM,
-                                             &message, 5000));
-    test_send(&a, &(NetMessage){.type = NET_MSG_READY});
-    test_send(&b, &(NetMessage){.type = NET_MSG_READY});
-    NetMessage start_a;
-    NetMessage start_b;
-    REVERSI_TEST_ASSERT(stats, pump_both(server, &a, &b, &start_a, &start_b,
-                                         NET_MSG_START, 5000));
-
-    GameState local;
-    game_init(&local);
-    int seq = 0;
-    bool finished = false;
-    for (int ply = 0; ply < 80 && !finished; ++ply) {
-        const bool black_turn = local.current_player == STONE_BLACK;
-        TestClient *mover = black_turn ? &a : &b;
-        TestClient *other = black_turn ? &b : &a;
-        Move moves[REVERSI_BOARD_CELL_COUNT];
-        const int count = rules_generate_legal_moves(
-            &local.board, local.current_player, moves,
-            REVERSI_BOARD_CELL_COUNT);
-        if (count <= 0) {
-            break;
-        }
-        const NetMessage move = {.type = NET_MSG_MOVE, .seq = seq,
-                                 .last = moves[0], .has_last = true};
-        REVERSI_TEST_ASSERT(stats, test_send(mover, &move));
-        NetMessage state_a;
-        NetMessage state_b;
-        REVERSI_TEST_ASSERT(stats, client_expect(server, mover, NET_MSG_STATE,
-                                                 &state_a, 5000));
-        REVERSI_TEST_ASSERT(stats, client_expect(server, other, NET_MSG_STATE,
-                                                 &state_b, 5000));
-        REVERSI_TEST_ASSERT(stats, state_a.seq == seq + 1);
-        REVERSI_TEST_ASSERT(stats, state_b.seq == seq + 1);
-        GameState expected = local;
-        REVERSI_TEST_ASSERT(stats, game_apply_move(&expected, moves[0]));
-        GameState transmitted;
-        REVERSI_TEST_ASSERT(stats, net_protocol_state_from_board(
-            state_a.board, state_a.turn, state_a.result, &transmitted));
-        REVERSI_TEST_ASSERT(stats, game_state_equal(&transmitted, &expected));
-        local = expected;
-        ++seq;
-        if (local.result != GAME_RESULT_ONGOING) {
-            NetMessage over_a;
-            NetMessage over_b;
-            REVERSI_TEST_ASSERT(stats, client_expect(server, &a,
-                                                     NET_MSG_GAMEOVER,
-                                                     &over_a, 5000));
-            REVERSI_TEST_ASSERT(stats, client_expect(server, &b,
-                                                     NET_MSG_GAMEOVER,
-                                                     &over_b, 5000));
-            REVERSI_TEST_ASSERT(stats, over_a.result == local.result);
-            finished = true;
-        }
-    }
-    REVERSI_TEST_ASSERT(stats, finished);
-    REVERSI_TEST_ASSERT(stats, seq > 0);
-
+    play_verified_game(stats, server, proxy_port_number, 5000);
     g_pump_hook = NULL;
     g_proxy = NULL;
-    test_close(&a);
-    test_close(&b);
     proxy_stop(&proxy);
     net_server_destroy(server);
 }
@@ -1903,9 +1837,10 @@ static void test_logs_redacted(TestStats *stats)
 #endif
 
 
-/* One complete two-client game on an already-running server. Reused by the
- * soak test so every game is also checked against a local replay. */
-static void soak_play_game(TestStats *stats, NetServer *server, int port)
+/* One complete two-client game on an already-running server, checked
+ * against a local replay. Used by the latency proxy and the soak test. */
+static void play_verified_game(TestStats *stats, NetServer *server, int port,
+                               int timeout_ms)
 {
     TestClient a;
     TestClient b;
@@ -1915,19 +1850,19 @@ static void soak_play_game(TestStats *stats, NetServer *server, int port)
     test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
     test_send(&a, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ROOM,
-                                             &message, 2000));
+                                             &message, timeout_ms));
     NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
     snprintf(join.code, sizeof(join.code), "%s", message.code);
     test_send(&b, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
     test_send(&b, &join);
     REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_ROOM,
-                                             &message, 2000));
+                                             &message, timeout_ms));
     test_send(&a, &(NetMessage){.type = NET_MSG_READY});
     test_send(&b, &(NetMessage){.type = NET_MSG_READY});
     NetMessage start_a;
     NetMessage start_b;
     REVERSI_TEST_ASSERT(stats, pump_both(server, &a, &b, &start_a, &start_b,
-                                         NET_MSG_START, 3000));
+                                         NET_MSG_START, timeout_ms));
 
     GameState local;
     game_init(&local);
@@ -1950,9 +1885,9 @@ static void soak_play_game(TestStats *stats, NetServer *server, int port)
         NetMessage state_a;
         NetMessage state_b;
         REVERSI_TEST_ASSERT(stats, client_expect(server, mover, NET_MSG_STATE,
-                                                 &state_a, 3000));
+                                                 &state_a, timeout_ms));
         REVERSI_TEST_ASSERT(stats, client_expect(server, other, NET_MSG_STATE,
-                                                 &state_b, 3000));
+                                                 &state_b, timeout_ms));
         REVERSI_TEST_ASSERT(stats, state_a.seq == seq + 1);
         REVERSI_TEST_ASSERT(stats, state_b.seq == seq + 1);
         GameState expected = local;
@@ -1968,10 +1903,10 @@ static void soak_play_game(TestStats *stats, NetServer *server, int port)
             NetMessage over_b;
             REVERSI_TEST_ASSERT(stats, client_expect(server, &a,
                                                      NET_MSG_GAMEOVER,
-                                                     &over_a, 3000));
+                                                     &over_a, timeout_ms));
             REVERSI_TEST_ASSERT(stats, client_expect(server, &b,
                                                      NET_MSG_GAMEOVER,
-                                                     &over_b, 3000));
+                                                     &over_b, timeout_ms));
             REVERSI_TEST_ASSERT(stats, over_a.result == local.result);
             finished = true;
         }
@@ -2004,18 +1939,18 @@ static void test_soak_games(TestStats *stats)
     if (duration_ms > 0) {
         const uint64_t deadline = test_now_ms() + (uint64_t)duration_ms;
         do {
-            soak_play_game(stats, server, port);
+            play_verified_game(stats, server, port, 3000);
             ++games;
         } while (test_now_ms() < deadline);
         REVERSI_TEST_ASSERT(stats, games >= 2);
     } else {
         while (games < 8) {
-            soak_play_game(stats, server, port);
+            play_verified_game(stats, server, port, 3000);
             ++games;
         }
     }
     /* The server keeps serving after the churn. */
-    soak_play_game(stats, server, port);
+    play_verified_game(stats, server, port, 3000);
     net_server_destroy(server);
 }
 

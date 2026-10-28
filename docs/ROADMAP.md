@@ -412,7 +412,7 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
   `hello` 顺序未强制；加入失败无限速；`SIGTERM` 无优雅关闭。
 - 可测试边界：握手/空闲/等待与结束房间 TTL 可配置；连接 48 / 房间 32 /
   加入失败 8 次 / 队列 16 KB 均有用例。
-- 测试：`net.server` 5,756 断言（新增 Hello 顺序、超时、TTL、上限、接管、
+- 测试：`net.server` 5,757 断言（新增 Hello 顺序、超时、TTL、上限、接管、
   优雅关闭、20 ms 延迟代理整局、日志脱敏、连续 8 局 soak）；`net.client`
   32；`net.session` 57（含中途重启）；v1.0.1 存档/设置 fixture。
 - 浏览器：Chrome / Firefox / WebKit 各完成一局；Web 队列溢出三引擎验证。

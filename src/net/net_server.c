@@ -50,7 +50,7 @@ typedef socklen_t NetSockLen;
 #define REVERSI_NET_SERVER_IDLE_MS 120000
 #define REVERSI_NET_SERVER_ROOM_WAIT_MS 600000
 #define REVERSI_NET_SERVER_ROOM_DONE_MS 120000
-#define REVERSI_NET_SERVER_JOIN_FAILURES 8
+#define REVERSI_NET_SERVER_JOIN_FAILURE_LIMIT 8
 
 typedef enum ConnectionState {
     CONNECTION_FREE = 0,
@@ -344,11 +344,11 @@ static void send_error(NetServer *server, int connection, const char *code)
 /* Counts join/rejoin failures per connection so a client cannot walk the
  * room-code space inside the general message budget; the connection is
  * dropped once the budget is spent. */
-static void join_failed(NetServer *server, int connection, const char *code)
+static void join_rejected(NetServer *server, int connection, const char *code)
 {
     ServerConnection *conn = &server->connections[connection];
     ++conn->join_failures;
-    if (conn->join_failures >= REVERSI_NET_SERVER_JOIN_FAILURES) {
+    if (conn->join_failures >= REVERSI_NET_SERVER_JOIN_FAILURE_LIMIT) {
         send_error(server, connection, "rate_limited");
         connection_schedule_close(server, connection);
         return;
@@ -688,7 +688,7 @@ static void handle_rejoin(NetServer *server, int connection,
             return;
         }
     }
-    join_failed(server, connection, "rejoin_failed");
+    join_rejected(server, connection, "rejoin_failed");
 }
 
 static void handle_create(NetServer *server, int connection,
@@ -748,22 +748,22 @@ static void handle_join(NetServer *server, int connection,
     }
     const int index = find_room(server, message->code);
     if (index < 0) {
-        join_failed(server, connection, "room_not_found");
+        join_rejected(server, connection, "room_not_found");
         return;
     }
     ServerRoom *room = &server->rooms[index];
     if (room->playing || room->finished) {
-        join_failed(server, connection, "room_in_progress");
+        join_rejected(server, connection, "room_in_progress");
         return;
     }
     if (!room->players[0].seated || !room->players[1].seated) {
         const int seat = room->players[0].seated ? 1 : 0;
         if (seat == 0) {
-            join_failed(server, connection, "room_closed");
+            join_rejected(server, connection, "room_closed");
             return;
         }
         if (message->color == room->players[0].color) {
-            join_failed(server, connection, "color_taken");
+            join_rejected(server, connection, "color_taken");
             return;
         }
         room->players[seat].seated = true;
@@ -787,7 +787,7 @@ static void handle_join(NetServer *server, int connection,
         log_line(server, "room %s joined", room->code);
         return;
     }
-    join_failed(server, connection, "room_full");
+    join_rejected(server, connection, "room_full");
 }
 
 static void handle_ready(NetServer *server, int connection)
@@ -1073,7 +1073,19 @@ static void accept_connections(NetServer *server)
                 break;
             }
         }
-        if (index < 0 || !socket_nonblocking(socket)) {
+        if (index < 0) {
+            /* No slot to run a WebSocket handshake in: answer at the HTTP
+             * layer so the client can tell "server full" from a network
+             * failure, then close. */
+            static const char OVER_CAPACITY[] =
+                "HTTP/1.1 503 Service Unavailable\r\n"
+                "Connection: close\r\n"
+                "Content-Length: 0\r\n\r\n";
+            (void)send(socket, OVER_CAPACITY, (int)strlen(OVER_CAPACITY), 0);
+            socket_close(socket);
+            continue;
+        }
+        if (!socket_nonblocking(socket)) {
             socket_close(socket);
             continue;
         }
@@ -1326,17 +1338,15 @@ void net_server_poll(NetServer *server, int timeout_ms)
     connection_close_pending(server);
 }
 
-void net_server_shutdown(NetServer *server, const char *status)
+void net_server_shutdown(NetServer *server)
 {
     if (server == NULL || !server->started) {
         return;
     }
-    const char *notice =
-        status != NULL && status[0] != '\0' ? status : "shutdown";
     int closed = 0;
     for (int r = 0; r < REVERSI_NET_SERVER_MAX_ROOMS; ++r) {
         if (server->rooms[r].used) {
-            room_close(server, r, notice);
+            room_close(server, r, "shutdown");
             ++closed;
         }
     }

@@ -367,6 +367,27 @@ static void test_record_rejects_bad_input(TestStats *stats)
         &analysis_current(&session)->state, &before));
 }
 
+static void test_record_v140_fixture(TestStats *stats)
+{
+    /* Verbatim analysis_record_write() output from the v1.4.0 source
+     * (Phase 14 baseline commit be5b90d). Loading and re-writing it here is
+     * the cross-version fixture for the public record format. */
+    static const char LEGACY[] =
+        "reversi-record 1\n"
+        "result -\n"
+        "moves e6 d6 c7 d7 c8 b8\n";
+    AnalysisSession loaded;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, analysis_record_read(&loaded, LEGACY, error,
+                                                    sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, analysis_current(&loaded)->ply == 6);
+    char again[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
+    const size_t length = analysis_record_write(&loaded, again,
+                                                sizeof(again));
+    REVERSI_TEST_ASSERT(stats, length > 0);
+    REVERSI_TEST_ASSERT(stats, strcmp(again, LEGACY) == 0);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -378,5 +399,6 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_history_import);
     REVERSI_RUN_TEST(&stats, test_record_roundtrip);
     REVERSI_RUN_TEST(&stats, test_record_rejects_bad_input);
+    REVERSI_RUN_TEST(&stats, test_record_v140_fixture);
     return reversi_test_summary(&stats, "analysis.session");
 }

@@ -186,7 +186,6 @@ static void test_client_flow(TestStats *stats)
     net_server_destroy(server);
 }
 
-
 static void test_queue_overflow(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,

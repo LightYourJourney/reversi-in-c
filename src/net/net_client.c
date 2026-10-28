@@ -134,16 +134,7 @@ static int socket_wait_writable(ClientSocket socket, int timeout_ms)
     return select((int)socket + 1, NULL, &set, NULL, &timeout);
 }
 
-static bool socket_read_would_block(void)
-{
-#if defined(_WIN32)
-    return WSAGetLastError() == WSAEWOULDBLOCK;
-#else
-    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
-#endif
-}
-
-static bool socket_write_would_block(void)
+static bool socket_would_block(void)
 {
 #if defined(_WIN32)
     return WSAGetLastError() == WSAEWOULDBLOCK;
@@ -209,7 +200,7 @@ static bool socket_write_all(NetClient *client, const uint8_t *data,
             sent += (size_t)written;
             continue;
         }
-        if (written < 0 && socket_write_would_block()) {
+        if (written < 0 && socket_would_block()) {
             const uint64_t now = now_ms();
             if (now >= deadline) {
                 return false;
@@ -261,7 +252,7 @@ static bool client_handshake(NetClient *client)
             }
         } else if (read == 0) {
             return false;
-        } else if (!socket_read_would_block()) {
+        } else if (!socket_would_block()) {
             return false;
         }
     }
@@ -362,7 +353,7 @@ static void *client_thread(void *argument)
             break;
         }
         if (read < 0) {
-            if (socket_read_would_block()) {
+            if (socket_would_block()) {
                 continue;
             }
             set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");

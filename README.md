@@ -522,7 +522,7 @@ ctest --test-dir build --output-on-failure
 | Debug + GUI | 30/30 通过（Phase 14）；Phase 15 本机无显示器，NOT TESTED |
 | TSan | `net.session` 57、`net.client` 32 断言，无竞争报告（Phase 15） |
 | 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；Safari/iOS/Android **NOT TESTED** |
-| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 394,983 B，Worker 58.7 KB） |
+| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 395,038 B，Worker 58.7 KB） |
 | GitHub Actions | HEAD（Phase 15 之前）`40707272332` 9/9 通过；Phase 15 提交未推送、CI 未运行 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中

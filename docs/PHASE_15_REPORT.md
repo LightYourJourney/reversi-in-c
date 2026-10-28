@@ -35,7 +35,7 @@ Chrome 155（Headless）、Playwright Firefox 157、Playwright WebKit 27.2
 
 | # | 问题 | 修复 | 证据 |
 |---|---|---|---|
-| 1 | Web 队列溢出静默丢弃 | 溢出时 `FAILED("queue_overflow")`、关闭套接字、清空队列，由会话重连重同步；发送失败回传 `false`；重连前关闭旧套接字 | `scripts/web-queue-overflow-check.mjs` 三引擎：溢出后 phase 7、重连后 2 |
+| 1 | Web 队列溢出静默丢弃 | 溢出时 `FAILED("queue_overflow")`、关闭套接字、清空队列：**房间内**由会话自动重连并重同步，**大厅内**转为 FAILED 需手动 Connect；发送失败同样断开；重连前关闭旧套接字 | `scripts/web-queue-overflow-check.mjs` 三引擎：溢出后 phase 7、手动重连后 2 |
 | 2 | 桌面发送阻塞 UI | 连接后置非阻塞；`socket_write_all` 以 select 等待，1 s 上限；部分帧写入失败即 `shutdown` 并 `DISCONNECTED("send_failed")`；pong 路径同样处理 | `net.client` 32 断言；TSan 无竞争；**卡死服务器场景未自动化（NOT TESTED）** |
 | 3 | 等待房间断线即销毁 | 断线保留座位到重连窗口；通知对手 `disconnected`；结束房间仍按原行为关闭（E2E 结果保留依赖它） | `test_waiting_room_reconnect` PASS |
 | 4 | 旧连接占用时无法重连 | 令牌持有者的 `rejoin` 接管座位：清旧连接的 room/seat 并关闭，令牌轮换 | `test_rejoin_takeover` PASS（旧套接字被关闭；新连接可落子） |
@@ -46,6 +46,10 @@ Chrome 155（Headless）、Playwright Firefox 157、Playwright WebKit 27.2
 | 9 | 边界不可测 | `NetServerConfig` 新增 `handshake_timeout_ms` / `idle_timeout_ms` / `room_wait_ms` / `room_done_ms`（≤0 取默认） | `test_handshake_timeout`、`test_idle_timeout`、`test_room_ttl` PASS |
 | 10 | 文档版本不一致 | `RELEASE.md` 改为 2.0.0（RC）+ 最新已发布 1.0.1；README/TESTING/CHANGELOG/ROADMAP/NETWORK_* 同步 | 见 §7 |
 
+复审补充：连接上限（48）现在向被拒连接写回 `HTTP/1.1 503`，客户端可区分
+“服务器满”与网络故障；Web 发送增加 `bufferedAmount` 上限（64 KiB）并在
+发送失败时断开重连。
+
 未做的重构：重复的 `now_ms()`、测试 pump 循环、结果映射三元式、
 CMake 测试块。均为可维护性事项，不改变行为。
 
@@ -55,6 +59,7 @@ CMake 测试块。均为可维护性事项，不改变行为。
 |---|---|---|
 | Hello 顺序与重复 | 协议顺序 | `test_hello_order` |
 | 握手 100 ms 超时 | 服务端边界 | `test_handshake_timeout` |
+| 连接上限返回 HTTP 503 | 资源上限 | `test_connection_cap`（读取 49 号连接的 `HTTP/1.1 503`） |
 | 空闲 300 ms 超时 | 服务端边界 | `test_idle_timeout` |
 | 等待房间 TTL 到期 / 加入刷新 | 服务端边界 | `test_room_ttl`、`test_room_ttl_refresh` |
 | 48 连接上限与释放后恢复 | 资源上限 | `test_connection_cap` |
@@ -67,8 +72,10 @@ CMake 测试块。均为可维护性事项，不改变行为。
 | 连续 8 局完整对局 | 稳定性 | `test_soak_games`（默认 8 局；`REVERSI_SOAK_MS` 长时） |
 | 日志脱敏 | 安全 | `test_logs_redacted`（redirect stderr，断言 token/`token=`/`board=` 不出现；POSIX） |
 | 接收队列溢出（桌面） | 客户端 | `net.client::test_queue_overflow` |
-| 中途服务端重启 | 会话 | `net.session::test_session_server_restart` |
+| 中途服务端重启 → 重连回到大厅 | 会话 | `net.session::test_session_server_restart` |
+| 重连预算耗尽 → FAILED | 会话 | `net.session::test_session_reconnect_budget` |
 | v1.0.1 存档/设置 | 兼容性 | `storage.save::test_v101_fixture`、`storage.settings::test_v101_fixture` |
+| v1.4.0 棋谱 | 兼容性 | `analysis.session::test_record_v140_fixture`（`be5b90d` 源码写出的记录，读入并重写一致） |
 | 浏览器队列溢出 | 真实浏览器 | `web-queue-overflow-check.mjs`（三引擎） |
 | 浏览器渲染/缩放/触摸/存档/Worker | 真实浏览器 | `tests/web/run-tests.js` 9/9（Chrome；套件坐标改为按 UI 布局公式计算） |
 
@@ -84,22 +91,22 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | `ctest --test-dir build-release` | PASS 26/26（29.0 s） |
 | `ctest --test-dir build-sanitize -E "app.*"`（ASan+UBSan） | PASS 26/26，无报告（49.5 s） |
 | `ctest --test-dir build-gui` | **NOT TESTED**：本会话无窗口服务器（`GLFW: Failed to get primary monitor`） |
-| TSan `net.session` / `net.client`（Homebrew clang 23） | PASS 57 / 32 断言，无竞争报告 |
-| `net.server` | PASS 5,756 断言（12.9 s，含延迟代理与 8 局 soak） |
+| TSan `net.session` / `net.client`（Homebrew clang 23） | PASS 71 / 32 断言，无竞争报告 |
+| `net.server` | PASS 5,757 断言（13.1 s，含延迟代理与 8 局 soak） |
 | 浏览器 Chrome 155 | PASS 房间 `38RSUR`；生产式代理下 `9J25DT` |
 | Web 自动化套件（Chrome） | PASS 9/9：smoke、gameplay、persistence、responsive（5 视口）、difficulties、mobile-touch、pagehide、cancel、autoplay |
 | 浏览器 Firefox 157 | PASS 房间 `45H8XY` |
 | 浏览器 WebKit 27.2 | PASS 房间 `V3U9MB`（引擎代理，不等于 Safari） |
 | Web 队列溢出（三引擎） | PASS：7 → 重连 → 2 |
-| Emscripten `scripts/build-web.sh` | PASS（wasm 394,983 B） |
+| Emscripten `scripts/build-web.sh` | PASS（wasm 395,038 B） |
 | 本地 TLS/HSTS/限速/关闭 | PASS，见 `PRODUCTION_DEPLOYMENT.md` §7 |
-| 10 分钟 ASan soak `REVERSI_SOAK_MS=600000` | PASS：`PASS net.server (897693 checks)`，退出码 0，无 ASan 报告 |
+| 10 分钟 ASan soak `REVERSI_SOAK_MS=600000` | PASS：`PASS net.server (865909 checks)`，退出码 0，无 ASan 报告 |
 | 安装包 `scripts/package.sh` | **NOT TESTED**（本阶段未重建归档） |
 | CI（本阶段提交） | **NOT RUN**（未推送；HEAD 的 CI 为 `40707272332` 9/9） |
 
 断言数（本机 Debug）：`net.protocol` 33、`net.ws` 20,026、`net.server`
-5,756、`net.client` 32、`net.session` 57、`storage.save` 102、
-`storage.settings` 68；全部无窗口测试合计 1,210,298 断言。
+5,757、`net.client` 32、`net.session` 71、`analysis.session` 112、
+`storage.save` 102、`storage.settings` 68；全部无窗口测试合计 1,210,317 断言。
 
 ### 4.1 假阳性检查
 
@@ -122,10 +129,10 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
   ./build-sanitize/reversi_net_server_tests
 ```
 
-结果：`PASS net.server (897693 checks)`，进程退出码 0，无 ASan/UBSan 报告。
+结果：`PASS net.server (865909 checks)`，进程退出码 0，无 ASan/UBSan 报告。
 
-该断言数包含 net.server 的常规用例（5,756）与 600 秒内的连续完整
-对局；按每局约 489 条断言推算，10 分钟完成约 **1,800 局**完整对局
+该断言数包含 net.server 的常规用例（5,757）与 600 秒内的连续完整
+对局；按每局约 489 条断言推算，10 分钟完成约 **1,750 局**完整对局
 （两名客户端建房、加入、ready、随机合法落子、终局、断开）。过程中没有
 连接泄漏、崩溃、协议错误或断言失败。断言总数随 machine speed 变化，
 不以该数作为性能指标。
@@ -135,7 +142,9 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
 1. 桌面 GUI（`app.smoke/app.net/app.lab/app.autoplay`）本机无显示器，
    **NOT TESTED**；CI 的 Xvfb 作业未运行（提交未推送）。
 2. 桌面↔Web 联机本阶段未复验（Phase 14 曾 PASS `HVVFKP`）。
-3. Safari、iOS Safari、Android Chrome：**NOT TESTED**。
+3. Safari、iOS Safari、Android Chrome：**NOT TESTED**。字体渲染与音效
+   **NOT TESTED**（浏览器 smoke 只证明无控制台错误；桌面字体/音效为
+   Phase 14 GUI 证据，本阶段无显示器未复验）。
 4. 真实公网：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域延迟
    与丢包：**NOT TESTED**。
 5. Windows/Linux 物理桌面与 2.0.0 安装包验收：**NOT TESTED**（待 CI）。

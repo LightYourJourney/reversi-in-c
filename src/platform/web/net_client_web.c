@@ -68,6 +68,12 @@ EM_JS(int, reversi_web_net_send, (const char *text), {
     var socket = globalThis.__reversiNetSocket;
     if (socket && socket.readyState === 1) {
         try {
+            // Bound the browser's outbound buffer: a peer that stops reading
+            // must not grow memory without limit. 64 KiB is hundreds of
+            // times the largest protocol message.
+            if (socket.bufferedAmount > 65536) {
+                return 0;
+            }
             socket.send(UTF8ToString(text));
             return 1;
         } catch (error) {
@@ -215,7 +221,15 @@ bool net_client_send(NetClient *client, const NetMessage *message)
     if (net_protocol_encode(message, text, sizeof(text)) == 0) {
         return false;
     }
-    return reversi_web_net_send(text) != 0;
+    if (reversi_web_net_send(text) == 0) {
+        /* The frame cannot be queued (closing socket or full buffer); drop
+         * the connection so the session reconnects and resyncs instead of
+         * leaving the UI authoritative in its own head. */
+        reversi_web_net_close();
+        web_set_status(client, NET_CLIENT_FAILED, "send_failed");
+        return false;
+    }
+    return true;
 }
 
 NetClientStatus net_client_status(const NetClient *client)
