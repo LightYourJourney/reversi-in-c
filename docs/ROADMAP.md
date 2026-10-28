@@ -394,7 +394,7 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 - Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
 - 两名独立客户端完成整局；非法、重复、断线重连、多房间、服务端重启、
   20k 随机帧与 ASan 通过。
-- Emscripten Release 构建通过（wasm 394,855 B）。
+- Emscripten Release 构建通过（wasm 394,922 B）。
 - 两个浏览器（本地 HTTPS/WSS，nginx 自签 TLSv1.3）完成建房/加入/落子/
   投降一局；`openssl s_client` 与浏览器均收到 `101`。
 - 桌面↔Web 完成一局：桌面 `ws://` 建房（黑），浏览器 `wss://` 加入

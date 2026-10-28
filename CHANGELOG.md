@@ -52,8 +52,11 @@
 - 在线终局 HUD 的结果与原因缺少分隔（`Black winsresign`）；现为
   `Black wins (resign)`。
 - Web 壳页仍写着“无账号、无网络同步”；现说明在线需要自托管服务器。
-- 终局后对手离开会关闭房间，客户端被踢回大厅、结算画面消失；现终局后
-  房间关闭仍保留 FINISHED 结果，直到玩家自行离开。
+- 终局后对手离开或服务端断开时，结算画面会被踢回大厅、结果丢失；现
+  保留 FINISHED 与真实结束原因，直到玩家自行离开。房间关闭后的 HUD 显示
+  “room closed / opponent left”，不再显示空房间码或过期的对手状态。
+- 房间关闭消息曾覆盖终局原因（如 `resign` 变成 `disconnected`）；现仅在
+  未结束时更新原因。
 
 ### Verified
 
@@ -68,7 +71,7 @@
   d3、浏览器投降，桌面显示 `Game over: Black wins (resign)`。
 - 两名独立客户端完成整局，服务端与本地重放状态一致；非法、重复、断线
   重连、多房间、服务端重启与 20k 随机帧通过。
-- Emscripten Release 构建通过（wasm 394,866 B）。
+- Emscripten Release 构建通过（wasm 394,922 B）。
 
 ### Not tested
 

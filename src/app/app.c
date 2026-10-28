@@ -1240,10 +1240,14 @@ static void app_draw_net_hud(const App *app)
                   ui_color_alpha(REVERSI_UI_COLOR_SURFACE, 0.92f),
                   REVERSI_UI_COLOR_BORDER);
     char text[256];
+    const bool room_open = net->code[0] != '\0';
     snprintf(text, sizeof(text), "Online  room %s  you %s%s  opponent %s  %d ms",
-             net->code, ui_player_name(net->color),
+             room_open ? net->code : "closed",
+             ui_player_name(net->color),
              net->is_host ? " (host)" : "",
-             net->opponent_status[0] != '\0' ? net->opponent_status : "connected",
+             room_open && net->opponent_status[0] != '\0'
+                 ? net->opponent_status
+                 : room_open ? "connected" : "left",
              net->latency_ms);
     ui_draw_text_clipped(&app->fonts, UI_TEXT_SEMIBOLD, text,
                          (Rectangle){panel.x + 12.0f, panel.y,

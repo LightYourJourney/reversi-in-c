@@ -62,11 +62,17 @@ static void on_status(void *context, NetClientStatus status,
         session->phase = NET_SESSION_CONNECTING;
         break;
     case NET_CLIENT_DISCONNECTED:
-        session->phase = session->active ? NET_SESSION_DISCONNECTED
-                                         : NET_SESSION_LOBBY;
+        /* A finished game stays on screen even if the socket drops later. */
+        if (session->phase != NET_SESSION_FINISHED) {
+            session->phase = session->active ? NET_SESSION_DISCONNECTED
+                                             : NET_SESSION_LOBBY;
+        }
         session->reconnect_timer = 0.0f;
         break;
     case NET_CLIENT_FAILED:
+        if (session->phase == NET_SESSION_FINISHED) {
+            break;
+        }
         if (session->active && session->token[0] != '\0'
             && session->reconnect_attempts < 5) {
             session->phase = NET_SESSION_DISCONNECTED;
@@ -158,11 +164,11 @@ static void on_message(void *context, const NetMessage *message)
         }
         break;
     case NET_MSG_ROOMCLOSED:
-        snprintf(session->reason, sizeof(session->reason), "%s",
-                 message->status);
-        /* Keep a finished game on screen when the room disappears after the
-         * opponent leaves; only an unfinished room falls back to the lobby. */
+        /* Keep a finished game (and its end reason) on screen when the room
+         * disappears; only an unfinished room falls back to the lobby. */
         if (session->phase != NET_SESSION_FINISHED) {
+            snprintf(session->reason, sizeof(session->reason), "%s",
+                     message->status);
             session->phase = NET_SESSION_LOBBY;
         }
         session->active = false;

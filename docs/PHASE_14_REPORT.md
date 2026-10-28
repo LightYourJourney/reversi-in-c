@@ -15,7 +15,7 @@ AppleClang 21，CMake 4.4.4，Emscripten 6.0.13
 | 3. 网络对局 | 落子请求、合法性、状态同步、回合、Pass、终局、120 s 超时、断线、重连、seq 防重复 | PASS（协议/客户端层） |
 | 4. 安全设计 | 输入校验、大小/频率限制、权限、令牌、重放防护、资源上限、日志脱敏；TLS 由代理终止 | PARTIAL（本地 nginx 终止 TLS 已实测；生产证书/HSTS 未测） |
 | 5. 联网体验 | 对手状态、延迟、掉线/重连提示、投降、终局；复盘未接入在线流程 | PARTIAL |
-| 6. 跨平台 | 桌面与 Web 构建；本地双人/AI 未改；协议 v1 | PASS（桌面↔Web 与 Web↔Web 均在本地完成一局）；Safari/Firefox **NOT TESTED** |
+| 6. 跨平台 | 桌面与 Web 构建；本地双人/AI 未改；协议 v1 | PASS（桌面↔Web 与 Chrome↔Chrome 本地完成一局；验收范围为桌面 + Chrome Web，Safari/Firefox 未测） |
 | 7. 测试 | 正常对局、非法、重复、断线重连、离开、多房间、服务端重启、模糊、ASan、浏览器 E2E | PARTIAL（真实网络延迟 **NOT TESTED**） |
 
 ## 2. 架构与审计
@@ -60,8 +60,8 @@ ARCHITECTURE/TESTING。
 | `net.ws` | 20,026 次断言：握手、掩码、长度、分片、ping、20k 随机帧 |
 | `net.server` | 713 次断言：完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 |
 | `net.client` | 26 次断言：连接、创建/加入/ready/落子、断线重连 |
-| `net.session` | 32 次断言：会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭 |
-| Emscripten Release | 构建通过（主 wasm 394,866 B） |
+| `net.session` | 37 次断言：会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭 |
+| Emscripten Release | 构建通过（主 wasm 394,922 B） |
 | 浏览器在线双客户端 | PASS：两个独立 Chromium 上下文经 HTTPS/WSS 建房/加入/落子/投降完成一局（脚本 `scripts/web-online-e2e.mjs`；房间 `MJXHDX`，双方 seq 1、GAME、PLAYING、终局 BLACK_WIN） |
 | 真实网络延迟/丢包 | **NOT TESTED**；只在回环与本地代理上测试 |
 | 本地 TLS/WSS（自签） | PASS：nginx TLSv1.3 终止，静态 HTTPS + WSS 代理；`s_client` 与浏览器均收到 `101` |
@@ -90,9 +90,11 @@ ARCHITECTURE/TESTING。
   `wss://localhost:8444` 连接；建房/加入/双方 ready/黑方 d3/白方投降，
   双方相位 LOBBY→WAITING→PLAYING→FINISHED，落子后双方 `seq=1`，终局双方
   `BLACK_WIN`。可复跑脚本见 `docs/WEB_ONLINE_TESTING.md`（未进 CI）。
-- 桌面↔Web：桌面应用以 `ws://127.0.0.1:8080` 建房（黑，房间 `7SUYW3`/
-  `2N9BLT`），浏览器经 WSS 加入（白）；桌面 d3 后浏览器 `seq=1`，浏览器
-  投降后桌面显示 `Game over: Black wins (resign)`，浏览器 `BLACK_WIN`。
+- 桌面↔Web：桌面应用以 `ws://127.0.0.1:8080` 建房（黑），浏览器经 WSS
+  加入（白）；桌面 d3 后浏览器 `seq=1`，浏览器投降后桌面显示
+  `Game over: Black wins (resign)`，浏览器 `BLACK_WIN`。成功运行房间
+  `7SUYW3`（流程）与 `2N9BLT`（延迟关闭浏览器以抓桌面终局）。桌面端为
+  主机脚本/窗口自动化，未进 CI。
 - TLS：nginx 自签证书 `CN=localhost`，TLSv1.3；`openssl s_client` 手工升级
   收到 `HTTP/1.1 101`；access log 记录两次 HeadlessChrome 的 WSS 升级。
 - 浏览器验证同时修复：在线会话此前只在转场期间轮询，稳定态大厅/对局不更新；
@@ -123,8 +125,8 @@ ARCHITECTURE/TESTING。
   真实网络 **NOT TESTED**。
 
 因此本阶段的核心验收（权威服务端、房间、桌面↔Web 联机、本地 TLS）
-已满足；仍为 **PARTIAL** 的仅是生产网络/证书、Safari/Firefox 与 Lab
-复盘等明确列出的未验证项。
+已满足；仍为 **PARTIAL** 的仅是真实网络/生产证书与 Lab 复盘；
+Safari/Firefox 未测，但不在本阶段验收范围。
 
 ## 8. 回滚
 

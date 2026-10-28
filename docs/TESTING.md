@@ -51,7 +51,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
 | net.server | reversi_net_server_tests | 713 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 | PASS |
 | net.client | reversi_net_client_tests | 26 | 连接、创建/加入/ready/落子、断线重连 | PASS |
-| net.session | reversi_net_session_tests | 32 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭 | PASS |
+| net.session | reversi_net_session_tests | 37 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
@@ -91,8 +91,8 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - GitHub Actions 运行 `40679842862`（2026-10-28，提交 `910adff`）9 个作业
   全部 `success`：Linux/Windows（MSVC）/macOS Debug 各 26/26；Linux
   ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包
-  与 Linux 包验收。该运行覆盖浏览器轮询修复（`net.server` 713、
-  `net.protocol` 33）。首跑 `40298668533` 暴露测试缺少 `windows.h` 与
+  与 Linux 包验收。该运行覆盖浏览器轮询与终局保留修复（`net.server` 713、
+  `net.protocol` 33、`net.session` 37）。首跑 `40298668533` 暴露测试缺少 `windows.h` 与
   Linux 端 `net.session` 等待竞态；`40299103857` 进一步显示 Windows 上
   `shutdown` 不唤醒阻塞的 `recv`，读取循环已改为先 `select` 再 `recv`
   （`95ccd03`、`699efbb`）。独立审计修复的运行是 `40452178342`
@@ -315,7 +315,7 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
   关闭）；重连到期判负与旧令牌拒绝；满房；重连进已结束房间（finished +
   真实结束原因）；随机帧不崩溃。
 - `net.client` / `net.session`：桌面线程客户端与浏览器共用会话逻辑；创建/
-  加入/ready/落子/seq。
+  加入/ready/落子/seq；终局后房间关闭仍保留结果与结束原因。
 - `app.net`：Online 大厅渲染 20 帧。
 - 浏览器双客户端（本地）：两个隔离 Chromium 上下文经 nginx HTTPS/WSS
   完成建房/加入/落子/投降；步骤与证据见

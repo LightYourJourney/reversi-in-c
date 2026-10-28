@@ -137,19 +137,20 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 浏览器经 `wss://localhost:8444` 加入同一房间。桌面创建房间（黑方），
 浏览器选白方加入；桌面 Ready，浏览器 Ready；桌面落子 d3；浏览器投降。
 
-桌面端在 macOS 上以窗口自动化执行（不切换前台、不抢占用户输入）：
+桌面端在 macOS 上以窗口自动化执行：
 
 - 通过 `CGWindowListCopyWindowInfo` 找到窗口并 `screencapture -l<id>` 按窗口
   截图（Retina 2×；raylib 坐标 = 像素/2 − 标题栏 32pt）。
-- 通过 `CGEventPost`/`postToPid` 投递鼠标事件；窗口必须先处于前台
-  （GLFW 忽略非活动窗口的按键），截图后恢复原应用。
+- 通过 `CGEventPost`/`postToPid` 投递鼠标事件。GLFW 忽略非活动窗口的按键，
+  因此验证期间会短暂把 Reversi 置前；事件按窗口/进程定向，结束后恢复原
+  应用，不会向其他应用输入文本。
 - 浏览器使用 Playwright，连接 WSS 并加入给定房间码。
 
 结果（2026-10-28）：
 
 | 项 | 结果 |
 |---|---|
-| 房间 | `7SUYW3`、`2N9BLT` |
+| 房间 | `7SUYW3`（完整流程）、`2N9BLT`（浏览器延迟关闭以抓桌面终局） |
 | 桌面 | `ws://127.0.0.1:8080`，黑方（host），ping 17–27 ms |
 | 浏览器 | `wss://localhost:8444`，白方 |
 | 双方 Ready | 双方进入 GAME，桌面显示 “Black to move” |

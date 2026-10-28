@@ -113,11 +113,11 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | 网络压力 | `reversi_net_{server,session,client}_tests` 各 40 次 | 120/120 PASS |
 | TSan（会话） | `clang -fsanitize=thread ... test_net_session.c` | PASS，无数据竞争报告 |
 | TSan（客户端） | 同上，`test_net_client.c` ×5 | PASS |
-| Web | `cmake --build build-web` | PASS（`reversi.wasm` 394,629 B） |
+| Web | `cmake --build build-web` | PASS（`reversi.wasm` 394,922 B） |
 | GitHub Actions | 运行 `40479705658`（提交 `37d219d`） | 9/9 作业 PASS：Linux/Windows/macOS Debug 26/26；ASan+UBSan 26/26 与 Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 
 断言计数（本机实跑）：`core.match` 1011、`net.protocol` 33、
-`net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 32。
+`net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 37。
 
 关键证据：
 
@@ -180,14 +180,14 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | 网络对局 | PASS | 完整对局、非法/重复、Pass、双向超时、投降、seq |
 | 安全设计 | PARTIAL | 限速、重放、令牌、资源上限有实现与部分测试；本地 TLS 终止 PASS，生产配置 NOT TESTED |
 | 联网体验 | PARTIAL | 大厅/HUD/重连/投降/终局 PASS；Lab 复盘未接入 |
-| 跨平台 | PASS（附注） | 桌面三平台 CI PASS；桌面↔Web 与 Chrome↔Chrome 本地联机 PASS；Safari/Firefox NOT TESTED |
+| 跨平台 | PASS | 桌面三平台 CI PASS；桌面↔Web 与 Chrome↔Chrome 本地联机 PASS（验收范围为桌面 + Chrome Web；Safari/Firefox 未测，不属本阶段验收范围） |
 | 测试 | PARTIAL | 服务端/协议/客户端/会话与浏览器 E2E 覆盖；真实网络延迟 NOT TESTED |
 
 **结论：核心在线对战验收 PASS；桌面↔Web、Web↔Web 与本地 TLS 已补测
-PASS；原始阶段验收仍为 PARTIAL，仅因生产网络/证书、Safari/Firefox 与
-Lab 复盘等明确未测项。**
-未达成的部分全部是“真实部署/浏览器/网络环境”类验证，按本阶段约束
-（不部署、不开放公网）无法在本机补齐，不得声称完整通过。
+PASS；原始阶段验收仍为 PARTIAL，仅因真实网络/生产证书与 Lab 复盘；
+Safari/Firefox 未测但不在验收范围。**
+未达成的部分属于“真实部署/网络环境”类验证，按本阶段约束（不部署、
+不开放公网）无法在本机补齐，不得声称完整通过。
 
 ## 7. 是否建议进入下一 Phase
 

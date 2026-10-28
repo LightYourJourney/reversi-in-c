@@ -106,8 +106,8 @@ static void test_session_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_WHITE_WIN);
     REVERSI_TEST_ASSERT(stats, b->game.result == GAME_RESULT_WHITE_WIN);
 
-    /* The opponent leaves after the game: the result must stay on screen. */
-    net_session_disconnect(b);
+    /* The opponent leaves after the game: the result and its reason stay. */
+    net_session_leave(b);
     for (int elapsed = 0; elapsed < 3000 && a->code[0] != '\0'; ++elapsed) {
         net_session_update(a, 0.002f);
         net_server_poll(server, 1);
@@ -116,10 +116,24 @@ static void test_session_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, a->code[0] == '\0');
     REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FINISHED);
     REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_WHITE_WIN);
+    REVERSI_TEST_ASSERT(stats, strcmp(a->reason, "resign") == 0);
+    REVERSI_TEST_ASSERT(stats, !a->active);
+
+    /* Losing the server must not discard the retained result either. */
+    net_server_destroy(server);
+    for (int elapsed = 0; elapsed < 2000
+         && net_client_status(a->client) != NET_CLIENT_DISCONNECTED;
+         ++elapsed) {
+        net_session_update(a, 0.002f);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats,
+        net_client_status(a->client) == NET_CLIENT_DISCONNECTED);
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FINISHED);
+    REVERSI_TEST_ASSERT(stats, strcmp(a->reason, "resign") == 0);
 
     net_session_destroy(a);
     net_session_destroy(b);
-    net_server_destroy(server);
 }
 
 int main(void)
