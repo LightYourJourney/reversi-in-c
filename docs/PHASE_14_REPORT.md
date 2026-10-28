@@ -55,7 +55,7 @@ ARCHITECTURE/TESTING。
 | Release 无窗口 | 26/26 PASS |
 | ASan+UBSan 无窗口 | 26/26 PASS |
 | Debug + GUI | 30/30 PASS（含 `app.net` 大厅渲染） |
-| GitHub Actions `40671454886` | 9/9 作业 PASS：Linux/Windows（MSVC）/macOS Debug 各 26/26；ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
+| GitHub Actions `40679842862` | 9/9 作业 PASS：Linux/Windows（MSVC）/macOS Debug 各 26/26；ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 | `net.protocol` | 33 次断言：字段/版本/方向/棋盘/错误/终局快照 |
 | `net.ws` | 20,026 次断言：握手、掩码、长度、分片、ping、20k 随机帧 |
 | `net.server` | 713 次断言：完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 |
