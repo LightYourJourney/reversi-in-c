@@ -48,7 +48,7 @@
 | macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口）；GUI 30/30 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
 | Windows x64 | GitHub Actions 托管 VM（v2.0.0）：Debug 26/26（运行 `40692227710`），发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
 | Linux x86_64 | GitHub Actions 托管 VM（v2.0.0）：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
-| Web（Chrome） | Emscripten 6.0.13；构建通过（v2.0.0）；本地 HTTPS/WSS 双浏览器与桌面↔Web 各完成一局（见 `docs/WEB_ONLINE_TESTING.md`） | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
+| Web（Chrome） | Emscripten 6.0.13；构建通过（v2.0.0）；本地 HTTPS/WSS 两个浏览器上下文与桌面↔Web 各完成一局（见 `docs/WEB_ONLINE_TESTING.md`） | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
 SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
@@ -514,7 +514,7 @@ ctest --test-dir build --output-on-failure
 | Release（无窗口） | 26/26 通过 |
 | ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告 |
 | Debug + GUI | 30/30 通过；含 `app.lab`、`app.net` 渲染冒烟 |
-| 浏览器（Chrome） | v2.0.0 双客户端 E2E（本地 HTTPS/WSS）通过；旧 v1.1.0 套件未复跑；Safari/Firefox **NOT TESTED** |
+| 浏览器（Chrome） | v2.0.0 两个浏览器上下文 E2E（本地 HTTPS/WSS）通过；旧 v1.1.0 套件未复跑；Safari/Firefox **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 394,922 B，Worker 58 KB） |
 | GitHub Actions | v1.4.0 运行 `40288248734` 9/9 通过；v1.3.0 为 `40111155790` |
 

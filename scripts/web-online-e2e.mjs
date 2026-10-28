@@ -255,17 +255,27 @@ try {
 
   // The loser closes the browser: the remaining client keeps the result.
   await b.context.close();
-  await a.page.waitForTimeout(1500);
+  let roomClosed = false;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await a.page.waitForTimeout(100);
+    if ((await netCode(a.page)) === "") {
+      roomClosed = true;
+      break;
+    }
+  }
   const retained = await a.page.evaluate(() => ({
     screen: window.__reversiTest.screenIndex(),
     phase: window.__reversiTest.netPhase(),
     over: window.__reversiTest.gameOver(),
     result: window.__reversiTest.result(),
+    code: window.__reversiTest.netCode(),
   }));
   result.retained = retained;
+  check("server closed and client processed it", roomClosed === true);
   check("A retains result after opponent closes",
         retained.screen === 2 && retained.phase === 5
-        && retained.over === true && retained.result === 1,
+        && retained.over === true && retained.result === 1
+        && retained.code === "",
         JSON.stringify(retained));
   await shot(a.page, "8-a-retained");
   await a.context.close();

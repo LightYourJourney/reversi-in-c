@@ -122,15 +122,15 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 |---|---|---|
 | 打开两页并进入 Online | `screenIndex() == 10`（NET） | PASS |
 | 端口改为 8444 并 Connect | `netPhase() == 2`（LOBBY） | PASS |
-| A 建房 | `netPhase() == 3`（WAITING），`netCode()` 非空 | PASS（`MGQW82`） |
+| A 建房 | `netPhase() == 3`（WAITING），`netCode()` 非空 | PASS |
 | B 切白方并加入 | 双方 `netPhase() == 3` | PASS |
 | 双方 Ready | `screenIndex() == 2`（GAME），`netPhase() == 4` | PASS |
-| A 点 d3 | 双方 `netSeq() == 1`；B 棋盘显示 d3 黑子、d4 翻黑，`Last move d3` | PASS（`MJXHDX`，2026-10-28 脚本复跑） |
+| A 点 d3 | 双方 `netSeq() == 1`；B 棋盘显示 d3 黑子、d4 翻黑，`Last move d3` | PASS |
 | B 点 Resign | 双方 `gameOver() == true`、`result() == 1`（BLACK_WIN），`netPhase() == 5` | PASS |
-| B 关闭浏览器 | A 仍为 GAME/FINISHED、`BLACK_WIN`（房间 `NZPDPD`） | PASS |
+| B 关闭浏览器 | A 仍为 GAME/FINISHED、`BLACK_WIN`，`netCode()` 清空（证明 ROOMCLOSED 已处理） | PASS |
 
-终局 HUD 文本为 `Game over: Black wins (resign)`（自然终局的 `normal`
-状态不再显示）。截图与 nginx 访问日志保留在本机 `~/rv-e2e/`，未纳入仓库；
+脚本每次生成新房间码；本轮审计运行 `EZJ69N`。终局 HUD 文本为
+`Game over: Black wins (resign)`（自然终局的 `normal` 状态不再显示）。截图与 nginx 访问日志保留在本机 `~/rv-e2e/`，未纳入仓库；
 服务端日志需自行重定向，默认写入 stderr。
 
 ## 5. 桌面 ↔ Web 联机
@@ -152,13 +152,13 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 
 | 项 | 结果 |
 |---|---|
-| 房间 | `7SUYW3`（完整流程）、`2N9BLT`（浏览器延迟关闭以抓桌面终局） |
+| 房间 | `HVVFKP`（完整流程 + 浏览器立即关闭后保留）；早期 `7SUYW3`/`2N9BLT` 为方法调试 |
 | 桌面 | `ws://127.0.0.1:8080`，黑方（host），ping 17–27 ms |
 | 浏览器 | `wss://localhost:8444`，白方 |
 | 双方 Ready | 双方进入 GAME，桌面显示 “Black to move” |
 | 桌面 d3 | 浏览器 `netSeq()==1`；桌面显示 d3 黑子、d4 翻黑、4:1 |
 | 浏览器投降 | 浏览器 `BLACK_WIN`、FINISHED；桌面 HUD `Game over: Black wins (resign)` |
-| 浏览器立即关闭 | 桌面仍保留 GAME/FINISHED 与 `Black wins (resign)`；HUD `room closed / opponent left`（房间 `HVVFKP`） |
+| 浏览器立即关闭 | 桌面仍保留 GAME/FINISHED 与 `Black wins (resign)`；HUD 为 `Online room closed … opponent left` |
 
 桌面↔Web 验证是手工/主机脚本流程，未纳入仓库脚本与 CI；坐标与焦点处理
 依赖 macOS 窗口管理。
