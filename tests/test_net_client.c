@@ -171,6 +171,7 @@ static void test_client_flow(TestStats *stats)
                                            NET_CLIENT_CONNECTED, 3000));
     NetMessage rejoin = {.type = NET_MSG_REJOIN};
     snprintf(rejoin.token, sizeof(rejoin.token), "%s", token_a);
+    net_client_send(a2, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
     REVERSI_TEST_ASSERT(stats, net_client_send(a2, &rejoin));
     REVERSI_TEST_ASSERT(stats, wait_message(server, a2, b, &again,
                                             NET_MSG_WELCOME, &message, 3000));
@@ -185,9 +186,42 @@ static void test_client_flow(TestStats *stats)
     net_server_destroy(server);
 }
 
+
+static void test_queue_overflow(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    Events events = {0};
+    NetClient *a = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, a != NULL);
+    REVERSI_TEST_ASSERT(stats, net_client_connect(a, "127.0.0.1", port));
+    REVERSI_TEST_ASSERT(stats, wait_status(server, a, &events,
+                                           NET_CLIENT_CONNECTED, 3000));
+    net_client_send(a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    /* 38 pongs against a 32-entry receive queue: the caller does not drain
+     * the queue, so it must fail loudly instead of dropping state. */
+    for (int i = 0; i < 38; ++i) {
+        net_client_send(a, &(NetMessage){.type = NET_MSG_PING});
+    }
+    for (int elapsed = 0; elapsed < 1000; ++elapsed) {
+        net_server_poll(server, 1);
+        test_sleep_ms(1);
+    }
+    net_client_poll(a);
+    REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_FAILED);
+    REVERSI_TEST_ASSERT(stats, strcmp(events.reason, "queue_overflow") == 0);
+    net_client_destroy(a);
+    net_server_destroy(server);
+}
+
 int main(void)
 {
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_client_flow);
+    REVERSI_RUN_TEST(&stats, test_queue_overflow);
     return reversi_test_summary(&stats, "net.client");
 }

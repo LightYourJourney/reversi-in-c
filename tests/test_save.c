@@ -348,6 +348,50 @@ static void test_atomic_overwrite(TestStats *stats)
     (void)storage_remove(temp);
 }
 
+
+static void test_v101_fixture(TestStats *stats)
+{
+    /* Verbatim save_write() output from tag v1.0.1 (compiled from that
+     * tag's src/storage/save.c). Loading it here is the cross-version
+     * fixture for published releases. */
+    static const char LEGACY[] =
+        "REVERSI_SAVE 1\n"
+        "checksum CBA0BAD2\n"
+        "mode 0\n"
+        "human 1\n"
+        "difficulty 0\n"
+        "moves 1\n"
+        "move 2 4\n"
+        "board ....................B......BB......WB...........................\n"
+        "player 2\n"
+        "result 0\n";
+    const char *path = "test-save-v101.rvs";
+    (void)storage_remove(path);
+    REVERSI_TEST_ASSERT(stats,
+        storage_write_atomic(path, LEGACY, strlen(LEGACY)));
+
+    SavedGame saved;
+    REVERSI_TEST_ASSERT(stats, save_read(path, &saved) == SAVE_STATUS_OK);
+    REVERSI_TEST_ASSERT(stats, saved.mode == GAME_MODE_PVP);
+    REVERSI_TEST_ASSERT(stats, saved.human_color == STONE_BLACK);
+    REVERSI_TEST_ASSERT(stats, saved.difficulty == 0);
+    REVERSI_TEST_ASSERT(stats, saved.move_count == 1);
+    REVERSI_TEST_ASSERT(stats, saved.moves[0].row == 2
+                        && saved.moves[0].col == 4);
+    REVERSI_TEST_ASSERT(stats,
+                        saved.expected.current_player == STONE_WHITE);
+    REVERSI_TEST_ASSERT(stats,
+                        saved.expected.result == GAME_RESULT_ONGOING);
+
+    Match restored;
+    const MatchConfig config = pvp_config();
+    REVERSI_TEST_ASSERT(stats, match_restore(&restored, &config, saved.moves,
+                                             saved.move_count));
+    REVERSI_TEST_ASSERT(stats,
+                        game_state_equal(&restored.state, &saved.expected));
+    (void)storage_remove(path);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -358,6 +402,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_status_messages);
     REVERSI_RUN_TEST(&stats, test_storage_path);
     REVERSI_RUN_TEST(&stats, test_atomic_overwrite);
+    REVERSI_RUN_TEST(&stats, test_v101_fixture);
 
     return reversi_test_summary(&stats, "storage.save");
 }

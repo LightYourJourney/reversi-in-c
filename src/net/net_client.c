@@ -40,6 +40,7 @@ typedef pthread_t ClientThread;
 #endif
 
 #define REVERSI_NET_CLIENT_QUEUE 32
+#define REVERSI_NET_CLIENT_SEND_TIMEOUT_MS 1000
 
 typedef struct ClientQueueEntry {
     char text[REVERSI_NET_MAX_MESSAGE + 1];
@@ -122,12 +123,43 @@ static int socket_wait_readable(ClientSocket socket, int timeout_ms)
     return select((int)socket + 1, &set, NULL, NULL, &timeout);
 }
 
+/* 1 = writable, 0 = timeout, -1 = error. */
+static int socket_wait_writable(ClientSocket socket, int timeout_ms)
+{
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(socket, &set);
+    struct timeval timeout = {.tv_sec = timeout_ms / 1000,
+                              .tv_usec = (timeout_ms % 1000) * 1000};
+    return select((int)socket + 1, NULL, &set, NULL, &timeout);
+}
+
 static bool socket_read_would_block(void)
 {
 #if defined(_WIN32)
     return WSAGetLastError() == WSAEWOULDBLOCK;
 #else
     return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+#endif
+}
+
+static bool socket_write_would_block(void)
+{
+#if defined(_WIN32)
+    return WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+#endif
+}
+
+static bool socket_nonblocking(ClientSocket socket)
+{
+#if defined(_WIN32)
+    u_long mode = 1;
+    return ioctlsocket(socket, FIONBIO, &mode) == 0;
+#else
+    const int flags = fcntl(socket, F_GETFL, 0);
+    return flags >= 0 && fcntl(socket, F_SETFL, flags | O_NONBLOCK) == 0;
 #endif
 }
 
@@ -160,18 +192,36 @@ static void queue_message(NetClient *client, const char *text, size_t length)
     unlock_client(client);
 }
 
+/* Writes one whole frame or fails within a bounded time. The socket is
+ * non-blocking, so a stalled server cannot freeze the UI thread that calls
+ * net_client_send(); a partial frame leaves the stream unusable and the
+ * caller must drop the connection. */
 static bool socket_write_all(NetClient *client, const uint8_t *data,
                              size_t length)
 {
     size_t sent = 0;
+    const uint64_t deadline = now_ms() + REVERSI_NET_CLIENT_SEND_TIMEOUT_MS;
     while (sent < length) {
         const int written = (int)send(client->socket,
                                       (const char *)data + sent,
                                       (int)(length - sent), 0);
-        if (written <= 0) {
-            return false;
+        if (written > 0) {
+            sent += (size_t)written;
+            continue;
         }
-        sent += (size_t)written;
+        if (written < 0 && socket_write_would_block()) {
+            const uint64_t now = now_ms();
+            if (now >= deadline) {
+                return false;
+            }
+            const uint64_t remaining = deadline - now;
+            const int slice = remaining < 100 ? (int)remaining : 100;
+            if (socket_wait_writable(client->socket, slice) < 0) {
+                return false;
+            }
+            continue;
+        }
+        return false;
     }
     return true;
 }
@@ -265,6 +315,15 @@ static void *client_thread(void *argument)
         return NULL;
 #endif
     }
+    if (!socket_nonblocking(socket_fd)) {
+        set_status(client, NET_CLIENT_FAILED, "connect_failed");
+        socket_close(socket_fd);
+#if defined(_WIN32)
+        return 0;
+#else
+        return NULL;
+#endif
+    }
     lock_client(client);
     client->socket = socket_fd;
     unlock_client(client);
@@ -331,10 +390,17 @@ static void *client_thread(void *argument)
                 const size_t length = net_ws_encode(
                     0xA, frame.payload, frame.length, true, &client->rng,
                     pong, sizeof(pong));
+                bool written = false;
                 if (length > 0) {
                     lock_client(client);
-                    (void)socket_write_all(client, pong, length);
+                    written = socket_write_all(client, pong, length);
                     unlock_client(client);
+                }
+                if (length > 0 && !written) {
+                    set_status(client, NET_CLIENT_DISCONNECTED,
+                               "send_failed");
+                    atomic_store(&client->stop, true);
+                    break;
                 }
             } else if (result == NET_WS_CLOSE
                        || result == NET_WS_ERROR) {
@@ -540,11 +606,25 @@ bool net_client_send(NetClient *client, const NetMessage *message)
         0x1, (const uint8_t *)text, strlen(text), true, &client->rng, frame,
         sizeof(frame));
     bool ok = false;
+    bool failed = false;
     if (length > 0 && client->socket != CLIENT_INVALID
         && atomic_load(&client->status) == NET_CLIENT_CONNECTED) {
         ok = socket_write_all(client, frame, length);
+        if (!ok) {
+            /* A partial frame corrupts the stream: drop the connection and
+             * let the session reconnect and resync from the server. */
+            failed = true;
+#if defined(_WIN32)
+            shutdown(client->socket, SD_BOTH);
+#else
+            shutdown(client->socket, SHUT_RDWR);
+#endif
+        }
     }
     unlock_client(client);
+    if (failed) {
+        set_status(client, NET_CLIENT_DISCONNECTED, "send_failed");
+    }
     return ok;
 }
 

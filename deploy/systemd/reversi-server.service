@@ -1,0 +1,48 @@
+[Unit]
+Description=Reversi online game server
+Documentation=file:/opt/reversi/docs/PRODUCTION_DEPLOYMENT.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reversi
+Group=reversi
+ExecStart=/opt/reversi/bin/reversi_server --bind 127.0.0.1 --port 8080
+WorkingDirectory=/opt/reversi
+
+# SIGTERM is handled in-process: every room receives
+# "roomclosed status=shutdown" and queued bytes are flushed before exit.
+KillSignal=SIGTERM
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=2s
+
+# The server keeps all state in memory (48 connections, 32 rooms, 16 KB send
+# buffers each), so a small, hard memory cap is enough to contain a leak.
+LimitNOFILE=4096
+MemoryMax=256M
+TasksMax=32
+
+# No filesystem, no privileges, loopback only.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=reversi-server
+
+[Install]
+WantedBy=multi-user.target

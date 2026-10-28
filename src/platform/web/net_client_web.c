@@ -64,11 +64,17 @@ EM_JS(void, reversi_web_net_connect, (const char *host, int port), {
     };
 })
 
-EM_JS(void, reversi_web_net_send, (const char *text), {
+EM_JS(int, reversi_web_net_send, (const char *text), {
     var socket = globalThis.__reversiNetSocket;
     if (socket && socket.readyState === 1) {
-        socket.send(UTF8ToString(text));
+        try {
+            socket.send(UTF8ToString(text));
+            return 1;
+        } catch (error) {
+            return 0;
+        }
     }
+    return 0;
 })
 
 EM_JS(void, reversi_web_net_close, (void), {
@@ -97,7 +103,17 @@ void reversi_net_client_web_message(const char *text)
         return;
     }
     const size_t length = strlen(text);
-    if (length > REVERSI_NET_MAX_MESSAGE || client->count >= REVERSI_NET_WEB_QUEUE) {
+    if (length > REVERSI_NET_MAX_MESSAGE) {
+        return;
+    }
+    if (client->count >= REVERSI_NET_WEB_QUEUE) {
+        /* Never drop a server message silently: the state would silently
+         * diverge from the server. Close the socket and let the session
+         * reconnect and resync from the authoritative snapshot. */
+        reversi_web_net_close();
+        client->head = 0;
+        client->count = 0;
+        web_set_status(client, NET_CLIENT_FAILED, "queue_overflow");
         return;
     }
     const int index = (client->head + client->count) % REVERSI_NET_WEB_QUEUE;
@@ -148,6 +164,9 @@ bool net_client_connect(NetClient *client, const char *host, int port)
     if (client == NULL || host == NULL || port <= 0 || port > 65535) {
         return false;
     }
+    /* A reconnect must not leave the previous socket answering callbacks
+     * for the new one. */
+    reversi_web_net_close();
     client->head = 0;
     client->count = 0;
     web_set_status(client, NET_CLIENT_CONNECTING, NULL);
@@ -196,8 +215,7 @@ bool net_client_send(NetClient *client, const NetMessage *message)
     if (net_protocol_encode(message, text, sizeof(text)) == 0) {
         return false;
     }
-    reversi_web_net_send(text);
-    return true;
+    return reversi_web_net_send(text) != 0;
 }
 
 NetClientStatus net_client_status(const NetClient *client)

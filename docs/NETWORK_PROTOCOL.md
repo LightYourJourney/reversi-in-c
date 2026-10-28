@@ -7,7 +7,11 @@
 ## 1. 版本与方向
 
 - 客户端首条消息 `hello v=1`；服务端 `welcome` 也带 `v=1`。
-- 版本不一致由服务端拒绝；客户端必须检查欢迎版本。
+- **顺序强制**：会话中的第一条消息必须是 `hello`；先发其他消息返回
+  `hello_required`，重复 `hello` 返回 `unexpected_message`。重连时同样
+  先 `hello` 再 `rejoin`。
+- 版本不一致由服务端拒绝（解码阶段即拒绝 `v≠1` 的 `hello`）；客户端
+  必须检查欢迎版本。
 - 客户端 → 服务端：`hello create join ready move resign ping rejoin leave`
 - 服务端 → 客户端：`welcome room start state error opponent gameover roomclosed pong`
 - 未知键、重复键、缺失必需字段、方向不符一律拒绝。
@@ -28,7 +32,7 @@
 | `board` | 64 字符，行主序，`0` 空 / `1` 黑 / `2` 白 |
 | `player` | 座位 `1`/`2`（1 为房主） |
 | `host` / `ready` | `0`/`1` |
-| `status` | `waiting`/`playing`/`finished`/`connected`/`disconnected`/`reconnected`/`normal`/`resign`/`timeout`/`left`/`expired`/`abandoned` |
+| `status` | `waiting`/`playing`/`finished`/`connected`/`disconnected`/`reconnected`/`normal`/`resign`/`timeout`/`left`/`expired`/`abandoned`/`shutdown` |
 | `error` | 错误码（见 §6） |
 
 ## 3. 大厅与房间
@@ -51,6 +55,8 @@ S: start turn=B seq=0 board=<64>
 - 创建者选颜色；加入者必须选另一色，否则 `color_taken`。
 - 双方就座且都 ready 才自动开始；房主离开等待中的房间会关闭房间。
 - 房间代码随机生成并查重；房间 TTL 10 分钟（等待）/2 分钟（结束）。
+  等待房间在**加入或重连时刷新** TTL，避免房间在双方都在线时因创建
+  时间过期。
 
 ## 4. 对局状态
 
@@ -80,22 +86,30 @@ S: state ...
 S: opponent status=reconnected   (发给对手)
 ```
 
-- 座位保留 60 秒；期间对手看到 `disconnected`。
+- 座位保留 60 秒（等待与对局中一致）；期间对手看到 `disconnected`。
+  等待房间不再因一次断线立即关闭。
 - 重连成功令牌轮换；旧令牌失效。
+- 若令牌持有者的旧连接尚未被服务端回收（NAT 变化、半开连接），新的
+  `rejoin` **接管座位**并关闭旧套接字，不再返回 `rejoin_failed`。
 - 超时未重连：对手在线则判对手胜（`status=disconnect`）；双方都离线则
   关闭房间（`roomclosed status=abandoned`）。
 - 投降：`resign` → `gameover status=resign`，对方胜。
 - 离开：等待/结束房间直接关闭；进行中离开按弃权处理。
 - 服务端重启：房间在内存中，全部丢失；旧代码 `room_not_found`。
+- 计划内停机（`SIGTERM`）：所有房间收到
+  `roomclosed status=shutdown`，随后连接关闭。
 
 ## 6. 错误码
 
-`bad_message`、`message_too_large`、`rate_limited`、`not_in_room`、
+`bad_message`、`hello_required`、`message_too_large`、`rate_limited`、`not_in_room`、
 `already_in_room`、`not_playing`、`not_ready_state`、`not_your_turn`、`stale_state`、
 `illegal_move`、`room_not_found`、`room_full`、`room_closed`、
 `room_in_progress`、
 `color_taken`、`rejoin_failed`、`server_full`、`server_busy`、
 `unexpected_message`。
+
+`join`/`rejoin` 失败按连接计数：同一连接累计 8 次失败后返回
+`rate_limited` 并断开（房间代码枚举防护）。
 
 客户端对未知错误只展示文本，不改变本地棋局；任何状态以服务端 `state`
 为准。

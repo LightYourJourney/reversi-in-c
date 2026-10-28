@@ -12,7 +12,8 @@
  */
 const fs = require('fs');
 const {
-  VIEWPORTS, launch, openPage, geometry, toScreen, press, startLocal,
+  VIEWPORTS, launch, openPage, geometry, toScreen, press, menuCenter,
+  startLocal,
   startLocalMobile, startPve, startPveHard, playOpeningMove,
   waitForAiActive, waitForFrames, waitForMoves, autosaveMoves, assert
 } = require('./lib');
@@ -103,7 +104,8 @@ async function withPage(browser, fn, options) {
           null, { timeout: 120000 });
         await page.waitForTimeout(500);
         geo = await geometry(page);
-        await press(page, geo, 640, 217); // Continue
+        const [continueX, continueY] = menuCenter(geo, 0);
+        await press(page, geo, continueX, continueY); // Continue
         const screen = await page.evaluate(() => window.__reversiTest.screenIndex());
         assert(screen === 2, `expected game screen after Continue, got ${screen}`);
         assert(errors.length === 0, 'errors: ' + errors.join(' | '));

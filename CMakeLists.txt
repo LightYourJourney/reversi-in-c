@@ -591,7 +591,8 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME net.server COMMAND reversi_net_server_tests)
     set_tests_properties(net.server PROPERTIES
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-        TIMEOUT 60)
+        # Includes the delayed-network game and the eight-game soak.
+        TIMEOUT 180)
 
     add_executable(reversi_net_protocol_tests tests/test_net_protocol.c)
     target_include_directories(reversi_net_protocol_tests PRIVATE

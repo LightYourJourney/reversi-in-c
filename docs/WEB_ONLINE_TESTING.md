@@ -1,10 +1,11 @@
 # 在线联机（Web / 桌面↔Web）与 TLS 本地验证
 
-日期：2026-10-28（桌面↔Web 追加于同日）  
+日期：2026-10-28（桌面↔Web 追加于同日；2026-10-29 Phase 15 补充
+Chrome/Firefox/WebKit 与生产式代理）
 范围：本地回环验证；**未部署公网、未购买云资源**  
 环境：macOS 26.6.2 arm64，Chrome 155（Headless，Playwright 1.64.1，
-channel `chrome`），nginx 1.31.8（Homebrew），OpenSSL 4.1.0，
-Emscripten 6.0.13
+channel `chrome`），Playwright Firefox 157，Playwright WebKit 27.2，
+nginx 1.31.8（Homebrew），OpenSSL 4.1.0，Emscripten 6.0.13
 
 本文件记录“浏览器双客户端联机”和“TLS/WSS 终止”的验证拓扑、可复现步骤与
 结果。自动化使用 Playwright，通过 `window.__reversiTest` 的只读接口
@@ -102,8 +103,10 @@ HeadlessChrome/155.0.0.0。
 ```bash
 mkdir -p ~/rv-e2e/pw && cd ~/rv-e2e/pw && npm init -y
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright
+npx playwright install firefox webkit      # 可选：非 Chrome 引擎
 cd /path/to/repo
 NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-online-e2e.mjs \
+  --browser chrome \
   --base https://localhost:8443/index.html --ws-port 8444 \
   --shots ~/rv-e2e
 ```
@@ -113,7 +116,9 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 环境的页面回收策略关闭。坐标按 canvas 的 CSS/像素缩放换算；界面高度
 637 时走紧凑布局，棋盘坐标按 `game_layout` 的窄屏公式计算。
 脚本通过 `__reversiTest.screenIndex/netPhase/netCode/netSeq` 断言，
-`--shots` 可选；任一步失败则以非零码退出。终局后脚本会关闭对手上下文，
+`--shots` 可选；`--browser chrome|firefox|webkit` 选择引擎；任一步失败则
+以非零码退出。清空端口输入框时按键保持 90 ms：Web 端按帧采样按键，
+自动化工具的瞬时 down+up 可能落在同一帧被丢弃（人工输入不受影响）。终局后脚本会关闭对手上下文，
 再断言本方仍保留 GAME/FINISHED 与结果。
 
 步骤与判定：
@@ -129,7 +134,10 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 | B 点 Resign | 双方 `gameOver() == true`、`result() == 1`（BLACK_WIN），`netPhase() == 5` | PASS |
 | B 关闭浏览器 | A 仍为 GAME/FINISHED、`BLACK_WIN`，`netCode()` 清空（证明 ROOMCLOSED 已处理） | PASS |
 
-脚本每次生成新房间码；本轮审计运行 `EZJ69N`。终局 HUD 文本为
+脚本每次生成新房间码。Phase 14 审计运行 `EZJ69N`；Phase 15 三个引擎
+分别为 Chrome `38RSUR`、Firefox `45H8XY`、WebKit `V3U9MB`，并经
+`deploy/nginx/reversi.conf` 同构的本地配置（9443/9444，HSTS + 限速）
+复跑 Chrome 得到 `9J25DT`。终局 HUD 文本为
 `Game over: Black wins (resign)`（自然终局的 `normal` 状态不再显示）。截图与 nginx 访问日志保留在本机 `~/rv-e2e/`，未纳入仓库；
 服务端日志需自行重定向，默认写入 stderr。
 
@@ -175,9 +183,23 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 4. 为浏览器自动化增加只读访问器 `reversi_web_net_code` /
    `reversi_web_net_phase`（`__reversiTest.netCode/netPhase`）。
 
-## 7. 未覆盖
+## 7. Phase 15 补充检查
 
-- Safari/Firefox；真实设备与移动端；可信证书链、HSTS、生产代理配置。
+```bash
+# 接收队列溢出：注入 40 条服务端消息（> 32 条队列）
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-queue-overflow-check.mjs \
+  --browser chrome
+# 期望：netPhase 7（FAILED）→ 重新 Connect 后 2（LOBBY）
+```
+
+三引擎均为 `phaseAfterOverflow=7`、`phaseAfterReconnect=2`，证明浏览器端
+不再静默丢消息，且重连会关闭旧套接字。实现细节与限制见
+`docs/PHASE_15_REPORT.md`。
+
+## 8. 未覆盖
+
+- Safari、iOS Safari、Android Chrome；真实设备与移动端。
+- 可信证书链、HSTS 预加载、公网 DNS。
 - 公网部署、NAT/防火墙、跨网络延迟与丢包。
-- 浏览器端断线重连与多局连续对战未做自动化。
+- 浏览器端自动重连 UI 的断网长时抖动（只有会话层与重启用例）。
 - 脚本未纳入 CI（需要本地 nginx/TLS 与服务端）。

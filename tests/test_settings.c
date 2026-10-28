@@ -160,6 +160,38 @@ static void test_invalid_files(TestStats *stats)
     (void)storage_remove(path);
 }
 
+
+static void test_v101_fixture(TestStats *stats)
+{
+    /* Verbatim settings_save_path() output from tag v1.0.1. */
+    static const char LEGACY[] =
+        "REVERSI_SETTINGS 1\n"
+        "volume 33\n"
+        "sfx 0\n"
+        "animations 1\n"
+        "animation_speed 150\n"
+        "legal_hints 0\n"
+        "last_move 1\n"
+        "default_difficulty 2\n"
+        "theme 1\n";
+    const char *path = "test-settings-v101.dat";
+    (void)storage_remove(path);
+    REVERSI_TEST_ASSERT(stats,
+        storage_write_atomic(path, LEGACY, strlen(LEGACY)));
+    Settings loaded;
+    settings_defaults(&loaded);
+    REVERSI_TEST_ASSERT(stats, settings_load_path(path, &loaded));
+    REVERSI_TEST_ASSERT(stats, loaded.volume == 33);
+    REVERSI_TEST_ASSERT(stats, !loaded.sfx);
+    REVERSI_TEST_ASSERT(stats, loaded.animations);
+    REVERSI_TEST_ASSERT(stats, loaded.animation_speed == 150);
+    REVERSI_TEST_ASSERT(stats, !loaded.legal_hints);
+    REVERSI_TEST_ASSERT(stats, loaded.last_move_highlight);
+    REVERSI_TEST_ASSERT(stats, loaded.default_difficulty == 2);
+    REVERSI_TEST_ASSERT(stats, loaded.theme == 1);
+    (void)storage_remove(path);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -169,6 +201,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_defaults);
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_invalid_files);
+    REVERSI_RUN_TEST(&stats, test_v101_fixture);
 
     return reversi_test_summary(&stats, "storage.settings");
 }

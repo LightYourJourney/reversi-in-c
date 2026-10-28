@@ -80,6 +80,7 @@ int main(int argc, char **argv)
     while (!g_stop) {
         net_server_poll(server, 50);
     }
+    net_server_shutdown(server, "shutdown");
     net_server_destroy(server);
     return 0;
 }

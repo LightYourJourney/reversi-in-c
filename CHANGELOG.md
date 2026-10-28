@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-10-26
+## [2.0.0] - 未发布（Release Candidate，源码截至 2026-10-29）
 
 ### Added
 
@@ -18,6 +18,10 @@
   复制代码）与网络对局 HUD（对手状态、延迟、Resign/Leave）。
 - 测试：`net.protocol`、`net.ws`、`net.server`、`net.client`、
   `net.session` 与 `app.net` 渲染冒烟。
+- 网络加固测试：握手/空闲/房间 TTL、连接/房间上限、加入失败限速、等待
+  房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、连续 8 局
+  soak；浏览器双客户端 E2E 支持 Chrome/Firefox/WebKit，新增队列溢出与
+  进程优雅关闭检查脚本；v1.0.1 存档/设置 fixture 兼容测试。
 - `docs/NETWORK_ARCHITECTURE.md`、`NETWORK_PROTOCOL.md`、
   `NETWORK_SECURITY.md`、`PHASE_14_REPORT.md`。
 
@@ -25,6 +29,11 @@
 
 - 主菜单 9 项；现有本地双人、AI、Lab 与实验平台路径未改。
 - Web 构建包含浏览器 WebSocket 适配；桌面构建包含 socket/线程客户端。
+- 服务端协议要求 `hello` 先于 `create`/`join`/`rejoin`；等待房间断线保留
+  座位；`rejoin` 可接管仍在线的旧连接。
+- 新增 `net_server_shutdown()` 与 `SIGTERM` 优雅关闭；新增
+  `docs/PRODUCTION_DEPLOYMENT.md`、`docs/RELEASE_READINESS.md`、
+  `docs/PHASE_15_REPORT.md` 与 `deploy/` 模板。
 
 ### Fixed
 
@@ -57,6 +66,25 @@
   “room closed / opponent left”，不再显示空房间码或过期的对手状态。
 - 房间关闭消息曾覆盖终局原因（如 `resign` 变成 `disconnected`）；现仅在
   未结束时更新原因。
+- 浏览器客户端接收队列满时**静默丢弃**服务端消息，界面会停在过期状态；
+  现置 `FAILED(queue_overflow)`、关闭套接字并由会话重连重同步。
+- 浏览器重连可能留下旧 WebSocket 继续回调；重连前先关闭旧套接字。
+- 桌面客户端发送在 UI 线程阻塞：现为非阻塞套接字 + 1 s 有界写入，失败即
+  断开重连，服务器卡死不再冻结界面。
+- 等待房间中一次断线就销毁整个房间，对手被踢回大厅；现保留座位到重连
+  窗口结束（与对局中一致）。终局房间仍按原行为关闭。
+- 令牌持有者在旧连接仍被服务端持有时 `rejoin` 会失败（NAT 变化/半开
+  连接）；现由新连接接管座位并关闭旧套接字。
+- 等待房间 TTL 只在创建时设置，加入较晚时房间可能立即过期；现加入/
+  重连时刷新。
+- 协议文档要求 `hello` 为首条消息，服务端却未强制；现强制（重复 hello
+  返回 `unexpected_message`，其余返回 `hello_required`），重连也先 hello。
+- 房间代码枚举：加入/重连失败没有独立上限；现每连接 8 次失败后
+  `rate_limited` 并断开。
+- `SIGTERM` 直接销毁服务器，对局中的客户端只看到连接被重置；现广播
+  `roomclosed status=shutdown` 并刷新发送队列后退出（退出码 0）。
+- 握手、空闲、等待/结束房间 TTL 无法在测试中缩短，边界未被覆盖；现可在
+  `NetServerConfig` 配置并由 `net.server` 覆盖。
 
 ### Verified
 

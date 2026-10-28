@@ -2,8 +2,11 @@
 
 一款使用 **ISO C11** 与 **raylib 6.2** 编写的翻转棋（Reversi / Othello）桌面游戏。
 
-> **源码版本：2.0.0（在线对战，尚未发布）。最新发行版为
+> **源码版本：2.0.0 Release Candidate（在线对战，尚未发布；未打标签、
+> 未创建 GitHub Release）。最新发行版为
 > [v1.0.1](https://github.com/LightYourJourney/reversi-in-c/releases/tag/v1.0.1)。**
+> 发布就绪性、阻碍项与测试矩阵见
+> [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md)。
 > 本地双人与人机对战均可完整走完一局。人机模式支持选择黑白方与
 > Easy / Medium / Hard 三档难度；AI 在后台线程搜索，思考期间界面不冻结。
 > Reversi Lab 提供独立于正式对局的复盘、MultiPV 分析与分支研究；
@@ -45,10 +48,11 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口）；GUI 30/30 | 实际窗口与鼠标点击流程已验证；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM（v2.0.0）：Debug 26/26（运行 `40706466157`），发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
-| Linux x86_64 | GitHub Actions 托管 VM（v2.0.0）：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
-| Web（Chrome） | Emscripten 6.0.13；构建通过（v2.0.0）；本地 HTTPS/WSS 两个浏览器上下文与桌面↔Web 各完成一局（见 `docs/WEB_ONLINE_TESTING.md`） | Chrome 桌面与移动模拟已验证；Safari/Firefox NOT TESTED |
+| macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口，Phase 15 复跑）；GUI 30/30 为 Phase 14 证据，Phase 15 本机会话无显示器（NOT TESTED） | 实际窗口与鼠标点击流程已验证（Phase 14）；无 Developer ID/公证 |
+| Windows x64 | GitHub Actions 托管 VM（2.0.0 最后一次已推送提交）：Debug 26/26（运行 `40706466157`），发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED；Phase 15 提交待推送后验证 |
+| Linux x86_64 | GitHub Actions 托管 VM：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收（同上） | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| Web（Chrome） | Emscripten 6.0.13；本地 HTTPS/WSS 双客户端整局（Phase 15：`38RSUR`、经生产式代理 `9J25DT`） | Chrome 桌面与移动模拟已验证 |
+| Web（Firefox / WebKit） | Playwright Firefox 157（`45H8XY`）、Playwright WebKit 27.2（`V3U9MB`）各完成一局 | WebKit 构建不等于 Safari；Safari/iOS/Android NOT TESTED |
 
 GitHub Actions 运行器是虚拟机，不等同物理机验证。v1.0.1 发行文件与
 SHA-256 见 [docs/RELEASES.md](docs/RELEASES.md)；具体命令、运行号与
@@ -82,8 +86,10 @@ AI 在独立 Web Worker 中运行，取消时终止 Worker，页面保持响应�
 或清理站点数据都可能删除它。
 
 已知限制：Web 端以 CSS 分辨率渲染（raylib Web 的 HiDPI 路径会把画布
-缩小 1/DPR）；Safari、Firefox 与真实移动设备未验证。构建、部署与测试
-细节见 [docs/WEB_BUILD.md](docs/WEB_BUILD.md)。
+缩小 1/DPR）；文本框按帧采样按键，自动化工具瞬时按下并抬起可能被丢弃
+（人工输入与 E2E 的 90 ms 按住不受影响）。Chrome、Firefox 与 WebKit
+引擎已各完成一局；Safari、iOS Safari 与 Android Chrome 未验证。构建、
+部署与测试细节见 [docs/WEB_BUILD.md](docs/WEB_BUILD.md)。
 
 ## 技术栈
 
@@ -510,13 +516,14 @@ ctest --test-dir build --output-on-failure
 
 | 构建 | 测试结果 |
 |---|---|
-| Debug（无窗口） | 26/26 通过 |
-| Release（无窗口） | 26/26 通过 |
-| ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告 |
-| Debug + GUI | 30/30 通过；含 `app.lab`、`app.net` 渲染冒烟 |
-| 浏览器（Chrome） | v2.0.0 两个浏览器上下文 E2E（本地 HTTPS/WSS）通过；旧 v1.1.0 套件未复跑；Safari/Firefox **NOT TESTED** |
-| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 394,922 B，Worker 58 KB） |
-| GitHub Actions | v1.4.0 运行 `40288248734` 9/9 通过；v1.3.0 为 `40111155790` |
+| Debug（无窗口） | 26/26 通过（Phase 15 复跑） |
+| Release（无窗口） | 26/26 通过（Phase 15 复跑） |
+| ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告（Phase 15 复跑） |
+| Debug + GUI | 30/30 通过（Phase 14）；Phase 15 本机无显示器，NOT TESTED |
+| TSan | `net.session` 57、`net.client` 32 断言，无竞争报告（Phase 15） |
+| 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；Safari/iOS/Android **NOT TESTED** |
+| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 394,983 B，Worker 58.7 KB） |
+| GitHub Actions | HEAD（Phase 15 之前）`40707272332` 9/9 通过；Phase 15 提交未推送、CI 未运行 |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、

@@ -74,11 +74,47 @@ async function press(page, geo, x, y, hold = 250, waitAfter = 650) {
   }
 }
 
-const DIFFICULTY_BUTTONS = {
-  easy: [392, 385],
-  medium: [640, 385],
-  hard: [829, 385]
-};
+/* Mirrors src/ui/menu_view.c and src/ui/setup_view.c. Click targets are
+ * derived from the same formulas so a menu item or layout change cannot
+ * silently invalidate this suite (the hard-coded coordinates used before
+ * Phase 15 still pointed at the old six-item menu). */
+const MENU_ITEM_COUNT = 9;
+const MENU_NEW_GAME = 1;
+
+function menuCenter(geo, index) {
+  const width = geo.size.w;
+  const height = geo.size.h;
+  const buttonHeight = 40;
+  const gap = 6;
+  const block = MENU_ITEM_COUNT * buttonHeight
+    + (MENU_ITEM_COUNT - 1) * gap;
+  const top = Math.min(Math.max(height * 0.30, 190),
+                       height - 70 - block);
+  return [width / 2, top + index * (buttonHeight + gap) + buttonHeight / 2];
+}
+
+function setupPoints(geo) {
+  const width = geo.size.w;
+  const height = geo.size.h;
+  const panelWidth = Math.min(620, width - 64);
+  const panelHeight = Math.min(560, height - 64);
+  const x = (width - panelWidth) / 2;
+  const y = (height - panelHeight) / 2;
+  const gap = 12;
+  const modeWidth = (panelWidth - 48 - gap) / 2;
+  const difficultyWidth = (panelWidth - 48 - gap * 2) / 3;
+  return {
+    local: [x + 24 + modeWidth / 2, y + 132 + 28],
+    computer: [x + 24 + modeWidth + gap + modeWidth / 2, y + 132 + 28],
+    easy: [x + 24 + difficultyWidth / 2, y + 316 + 24],
+    medium: [x + 24 + difficultyWidth + gap + difficultyWidth / 2,
+             y + 316 + 24],
+    hard: [x + 24 + (difficultyWidth + gap) * 2 + difficultyWidth / 2,
+           y + 316 + 24],
+    start: [x + 24 + (panelWidth - 48) / 2,
+            y + panelHeight - 24 - 48 - 10 - 48 + 24]
+  };
+}
 
 async function waitForScreen(page, index, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
@@ -105,37 +141,43 @@ async function pressUntilScreen(page, geo, x, y, index, attempts = 3) {
 }
 
 async function startLocal(page, geo) {
-  if (!(await pressUntilScreen(page, geo, 640, 261, 1))) {
+  const [menuX, menuY] = menuCenter(geo, MENU_NEW_GAME);
+  if (!(await pressUntilScreen(page, geo, menuX, menuY, 1))) {
     throw new Error('setup screen did not appear');
   }
-  if (!(await pressUntilScreen(page, geo, 640, 501, 2))) {
+  const setup = setupPoints(geo);
+  if (!(await pressUntilScreen(page, geo, setup.start[0], setup.start[1], 2))) {
     throw new Error('game screen did not appear');
   }
 }
 
 async function startLocalMobile(page, geo) {
-  if (!(await pressUntilScreen(page, geo, 195, 264, 1))) {
+  const [menuX, menuY] = menuCenter(geo, MENU_NEW_GAME);
+  if (!(await pressUntilScreen(page, geo, menuX, menuY, 1))) {
     throw new Error('setup screen did not appear');
   }
-  if (!(await pressUntilScreen(page, geo, 195, 487, 2))) {
+  const setup = setupPoints(geo);
+  if (!(await pressUntilScreen(page, geo, setup.start[0], setup.start[1], 2))) {
     throw new Error('game screen did not appear');
   }
   await page.waitForTimeout(700); // let the page transition finish
 }
 
 async function startPve(page, geo, difficulty = 'hard') {
-  const button = DIFFICULTY_BUTTONS[difficulty];
-  if (!button) {
-    throw new Error('unknown difficulty: ' + difficulty);
-  }
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (!(await pressUntilScreen(page, geo, 640, 261, 1))) {
+    const [menuX, menuY] = menuCenter(geo, MENU_NEW_GAME);
+    if (!(await pressUntilScreen(page, geo, menuX, menuY, 1))) {
       throw new Error('setup screen did not appear');
     }
     await page.waitForTimeout(600); // let the setup transition finish
-    await press(page, geo, 780, 204, 400); // Computer
-    await press(page, geo, button[0], button[1], 400);
-    if (!(await pressUntilScreen(page, geo, 640, 501, 2))) {
+    const setup = setupPoints(geo);
+    if (!setup[difficulty]) {
+      throw new Error('unknown difficulty: ' + difficulty);
+    }
+    await press(page, geo, setup.computer[0], setup.computer[1], 400);
+    await press(page, geo, setup[difficulty][0], setup[difficulty][1], 400);
+    if (!(await pressUntilScreen(page, geo, setup.start[0], setup.start[1],
+                                 2))) {
       throw new Error('game screen did not appear');
     }
     if (await page.evaluate(() => window.__reversiTest.mode()) === 1) {
@@ -237,6 +279,8 @@ module.exports = {
   toScreen,
   press,
   waitForScreen,
+  menuCenter,
+  setupPoints,
   startLocal,
   startLocalMobile,
   startPve,

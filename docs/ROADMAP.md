@@ -405,6 +405,25 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 [PHASE_14_REPORT.md](PHASE_14_REPORT.md) 与
 [WEB_ONLINE_TESTING.md](WEB_ONLINE_TESTING.md)。
 
+## Phase 15：Reversi 2.0.0 发布加固（Release Candidate）
+
+- 修复：浏览器接收队列溢出静默丢弃；桌面发送阻塞 UI；等待房间断线即销毁；
+  旧连接未回收时 `rejoin` 失败（改为座位接管）；房间 TTL 未在加入时刷新；
+  `hello` 顺序未强制；加入失败无限速；`SIGTERM` 无优雅关闭。
+- 可测试边界：握手/空闲/等待与结束房间 TTL 可配置；连接 48 / 房间 32 /
+  加入失败 8 次 / 队列 16 KB 均有用例。
+- 测试：`net.server` 5,756 断言（新增 Hello 顺序、超时、TTL、上限、接管、
+  优雅关闭、20 ms 延迟代理整局、日志脱敏、连续 8 局 soak）；`net.client`
+  32；`net.session` 57（含中途重启）；v1.0.1 存档/设置 fixture。
+- 浏览器：Chrome / Firefox / WebKit 各完成一局；Web 队列溢出三引擎验证。
+- 部署：`deploy/nginx|systemd|logrotate` 模板；本地隔离验证 TLS 1.2/1.3、
+  HSTS 头、TLS1.1 拒绝、WSS 101、代理限速 503、优雅关闭。
+- 文档：`PHASE_15_REPORT`、`RELEASE_READINESS`、`PRODUCTION_DEPLOYMENT`。
+- 仍未验证：真实公网、可信证书、Safari/iOS/Android、桌面 GUI 与桌面↔Web
+  本阶段复验、Phase 15 CI。
+
+结论：**Release Candidate**，不发布正式 v2.0.0。
+
 ## 非目标（当前）
 
 - 账号系统、排位、观战（在线对战已在 Phase 14 实现基础版）

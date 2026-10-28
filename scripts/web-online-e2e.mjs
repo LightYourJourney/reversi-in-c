@@ -17,14 +17,18 @@
  *
  * Covers: lobby connect, create/join, colour choice, ready, one move reaching
  * both clients (seq 1), resign, game over with BLACK_WIN and FINISHED phase.
- * Does not cover desktop<->web play, Safari/Firefox, or a trusted certificate.
+ * --browser chrome|firefox|webkit selects the engine (default system Chrome).
+ * Does not cover desktop<->web play, real Safari/iOS/Android, or a trusted
+ * certificate.
  */
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 let chromium;
+let firefox;
+let webkit;
 try {
-  ({ chromium } = require("playwright"));
+  ({ chromium, firefox, webkit } = require("playwright"));
 } catch {
   console.error("Playwright not found. See the header of this file.");
   process.exit(2);
@@ -36,6 +40,7 @@ function arg(name, fallback) {
   return index >= 0 && index + 1 < args.length ? args[index + 1] : fallback;
 }
 const baseUrl = arg("--base", "https://localhost:8443/index.html");
+const browserName = arg("--browser", "chrome");
 const wsPort = arg("--ws-port", "8444");
 const shots = arg("--shots", "");
 const viewport = { width: 1100, height: 800 };
@@ -134,8 +139,13 @@ async function connectLobby(page) {
   const g = await geom(page);
   const b = buttons(g);
   await clickR(page, b.port[0], b.port[1]);
+  // Hold each key past one animation frame: the Web build samples key
+  // presses per frame, so an instantaneous down+up can be missed.
   for (let i = 0; i < 4; i += 1) {
-    await page.keyboard.press("Backspace");
+    await page.keyboard.down("Backspace");
+    await page.waitForTimeout(90);
+    await page.keyboard.up("Backspace");
+    await page.waitForTimeout(90);
   }
   await page.keyboard.type(wsPort);
   await clickR(page, b.connect[0], b.connect[1]);
@@ -185,8 +195,17 @@ async function shot(page, name) {
 const result = { steps: [], failures };
 let browser;
 try {
-  const browserType = chromium;
-  browser = await browserType.launch({ headless: true, channel: "chrome" });
+  const engines = {
+    chrome: { type: chromium, options: { channel: "chrome" } },
+    chromium: { type: chromium, options: {} },
+    firefox: { type: firefox, options: {} },
+    webkit: { type: webkit, options: {} },
+  };
+  const engine = engines[browserName];
+  if (!engine || !engine.type) {
+    throw new Error(`unsupported browser ${browserName}`);
+  }
+  browser = await engine.type.launch({ headless: true, ...engine.options });
   const a = await openPage(browser, "A");
   const b = await openPage(browser, "B");
 

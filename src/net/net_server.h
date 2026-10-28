@@ -11,6 +11,11 @@ typedef struct NetServerConfig {
     int port;
     int move_timeout_ms;
     int reconnect_timeout_ms;
+    /* Zero selects the documented defaults (5 s / 120 s / 10 min / 2 min). */
+    int handshake_timeout_ms;
+    int idle_timeout_ms;
+    int room_wait_ms;
+    int room_done_ms;
     bool quiet;
 } NetServerConfig;
 
@@ -25,5 +30,10 @@ int net_server_port(const NetServer *server);
 
 /* Processes one ready event batch; timeout_ms may be 0 for non-blocking. */
 void net_server_poll(NetServer *server, int timeout_ms);
+
+/* Tells every open room the server is going away and flushes the
+ * notification to clients; call before net_server_destroy on a planned
+ * stop so players are not left waiting on a dead socket. */
+void net_server_shutdown(NetServer *server, const char *status);
 
 #endif

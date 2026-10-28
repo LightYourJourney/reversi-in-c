@@ -50,6 +50,7 @@ typedef socklen_t NetSockLen;
 #define REVERSI_NET_SERVER_IDLE_MS 120000
 #define REVERSI_NET_SERVER_ROOM_WAIT_MS 600000
 #define REVERSI_NET_SERVER_ROOM_DONE_MS 120000
+#define REVERSI_NET_SERVER_JOIN_FAILURES 8
 
 typedef enum ConnectionState {
     CONNECTION_FREE = 0,
@@ -60,6 +61,7 @@ typedef enum ConnectionState {
 typedef struct ServerConnection {
     ConnectionState state;
     bool closing;
+    bool hello_received;
     NetSocket socket;
     uint8_t input[REVERSI_NET_SERVER_READ_CAP];
     size_t input_length;
@@ -70,6 +72,7 @@ typedef struct ServerConnection {
     uint64_t last_active;
     int tokens;
     uint64_t tokens_ms;
+    int join_failures;
     int room;
     int seat;
 } ServerConnection;
@@ -338,6 +341,21 @@ static void send_error(NetServer *server, int connection, const char *code)
     send_message(server, connection, &message);
 }
 
+/* Counts join/rejoin failures per connection so a client cannot walk the
+ * room-code space inside the general message budget; the connection is
+ * dropped once the budget is spent. */
+static void join_failed(NetServer *server, int connection, const char *code)
+{
+    ServerConnection *conn = &server->connections[connection];
+    ++conn->join_failures;
+    if (conn->join_failures >= REVERSI_NET_SERVER_JOIN_FAILURES) {
+        send_error(server, connection, "rate_limited");
+        connection_schedule_close(server, connection);
+        return;
+    }
+    send_error(server, connection, code);
+}
+
 static int find_room(NetServer *server, const char *code)
 {
     for (int i = 0; i < REVERSI_NET_SERVER_MAX_ROOMS; ++i) {
@@ -464,7 +482,7 @@ static void room_finish(NetServer *server, int room_index, GameResult result,
     room->result = result;
     room->game.result = result;
     snprintf(room->finish_status, sizeof(room->finish_status), "%s", status);
-    room->expires = now_ms() + REVERSI_NET_SERVER_ROOM_DONE_MS;
+    room->expires = now_ms() + (uint64_t)server->config.room_done_ms;
     room_send_state(server, room, false);
     NetMessage over = {.type = NET_MSG_GAMEOVER, .result = result};
     snprintf(over.status, sizeof(over.status), "%s", status);
@@ -510,24 +528,32 @@ static void detach_player(NetServer *server, int room_index, int seat,
     const bool playing = room->playing;
     player->connection = -1;
     player->ready = false;
-    if (playing) {
-        if (forfeit) {
+    if (forfeit) {
+        if (playing) {
             const Stone winner = room->players[other].color;
             const GameResult result = winner == STONE_BLACK
                 ? GAME_RESULT_BLACK_WIN : GAME_RESULT_WHITE_WIN;
             room_finish(server, room_index, result, status);
         } else {
-            player->rejoin_deadline = now_ms()
-                + (uint64_t)server->config.reconnect_timeout_ms;
-            NetMessage notice = {.type = NET_MSG_OPPONENT};
-            snprintf(notice.status, sizeof(notice.status), "disconnected");
-            send_message(server, room->players[other].connection, &notice);
-            log_line(server, "room %s player %d disconnected", room->code,
-                     seat + 1);
+            room_close(server, room_index, status);
         }
         return;
     }
-    room_close(server, room_index, status);
+    /* Nothing can be resumed in a finished room, so a dropped socket closes
+     * it and the remaining player keeps the result on their screen. */
+    if (room->finished) {
+        room_close(server, room_index, status);
+        return;
+    }
+    /* A dropped socket keeps the seat for the reconnect window in both the
+     * waiting and playing states; the opponent is told about it and the
+     * clock in server_timers() eventually ends the room. */
+    player->rejoin_deadline = now_ms()
+        + (uint64_t)server->config.reconnect_timeout_ms;
+    NetMessage notice = {.type = NET_MSG_OPPONENT};
+    snprintf(notice.status, sizeof(notice.status), "disconnected");
+    send_message(server, room->players[other].connection, &notice);
+    log_line(server, "room %s player %d disconnected", room->code, seat + 1);
 }
 
 static void handle_move(NetServer *server, int connection, NetMessage *message)
@@ -611,6 +637,7 @@ static void handle_rejoin(NetServer *server, int connection,
         send_error(server, connection, "already_in_room");
         return;
     }
+    const uint64_t now = now_ms();
     for (int r = 0; r < REVERSI_NET_SERVER_MAX_ROOMS; ++r) {
         ServerRoom *room = &server->rooms[r];
         if (!room->used) {
@@ -618,34 +645,50 @@ static void handle_rejoin(NetServer *server, int connection,
         }
         for (int seat = 0; seat < 2; ++seat) {
             ServerPlayer *player = &room->players[seat];
-            if (player->seated && player->connection < 0
-                && strcmp(player->token, message->token) == 0
-                && now_ms() <= player->rejoin_deadline) {
-                player->connection = connection;
-                player->rejoin_deadline = 0;
-                conn->room = r;
-                conn->seat = seat;
-                generate_token(server, player->token);
-                NetMessage welcome = {
-                    .type = NET_MSG_WELCOME,
-                    .version = REVERSI_NET_VERSION,
-                    .player = seat + 1
-                };
-                snprintf(welcome.token, sizeof(welcome.token), "%s",
-                         player->token);
-                send_message(server, connection, &welcome);
-                send_room_snapshot(server, room, seat);
-                NetMessage notice = {.type = NET_MSG_OPPONENT};
-                snprintf(notice.status, sizeof(notice.status), "reconnected");
-                send_message(server, room->players[1 - seat].connection,
-                             &notice);
-                log_line(server, "room %s player %d reconnected", room->code,
-                         seat + 1);
-                return;
+            if (!player->seated
+                || strcmp(player->token, message->token) != 0) {
+                continue;
             }
+            if (player->connection >= 0) {
+                /* The token holder owns the seat. The old socket can be a
+                 * half-open connection the server has not reaped yet, so a
+                 * valid rejoin takes the seat over instead of failing for up
+                 * to the idle timeout. */
+                const int stale = player->connection;
+                server->connections[stale].room = -1;
+                server->connections[stale].seat = -1;
+                connection_schedule_close(server, stale);
+            } else if (now > player->rejoin_deadline) {
+                continue;
+            }
+            player->connection = connection;
+            player->rejoin_deadline = 0;
+            conn->room = r;
+            conn->seat = seat;
+            conn->join_failures = 0;
+            if (!room->playing && !room->finished) {
+                room->expires = now + (uint64_t)server->config.room_wait_ms;
+            }
+            generate_token(server, player->token);
+            NetMessage welcome = {
+                .type = NET_MSG_WELCOME,
+                .version = REVERSI_NET_VERSION,
+                .player = seat + 1
+            };
+            snprintf(welcome.token, sizeof(welcome.token), "%s",
+                     player->token);
+            send_message(server, connection, &welcome);
+            send_room_snapshot(server, room, seat);
+            NetMessage notice = {.type = NET_MSG_OPPONENT};
+            snprintf(notice.status, sizeof(notice.status), "reconnected");
+            send_message(server, room->players[1 - seat].connection,
+                         &notice);
+            log_line(server, "room %s player %d reconnected", room->code,
+                     seat + 1);
+            return;
         }
     }
-    send_error(server, connection, "rejoin_failed");
+    join_failed(server, connection, "rejoin_failed");
 }
 
 static void handle_create(NetServer *server, int connection,
@@ -682,7 +725,7 @@ static void handle_create(NetServer *server, int connection,
     generate_token(server, room->players[0].token);
     conn->room = index;
     conn->seat = 0;
-    room->expires = now_ms() + REVERSI_NET_SERVER_ROOM_WAIT_MS;
+    room->expires = now_ms() + (uint64_t)server->config.room_wait_ms;
     NetMessage welcome = {
         .type = NET_MSG_WELCOME,
         .version = REVERSI_NET_VERSION,
@@ -705,30 +748,32 @@ static void handle_join(NetServer *server, int connection,
     }
     const int index = find_room(server, message->code);
     if (index < 0) {
-        send_error(server, connection, "room_not_found");
+        join_failed(server, connection, "room_not_found");
         return;
     }
     ServerRoom *room = &server->rooms[index];
     if (room->playing || room->finished) {
-        send_error(server, connection, "room_in_progress");
+        join_failed(server, connection, "room_in_progress");
         return;
     }
     if (!room->players[0].seated || !room->players[1].seated) {
         const int seat = room->players[0].seated ? 1 : 0;
         if (seat == 0) {
-            send_error(server, connection, "room_closed");
+            join_failed(server, connection, "room_closed");
             return;
         }
         if (message->color == room->players[0].color) {
-            send_error(server, connection, "color_taken");
+            join_failed(server, connection, "color_taken");
             return;
         }
         room->players[seat].seated = true;
         room->players[seat].color = message->color;
         room->players[seat].connection = connection;
         generate_token(server, room->players[seat].token);
+        room->expires = now_ms() + (uint64_t)server->config.room_wait_ms;
         conn->room = index;
         conn->seat = seat;
+        conn->join_failures = 0;
         NetMessage welcome = {
             .type = NET_MSG_WELCOME,
             .version = REVERSI_NET_VERSION,
@@ -742,7 +787,7 @@ static void handle_join(NetServer *server, int connection,
         log_line(server, "room %s joined", room->code);
         return;
     }
-    send_error(server, connection, "room_full");
+    join_failed(server, connection, "room_full");
 }
 
 static void handle_ready(NetServer *server, int connection)
@@ -805,9 +850,22 @@ static void handle_leave(NetServer *server, int connection)
 
 static void dispatch(NetServer *server, int connection, NetMessage *message)
 {
+    ServerConnection *conn = &server->connections[connection];
+    if (message->type == NET_MSG_HELLO) {
+        if (conn->hello_received) {
+            send_error(server, connection, "unexpected_message");
+            return;
+        }
+        conn->hello_received = true;
+        return;
+    }
+    /* Protocol v1 starts with hello so the version is negotiated before any
+     * room or game state exists. */
+    if (!conn->hello_received) {
+        send_error(server, connection, "hello_required");
+        return;
+    }
     switch (message->type) {
-    case NET_MSG_HELLO:
-        break;
     case NET_MSG_CREATE:
         handle_create(server, connection, message);
         break;
@@ -1023,7 +1081,8 @@ static void accept_connections(NetServer *server)
         memset(connection, 0, sizeof(*connection));
         connection->state = CONNECTION_HANDSHAKE;
         connection->socket = socket;
-        connection->handshake_deadline = now_ms() + REVERSI_NET_SERVER_HANDSHAKE_MS;
+        connection->handshake_deadline = now_ms()
+            + (uint64_t)server->config.handshake_timeout_ms;
         connection->last_active = now_ms();
         connection->tokens = REVERSI_NET_SERVER_TOKEN_CAP;
         connection->tokens_ms = now_ms();
@@ -1057,6 +1116,18 @@ NetServer *net_server_create(const NetServerConfig *config)
     }
     if (server->config.reconnect_timeout_ms <= 0) {
         server->config.reconnect_timeout_ms = 60000;
+    }
+    if (server->config.handshake_timeout_ms <= 0) {
+        server->config.handshake_timeout_ms = REVERSI_NET_SERVER_HANDSHAKE_MS;
+    }
+    if (server->config.idle_timeout_ms <= 0) {
+        server->config.idle_timeout_ms = REVERSI_NET_SERVER_IDLE_MS;
+    }
+    if (server->config.room_wait_ms <= 0) {
+        server->config.room_wait_ms = REVERSI_NET_SERVER_ROOM_WAIT_MS;
+    }
+    if (server->config.room_done_ms <= 0) {
+        server->config.room_done_ms = REVERSI_NET_SERVER_ROOM_DONE_MS;
     }
     server->listener = NET_INVALID;
     server->port = 0;
@@ -1141,7 +1212,8 @@ static void server_timers(NetServer *server)
             && now >= connection->handshake_deadline) {
             connection_schedule_close(server, i);
         } else if (connection->state == CONNECTION_OPEN
-                   && now - connection->last_active > REVERSI_NET_SERVER_IDLE_MS) {
+                   && now - connection->last_active
+                   > (uint64_t)server->config.idle_timeout_ms) {
             connection_schedule_close(server, i);
         }
     }
@@ -1252,6 +1324,30 @@ void net_server_poll(NetServer *server, int timeout_ms)
     }
     server_timers(server);
     connection_close_pending(server);
+}
+
+void net_server_shutdown(NetServer *server, const char *status)
+{
+    if (server == NULL || !server->started) {
+        return;
+    }
+    const char *notice =
+        status != NULL && status[0] != '\0' ? status : "shutdown";
+    int closed = 0;
+    for (int r = 0; r < REVERSI_NET_SERVER_MAX_ROOMS; ++r) {
+        if (server->rooms[r].used) {
+            room_close(server, r, notice);
+            ++closed;
+        }
+    }
+    log_line(server, "shutdown: closed %d room(s)", closed);
+    server->started = false;
+    /* Best-effort flush: sockets are closed by net_server_destroy. */
+    for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
+        if (server->connections[i].state != CONNECTION_FREE) {
+            connection_flush(server, i);
+        }
+    }
 }
 
 void net_server_destroy(NetServer *server)

@@ -136,9 +136,74 @@ static void test_session_flow(TestStats *stats)
     net_session_destroy(b);
 }
 
+
+static void test_session_server_restart(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .move_timeout_ms = 30000,
+                              .reconnect_timeout_ms = 3000, .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    NetSession *a = net_session_create();
+    NetSession *b = net_session_create();
+    REVERSI_TEST_ASSERT(stats, a != NULL && b != NULL);
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1", port));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_LOBBY, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_create_room(a, STONE_BLACK));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_WAITING, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_connect(b, "127.0.0.1", port));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, b, a,
+                                          NET_SESSION_LOBBY, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_join_room(b, a->code,
+                                                     STONE_WHITE));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, b, a,
+                                          NET_SESSION_WAITING, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_ready(a));
+    REVERSI_TEST_ASSERT(stats, net_session_ready(b));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, b,
+                                          NET_SESSION_PLAYING, 3000));
+    Move moves[REVERSI_BOARD_CELL_COUNT];
+    const int count = rules_generate_legal_moves(
+        &a->game.board, a->game.current_player, moves,
+        REVERSI_BOARD_CELL_COUNT);
+    REVERSI_TEST_ASSERT(stats, count > 0);
+    REVERSI_TEST_ASSERT(stats, net_session_move(a, moves[0]));
+    for (int elapsed = 0; elapsed < 3000 && a->seq < 1; ++elapsed) {
+        net_session_update(a, 0.002f);
+        net_session_update(b, 0.002f);
+        net_server_poll(server, 1);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->seq == 1);
+
+    /* An abrupt server loss must be reported, never turned into an illegal
+     * local game or a crash. The board is retained until the server says
+     * otherwise; the session attempts a rejoin for its retry budget. */
+    net_server_destroy(server);
+    bool disconnected = false;
+    for (int elapsed = 0; elapsed < 3000 && !disconnected; ++elapsed) {
+        net_session_update(a, 0.002f);
+        if (a->phase == NET_SESSION_DISCONNECTED) {
+            disconnected = true;
+        }
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, disconnected);
+    REVERSI_TEST_ASSERT(stats, a->seq == 1);
+    REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_ONGOING);
+    REVERSI_TEST_ASSERT(stats, a->code[0] != '\0');
+    net_session_destroy(a);
+    net_session_destroy(b);
+}
+
 int main(void)
 {
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_session_flow);
+    REVERSI_RUN_TEST(&stats, test_session_server_restart);
     return reversi_test_summary(&stats, "net.session");
 }

@@ -1,0 +1,13 @@
+# Only needed when server output is redirected to a file instead of journald.
+# Prefer journald (the shipped systemd unit uses it): it rotates by size/time
+# and needs no extra daemon.
+/var/log/reversi/server.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su reversi reversi
+}

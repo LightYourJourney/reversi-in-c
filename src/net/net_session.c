@@ -47,6 +47,9 @@ static void on_status(void *context, NetClientStatus status,
     (void)reason;
     switch (status) {
     case NET_CLIENT_CONNECTED:
+        /* Protocol v1: hello is always the first message, including on a
+         * reconnect before the rejoin request. */
+        send_hello(session);
         if (session->rejoin_pending && session->token[0] != '\0') {
             NetMessage rejoin = {.type = NET_MSG_REJOIN};
             snprintf(rejoin.token, sizeof(rejoin.token), "%s",
@@ -54,7 +57,6 @@ static void on_status(void *context, NetClientStatus status,
             net_client_send(session->client, &rejoin);
             session->phase = NET_SESSION_CONNECTING;
         } else {
-            send_hello(session);
             session->phase = NET_SESSION_LOBBY;
         }
         break;

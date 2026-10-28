@@ -49,13 +49,13 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
 | net.protocol | reversi_net_protocol_tests | 33 | 协议字段/版本/方向/棋盘/错误/终局快照 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
-| net.server | reversi_net_server_tests | 713 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 | PASS |
-| net.client | reversi_net_client_tests | 26 | 连接、创建/加入/ready/落子、断线重连 | PASS |
-| net.session | reversi_net_session_tests | 37 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭 | PASS |
+| net.server | reversi_net_server_tests | 5,756 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊、Hello 顺序、握手/空闲/房间 TTL、加入失败限速、连接/房间上限、等待房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、8 局连续 soak | PASS |
+| net.client | reversi_net_client_tests | 32 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出报错 | PASS |
+| net.session | reversi_net_session_tests | 57 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途服务端重启 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
-| ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
-| storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
-| storage.settings | reversi_settings_tests | 58 | 默认值、速度档位、解析、持久化、损坏回退 | PASS |
+| ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
+| storage.save | reversi_save_tests | 102 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture | PASS |
+| storage.settings | reversi_settings_tests | 68 | 默认值、速度档位、解析、持久化、损坏回退、v1.0.1 设置 fixture | PASS |
 | storage.stats | reversi_stats_tests | 44 | 记录/撤回、视角、汇总、原子持久化 | PASS |
 | audio.noop | reversi_audio_tests | 2 | 无音频设备时安全空操作 | PASS |
 | ui.button | reversi_ui_button_tests | 30 | 悬停/按下/取消/禁用/reduced-motion | PASS |
@@ -64,6 +64,11 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 
 实际运行结果：
 
+- Phase 15（2026-10-29）：Debug 26/26、Release 26/26、ASan+UBSan 无窗口
+  26/26；TSan `net.session`/`net.client` 无竞争；`net.server` 5,756 断言
+  （含 20 ms 延迟代理与 8 局连续 soak）；`REVERSI_SOAK_MS=600000` 的
+  10 分钟 ASan soak 结果见 `PHASE_15_REPORT.md`。GUI 30/30 在本次会话
+  **NOT TESTED**（无窗口服务器：`Failed to get primary monitor`）。
 - Debug：26/26 无窗口测试通过（v2.0.0）。
 - Debug + GUI：v2.0.0 本机 30/30，包含 `app.lab` 与 `app.net`（大厅 20 帧渲染），
   `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程
@@ -329,3 +334,52 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
   落子与投降终局；步骤见 `docs/WEB_ONLINE_TESTING.md`（手工/主机脚本）。
 - **未覆盖**：真实网络延迟/丢包、Safari/Firefox、可信证书链与生产代理、
   公网部署、在线终局导入 Lab 复盘。
+
+## 13. 网络加固测试（Phase 15）
+
+```bash
+# 网络单元/集成（含边界、上限、接管、延迟代理、soak 8 局）
+ctest --test-dir build -R '^net\.' --output-on-failure
+
+# 长时间 soak（10 分钟；默认 8 局，确定断言数）
+REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
+  ./build-sanitize/reversi_net_server_tests
+
+# 浏览器（需要本地 nginx + 服务端，见 WEB_ONLINE_TESTING.md）
+NODE_PATH=~/rv-e2e/pw/node_modules \
+  node scripts/web-online-e2e.mjs --browser chrome \
+  --base https://localhost:9443/index.html --ws-port 9444
+node scripts/web-queue-overflow-check.mjs --browser chrome
+
+# 进程级优雅关闭
+node scripts/check-server-shutdown.mjs --pid <server pid> \
+  --url wss://127.0.0.1:9444/
+
+# 浏览器渲染/缩放/触摸/存档/Worker（Release 8080 + Debug 8081）
+REVERSI_WEB_URL=http://127.0.0.1:8080 \
+REVERSI_WEB_DEBUG_URL=http://127.0.0.1:8081 \
+  node tests/web/run-tests.js
+```
+
+| 场景 | 方式 | 结果 |
+|---|---|---|
+| 高延迟 | 测试内 TCP 代理，每方向 20 ms，双客户端完成整局 | PASS（`test_latency_game`） |
+| 重复消息 | 重复落子/重复 ready/重复 hello | PASS（`stale_state` / `not_ready_state` / `unexpected_message`） |
+| 错误消息顺序 | 首条非 hello、重复 hello | PASS（`hello_required` / `unexpected_message`） |
+| 客户端突然断开 | 直接 `close()`（对局中与等待中） | PASS（座位保留、对手收到 `disconnected`） |
+| 服务端重启 | 测试内销毁服务器；会话层 | PASS（DISCONNECTED、保留棋盘、重连预算耗尽后 FAILED） |
+| 断线后重连 | 令牌 rejoin、旧令牌拒绝、旧连接仍在线时接管 | PASS |
+| 房间已过期 | 等待 TTL 到期后 join | PASS（`expired` 后 `room_not_found`） |
+| 发送队列饱和 | 客户端接收队列 32 条溢出（桌面与浏览器） | PASS（`FAILED(queue_overflow)`，浏览器三引擎注入验证） |
+| 多房间并发 | 两个房间同时建房/加入 | PASS |
+| 完整对局连续运行 | 8 局连续（默认）与 `REVERSI_SOAK_MS` 长时 | PASS / 见报告 |
+| 服务端长时间稳定性 | 10 分钟 ASan soak：`PASS net.server (897693 checks)`，约 1,800 局，退出码 0 | PASS |
+| 浏览器渲染/触摸/存档 | `tests/web/run-tests.js`（Chrome）：9/9 | PASS |
+| 连接/房间上限 | 48 连接、32 房间 | PASS |
+| 握手/空闲超时 | 100/300 ms 配置 | PASS |
+| 加入失败限速 | 7 次 `room_not_found` 后第 8 次 `rate_limited` 并关闭 | PASS |
+| 复制/重排/丢包（字节级） | 不做字节级注入：TCP 会重传，应用层观察不到丢包；连接丢失用断开/重连覆盖 | NOT APPLICABLE / NOT TESTED |
+
+**模拟与真实网络的区分**：以上延迟测试是**进程内模拟**（回环 TCP + 代理
+延迟），不包含真实路由、NAT、丢包、乱序或带宽限制。真实跨网络测试
+**NOT TESTED**。

@@ -1,6 +1,8 @@
 # 安装、卸载与发布
 
-版本号来自仓库根目录的 `VERSION` 文件，当前为 **1.0.1**。发行包由
+版本号来自仓库根目录的 `VERSION` 文件，当前为 **2.0.0**（Release
+Candidate，尚未发布）；**最新已发布版本仍为 1.0.1**。下文示例统一使用
+2.0.0；已发布版本的归档与校验值见 [RELEASES.md](RELEASES.md)。发行包由
 CMake/CPack 生成，包含可执行程序、运行时资源、文档、许可证与 SHA-256
 校验值。
 
@@ -8,9 +10,9 @@ CMake/CPack 生成，包含可执行程序、运行时资源、文档、许可�
 
 | 平台 | 文件 | 形式 |
 |---|---|---|
-| macOS 11+ arm64 | `Reversi-1.0.1-Darwin-arm64.zip` | `Reversi.app` 应用包 |
-| Windows x64 | `Reversi-1.0.1-Windows-AMD64.zip` | 便携目录，含 `reversi.exe` |
-| Linux x86_64 | `Reversi-1.0.1-Linux-x86_64.zip` / `.tar.gz` | 便携目录，含 `reversi` |
+| macOS 11+ arm64 | `Reversi-2.0.0-Darwin-arm64.zip` | `Reversi.app` 应用包 |
+| Windows x64 | `Reversi-2.0.0-Windows-AMD64.zip` | 便携目录，含 `reversi.exe` |
+| Linux x86_64 | `Reversi-2.0.0-Linux-x86_64.zip` / `.tar.gz` | 便携目录，含 `reversi` |
 
 每个归档旁有 `.sha256` 文件；GitHub Release 另提供汇总的 `SHA256SUMS`。
 当前 macOS 构建只做 **ad-hoc 签名**（用于保证包结构完整），**没有
@@ -48,7 +50,7 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
 签名并打包后，可用发布者自己的 notarytool 凭据提交公证：
 
 ```bash
-xcrun notarytool submit Reversi-1.0.1-Darwin-arm64.zip \
+xcrun notarytool submit Reversi-2.0.0-Darwin-arm64.zip \
   --keychain-profile <profile> --wait
 xcrun stapler staple Reversi.app
 ```
@@ -83,8 +85,8 @@ sudo apt install libasound2 libx11-6 libxrandr2 libxi6 libgl1 \
 安装：
 
 ```bash
-unzip Reversi-1.0.1-Linux-x86_64.zip
-cd Reversi-1.0.1-Linux-x86_64
+unzip Reversi-2.0.0-Linux-x86_64.zip
+cd Reversi-2.0.0-Linux-x86_64
 chmod +x reversi
 ./reversi
 ```
@@ -111,19 +113,19 @@ chmod +x reversi
 macOS：
 
 ```bash
-shasum -a 256 -c Reversi-1.0.1-Darwin-arm64.zip.sha256
+shasum -a 256 -c Reversi-2.0.0-Darwin-arm64.zip.sha256
 ```
 
 Linux：
 
 ```bash
-sha256sum -c Reversi-1.0.1-Linux-x86_64.zip.sha256
+sha256sum -c Reversi-2.0.0-Linux-x86_64.zip.sha256
 ```
 
 Windows PowerShell：
 
 ```powershell
-Get-FileHash .\Reversi-1.0.1-Windows-AMD64.zip -Algorithm SHA256
+Get-FileHash .\Reversi-2.0.0-Windows-AMD64.zip -Algorithm SHA256
 ```
 
 ## 7. 从源码生成发行包
