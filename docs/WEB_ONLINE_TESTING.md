@@ -1,6 +1,6 @@
-# Web 在线联机与 TLS 本地验证
+# 在线联机（Web / 桌面↔Web）与 TLS 本地验证
 
-日期：2026-10-28  
+日期：2026-10-28（桌面↔Web 追加于同日）  
 范围：本地回环验证；**未部署公网、未购买云资源**  
 环境：macOS 26.6.2 arm64，Chrome 155（Headless，Playwright 1.64.1，
 channel `chrome`），nginx 1.31.8（Homebrew），OpenSSL 4.1.0，
@@ -131,7 +131,35 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 状态不再显示）。截图与 nginx 访问日志保留在本机 `~/rv-e2e/`，未纳入仓库；
 服务端日志需自行重定向，默认写入 stderr。
 
-## 5. 验证中发现并修复的问题
+## 5. 桌面 ↔ Web 联机
+
+拓扑：桌面应用（原生窗口）连接 `ws://127.0.0.1:8080`（默认服务器/端口），
+浏览器经 `wss://localhost:8444` 加入同一房间。桌面创建房间（黑方），
+浏览器选白方加入；桌面 Ready，浏览器 Ready；桌面落子 d3；浏览器投降。
+
+桌面端在 macOS 上以窗口自动化执行（不切换前台、不抢占用户输入）：
+
+- 通过 `CGWindowListCopyWindowInfo` 找到窗口并 `screencapture -l<id>` 按窗口
+  截图（Retina 2×；raylib 坐标 = 像素/2 − 标题栏 32pt）。
+- 通过 `CGEventPost`/`postToPid` 投递鼠标事件；窗口必须先处于前台
+  （GLFW 忽略非活动窗口的按键），截图后恢复原应用。
+- 浏览器使用 Playwright，连接 WSS 并加入给定房间码。
+
+结果（2026-10-28）：
+
+| 项 | 结果 |
+|---|---|
+| 房间 | `7SUYW3`、`2N9BLT` |
+| 桌面 | `ws://127.0.0.1:8080`，黑方（host），ping 17–27 ms |
+| 浏览器 | `wss://localhost:8444`，白方 |
+| 双方 Ready | 双方进入 GAME，桌面显示 “Black to move” |
+| 桌面 d3 | 浏览器 `netSeq()==1`；桌面显示 d3 黑子、d4 翻黑、4:1 |
+| 浏览器投降 | 浏览器 `BLACK_WIN`、FINISHED；桌面 HUD `Game over: Black wins (resign)` |
+
+桌面↔Web 验证是手工/主机脚本流程，未纳入仓库脚本与 CI；坐标与焦点处理
+依赖 macOS 窗口管理。
+
+## 6. 验证中发现并修复的问题
 
 1. **会话只在转场期间轮询**：`net_session_update` 原先仅在
    `app_update_passive` 调用，稳定态大厅/对局不轮询，界面永远 “Offline”。
@@ -143,9 +171,8 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 4. 为浏览器自动化增加只读访问器 `reversi_web_net_code` /
    `reversi_web_net_phase`（`__reversiTest.netCode/netPhase`）。
 
-## 6. 未覆盖
+## 7. 未覆盖
 
-- 桌面↔Web 联机（本次是 Web↔Web 两个浏览器）。
 - Safari/Firefox；真实设备与移动端；可信证书链、HSTS、生产代理配置。
 - 公网部署、NAT/防火墙、跨网络延迟与丢包。
 - 浏览器端断线重连与多局连续对战未做自动化。

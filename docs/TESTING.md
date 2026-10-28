@@ -51,7 +51,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
 | net.server | reversi_net_server_tests | 713 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊 | PASS |
 | net.client | reversi_net_client_tests | 26 | 连接、创建/加入/ready/落子、断线重连 | PASS |
-| net.session | reversi_net_session_tests | 29 | 会话相位、颜色、seq、回合、落子、投降终局 | PASS |
+| net.session | reversi_net_session_tests | 32 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 22 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 91 | 往返、原子覆盖、损坏/版本/校验和/非法状态 | PASS |
@@ -324,5 +324,7 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
   与浏览器均收到 `101`。
 - `scripts/web-online-e2e.mjs`：双浏览器联机脚本（需 Playwright 与本地
   nginx），断言连接/建房/加入/落子 `seq`/投降终局；未进 CI。
+- 桌面↔Web：桌面 `ws://127.0.0.1:8080` 建房、浏览器 WSS 加入，完成
+  落子与投降终局；步骤见 `docs/WEB_ONLINE_TESTING.md`（手工/主机脚本）。
 - **未覆盖**：真实网络延迟/丢包、Safari/Firefox、可信证书链与生产代理、
   公网部署、在线终局导入 Lab 复盘。

@@ -52,6 +52,8 @@
 - 在线终局 HUD 的结果与原因缺少分隔（`Black winsresign`）；现为
   `Black wins (resign)`。
 - Web 壳页仍写着“无账号、无网络同步”；现说明在线需要自托管服务器。
+- 终局后对手离开会关闭房间，客户端被踢回大厅、结算画面消失；现终局后
+  房间关闭仍保留 FINISHED 结果，直到玩家自行离开。
 
 ### Verified
 
@@ -62,14 +64,15 @@
   投降，双方进入 GAME/PLAYING/FINISHED 并一致判定黑胜。
 - 本地 TLS/WSS：nginx 自签证书 TLSv1.3，`openssl s_client` 与浏览器均
   收到 `101`；生产证书与公网未验证。
+- 桌面↔Web：桌面 `ws://` 建房（黑）、浏览器 `wss://` 加入（白），桌面
+  d3、浏览器投降，桌面显示 `Game over: Black wins (resign)`。
 - 两名独立客户端完成整局，服务端与本地重放状态一致；非法、重复、断线
   重连、多房间、服务端重启与 20k 随机帧通过。
-- Emscripten Release 构建通过（wasm 394,855 B）。
+- Emscripten Release 构建通过（wasm 394,866 B）。
 
 ### Not tested
 
-- 桌面↔Web 联机、Safari/Firefox、可信证书链/HSTS、真实网络延迟/丢包、
-  公网部署。
+- Safari/Firefox、可信证书链/HSTS、真实网络延迟/丢包、公网部署。
 - 在线对局导入 Reversi Lab 复盘未实现。
 
 ## [1.4.0] - 2026-10-25

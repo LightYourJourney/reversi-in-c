@@ -160,7 +160,11 @@ static void on_message(void *context, const NetMessage *message)
     case NET_MSG_ROOMCLOSED:
         snprintf(session->reason, sizeof(session->reason), "%s",
                  message->status);
-        session->phase = NET_SESSION_LOBBY;
+        /* Keep a finished game on screen when the room disappears after the
+         * opponent leaves; only an unfinished room falls back to the lobby. */
+        if (session->phase != NET_SESSION_FINISHED) {
+            session->phase = NET_SESSION_LOBBY;
+        }
         session->active = false;
         session->code[0] = '\0';
         session->token[0] = '\0';

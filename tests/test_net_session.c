@@ -106,6 +106,17 @@ static void test_session_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_WHITE_WIN);
     REVERSI_TEST_ASSERT(stats, b->game.result == GAME_RESULT_WHITE_WIN);
 
+    /* The opponent leaves after the game: the result must stay on screen. */
+    net_session_disconnect(b);
+    for (int elapsed = 0; elapsed < 3000 && a->code[0] != '\0'; ++elapsed) {
+        net_session_update(a, 0.002f);
+        net_server_poll(server, 1);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->code[0] == '\0');
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FINISHED);
+    REVERSI_TEST_ASSERT(stats, a->game.result == GAME_RESULT_WHITE_WIN);
+
     net_session_destroy(a);
     net_session_destroy(b);
     net_server_destroy(server);

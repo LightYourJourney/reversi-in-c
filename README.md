@@ -515,7 +515,7 @@ ctest --test-dir build --output-on-failure
 | ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告 |
 | Debug + GUI | 30/30 通过；含 `app.lab`、`app.net` 渲染冒烟 |
 | 浏览器（Chrome） | v2.0.0 双客户端 E2E（本地 HTTPS/WSS）通过；旧 v1.1.0 套件未复跑；Safari/Firefox **NOT TESTED** |
-| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 394,855 B，Worker 58 KB） |
+| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 394,866 B，Worker 58 KB） |
 | GitHub Actions | v1.4.0 运行 `40288248734` 9/9 通过；v1.3.0 为 `40111155790` |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中

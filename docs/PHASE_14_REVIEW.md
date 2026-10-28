@@ -117,7 +117,7 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | GitHub Actions | 运行 `40479705658`（提交 `37d219d`） | 9/9 作业 PASS：Linux/Windows/macOS Debug 26/26；ASan+UBSan 26/26 与 Xvfb GUI 4/4；三平台打包与 Linux 包验收 |
 
 断言计数（本机实跑）：`core.match` 1011、`net.protocol` 33、
-`net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 29。
+`net.ws` 20,026、`net.server` 713、`net.client` 26、`net.session` 32。
 
 关键证据：
 
@@ -135,7 +135,7 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
   `src/storage/`；同版本往返测试通过。**跨版本旧存档 fixture 未实测**
   ——NOT TESTED。
 - 桌面/Web：桌面三平台 CI 通过（见 CI 记录）；Web 构建通过；本地
-  Web↔Web 浏览器联机 PASS；桌面↔Web NOT TESTED。
+  Web↔Web 与桌面↔Web 联机 PASS（房间 `7SUYW3`/`2N9BLT`）。
 - Debug/Release：两者均跑全部无窗口测试；网络代码无 `NDEBUG` 分支。
 
 性能：
@@ -146,9 +146,10 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 
 ## 5. 仍未解决的风险
 
-1. **浏览器覆盖有限**：本地 Headless Chrome 双客户端已完成一局
-   （HTTPS/WSS），但 Safari/Firefox、移动端、可信证书链与生产代理配置
-   仍 NOT TESTED。
+1. **浏览器/桌面覆盖有限**：本地 Headless Chrome 双客户端与桌面↔Web
+   各完成一局；桌面↔Web 为主机自动化（依赖 macOS 窗口/事件注入），未进
+   CI。Safari/Firefox、移动端、真实网络、可信证书链与生产代理配置仍
+   NOT TESTED。
 2. **TLS 仅本地实测**：nginx 自签证书 + `ignoreHTTPSErrors`；HSTS、
    证书轮换、代理超时与公网握手 NOT TESTED。
 3. **真实网络延迟/丢包/乱序 NOT TESTED**：只在回环。
@@ -179,12 +180,12 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | 网络对局 | PASS | 完整对局、非法/重复、Pass、双向超时、投降、seq |
 | 安全设计 | PARTIAL | 限速、重放、令牌、资源上限有实现与部分测试；本地 TLS 终止 PASS，生产配置 NOT TESTED |
 | 联网体验 | PARTIAL | 大厅/HUD/重连/投降/终局 PASS；Lab 复盘未接入 |
-| 跨平台 | PARTIAL | 桌面三平台 CI PASS；Chrome↔Chrome HTTPS/WSS PASS；桌面↔Web、Safari/Firefox NOT TESTED |
+| 跨平台 | PASS（附注） | 桌面三平台 CI PASS；桌面↔Web 与 Chrome↔Chrome 本地联机 PASS；Safari/Firefox NOT TESTED |
 | 测试 | PARTIAL | 服务端/协议/客户端/会话与浏览器 E2E 覆盖；真实网络延迟 NOT TESTED |
 
-**结论：核心在线对战验收 PASS；浏览器（Web↔Web）与本地 TLS 已补测
-PASS；原始阶段验收仍为 PARTIAL（桌面↔Web、生产网络、Safari/Firefox
-未测）。**
+**结论：核心在线对战验收 PASS；桌面↔Web、Web↔Web 与本地 TLS 已补测
+PASS；原始阶段验收仍为 PARTIAL，仅因生产网络/证书、Safari/Firefox 与
+Lab 复盘等明确未测项。**
 未达成的部分全部是“真实部署/浏览器/网络环境”类验证，按本阶段约束
 （不部署、不开放公网）无法在本机补齐，不得声称完整通过。
 

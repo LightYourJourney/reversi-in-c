@@ -397,9 +397,11 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 - Emscripten Release 构建通过（wasm 394,855 B）。
 - 两个浏览器（本地 HTTPS/WSS，nginx 自签 TLSv1.3）完成建房/加入/落子/
   投降一局；`openssl s_client` 与浏览器均收到 `101`。
+- 桌面↔Web 完成一局：桌面 `ws://` 建房（黑），浏览器 `wss://` 加入
+  （白），桌面 d3、浏览器投降，双方终局一致。
 
-未验证：桌面↔Web 联机、Safari/Firefox、可信证书链/HSTS、真实网络
-延迟/丢包、公网部署、在线对局导入 Lab 复盘。详见
+未验证：Safari/Firefox、可信证书链/HSTS、真实网络延迟/丢包、公网部署、
+在线对局导入 Lab 复盘。详见
 [PHASE_14_REPORT.md](PHASE_14_REPORT.md) 与
 [WEB_ONLINE_TESTING.md](WEB_ONLINE_TESTING.md)。
 
