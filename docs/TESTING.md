@@ -88,7 +88,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - GitHub Actions 运行 `40288248734`（2026-10-26，Phase 13）9 个作业全部
   `success`：三平台 Debug/Release 各 21/21；Linux ASan+UBSan 无窗口 21/21；
   Linux Xvfb GUI 3/3；三平台打包与 Linux 包验收。
-- GitHub Actions 运行 `40692227710`（2026-10-28，提交 `5652399`）9 个作业
+- GitHub Actions 运行 `40706466157`（2026-10-28，提交 `e1196b4`）9 个作业
   全部 `success`：Linux/Windows（MSVC）/macOS Debug 各 26/26；Linux
   ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包
   与 Linux 包验收。该运行覆盖浏览器轮询与终局保留修复（`net.server` 713、
