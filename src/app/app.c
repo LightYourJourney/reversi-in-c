@@ -1259,7 +1259,9 @@ static void app_draw_net_hud(const App *app)
                              REVERSI_UI_COLOR_DANGER, UI_ALIGN_LEFT);
     } else if (net->phase == NET_SESSION_FINISHED) {
         char result[128];
-        if (net->reason[0] != '\0') {
+        const bool show_reason = net->reason[0] != '\0'
+            && strcmp(net->reason, "normal") != 0;
+        if (show_reason) {
             snprintf(result, sizeof(result), "Game over: %s (%s)",
                      ui_result_title(net->result), net->reason);
         } else {
@@ -1927,6 +1929,7 @@ int reversi_web_result(void);
 int reversi_web_screen_index(void);
 const char *reversi_web_net_code(void);
 int reversi_web_net_phase(void);
+int reversi_web_net_seq(void);
 int reversi_web_ai_active(void);
 int reversi_web_match_mode(void);
 void reversi_web_cancel_ai_test(void);
@@ -2021,6 +2024,13 @@ int reversi_web_net_phase(void)
 {
     const NetSession *session = g_web_run.app.net;
     return session != NULL ? (int)session->phase : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_net_seq(void)
+{
+    const NetSession *session = g_web_run.app.net;
+    return session != NULL ? session->seq : -1;
 }
 
 EMSCRIPTEN_KEEPALIVE

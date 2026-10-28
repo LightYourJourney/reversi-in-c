@@ -64,8 +64,9 @@ app (desktop / Web)
   代码量可控（握手、帧、掩码、分片、ping/pong/close）。
 - 需要自行实现 SHA-1、base64 与严格的帧长度/掩码校验，并用单元测试与
   模糊测试覆盖；这是本阶段的主要安全风险。
-- TLS：进程内不实现；本地测试用 `ws://127.0.0.1`，生产由 nginx/Caddy
-  终止 WSS 并转发到本地服务端。文档与安全审计明确这一边界。
+- TLS：进程内不实现；回环单元测试用 `ws://127.0.0.1`，本地浏览器验证由
+  nginx 自签证书终止 WSS（2026-10-28 实测），生产由代理终止并转发到
+  本地服务端。文档与安全审计明确这一边界。
 - Windows 使用 Winsock，POSIX 使用 socket/poll；服务端与桌面客户端共享
   一层薄 socket 抽象。
 
@@ -109,7 +110,7 @@ WAITING ──双方就座+ready──► PLAYING ──终局/投降/超时─�
 | 房间权限 | 只有两名就座玩家可 ready/move；非本房间 token 拒绝 |
 | 身份伪造 | 128 位随机会话 token，只在握手响应中发送；日志不记录 |
 | 日志敏感数据 | 不记录 token；房间代码可记录；错误不包含原始负载 |
-| 传输窃听 | 本地 `ws://` 仅限回环；生产 WSS 由代理终止（本轮 NOT TESTED） |
+| 传输窃听 | 本地 `ws://` 仅限回环；本地 WSS 由 nginx 自签终止已验证；生产 WSS 未测 |
 
 ## 8. 测试计划
 
@@ -127,7 +128,8 @@ WAITING ──双方就座+ready──► PLAYING ──终局/投降/超时─�
 ## 9. 本地部署
 
 - `reversi_server --port 8080 --bind 127.0.0.1`。
-- `scripts/serve-web.sh` 提供静态页面；浏览器连接 `ws://127.0.0.1:8080`。
+- `scripts/serve-web.sh` 提供静态页面（HTTP）；浏览器也可经本地 nginx
+  以 HTTPS + WSS 连接，见 `WEB_ONLINE_TESTING.md`。
 - 不提供公网部署脚本、不购买资源；WSS 反向代理示例只作为文档。
 
 ## 10. 可行性结论

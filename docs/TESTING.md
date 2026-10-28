@@ -88,14 +88,15 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - GitHub Actions 运行 `40288248734`（2026-10-26，Phase 13）9 个作业全部
   `success`：三平台 Debug/Release 各 21/21；Linux ASan+UBSan 无窗口 21/21；
   Linux Xvfb GUI 3/3；三平台打包与 Linux 包验收。
-- GitHub Actions 运行 `40667882210`（2026-10-26，Phase 14）9 个作业全部
-  `success`：Linux/Windows（MSVC）/macOS Debug 各 26/26；Linux ASan+UBSan
-  无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包与 Linux 包
-  验收。首跑 `40298668533` 暴露测试缺少 `windows.h` 与 Linux 端
-  `net.session` 等待竞态；`40299103857` 进一步显示 Windows 上 `shutdown`
-  不唤醒阻塞的 `recv`，读取循环已改为先 `select` 再 `recv`
-  （`95ccd03`、`699efbb`）。独立审计后的运行 `40667882210`（`abf182d`）
-  覆盖终局快照、限速与延迟关闭修复（`net.server` 709、`net.protocol` 33）。
+- GitHub Actions 运行 `40667882210`（2026-10-28，提交 `2d243c9`）9 个作业
+  全部 `success`：Linux/Windows（MSVC）/macOS Debug 各 26/26；Linux
+  ASan+UBSan 无窗口 26/26、Xvfb GUI 4/4；Linux Xvfb GUI 4/4；三平台打包
+  与 Linux 包验收。该运行覆盖浏览器轮询修复（`net.server` 713、
+  `net.protocol` 33）。首跑 `40298668533` 暴露测试缺少 `windows.h` 与
+  Linux 端 `net.session` 等待竞态；`40299103857` 进一步显示 Windows 上
+  `shutdown` 不唤醒阻塞的 `recv`，读取循环已改为先 `select` 再 `recv`
+  （`95ccd03`、`699efbb`）。独立审计修复的运行是 `40452178342`
+  （`abf182d`，`net.server` 709）。
 - GitHub Actions 运行 `40111155790`（2026-10-24，Phase 12）9 个作业全部
   `success`：三平台 Debug/Release 各 20/20；Linux ASan+UBSan 无窗口
   20/20；Linux Xvfb GUI 3/3；Linux 发行包验收。Phase 13 的 CI 结果在
@@ -321,5 +322,7 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
   `docs/WEB_ONLINE_TESTING.md`。
 - 本地 TLS/WSS：nginx 自签证书 TLSv1.3 终止，`openssl s_client` 手工升级
   与浏览器均收到 `101`。
+- `scripts/web-online-e2e.mjs`：双浏览器联机脚本（需 Playwright 与本地
+  nginx），断言连接/建房/加入/落子 `seq`/投降终局；未进 CI。
 - **未覆盖**：真实网络延迟/丢包、Safari/Firefox、可信证书链与生产代理、
   公网部署、在线终局导入 Lab 复盘。

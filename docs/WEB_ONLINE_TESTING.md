@@ -2,8 +2,9 @@
 
 日期：2026-10-28  
 范围：本地回环验证；**未部署公网、未购买云资源**  
-环境：macOS 26.6.2 arm64，Chrome 155（Headless，Playwright channel
-`chrome`），nginx 1.31.8（Homebrew），OpenSSL 3.x，Emscripten 6.0.13
+环境：macOS 26.6.2 arm64，Chrome 155（Headless，Playwright 1.64.1，
+channel `chrome`），nginx 1.31.8（Homebrew），OpenSSL 4.1.0，
+Emscripten 6.0.13
 
 本文件记录“浏览器双客户端联机”和“TLS/WSS 终止”的验证拓扑、可复现步骤与
 结果。自动化使用 Playwright，通过 `window.__reversiTest` 的只读接口
@@ -35,6 +36,8 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
 ```nginx
 events { worker_connections 128; }
 http {
+    include /opt/homebrew/etc/nginx/mime.types;  # 路径随安装位置调整
+    types { application/wasm wasm; }
     map $http_upgrade $connection_upgrade { default upgrade; '' close; }
     server {                     # 静态页面（HTTPS）
         listen 8443 ssl;
@@ -61,8 +64,9 @@ http {
 }
 ```
 
-注意：静态服务器必须为 `.wasm` 返回 `application/wasm`（nginx 默认类型表
-已包含；缺失时 Emscripten 回退到 ArrayBuffer 仍可运行）。
+注意：静态服务器必须为 `.wasm` 返回 `application/wasm`。Homebrew nginx 的
+默认 `mime.types` **不含** `.wasm`，实测会返回 `text/plain`，浏览器回退到
+ArrayBuffer 实例化（仍可运行但会打印错误）。上面的配置显式补充了该类型。
 
 启动：
 
@@ -81,9 +85,10 @@ openssl s_client -connect 127.0.0.1:8444 -servername localhost </dev/null
 # Verify return code: 18 (self-signed certificate)
 
 printf 'GET / HTTP/1.1\r\nHost: localhost:8444\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n' \
-  | openssl s_client -quiet -connect 127.0.0.1:8444 -servername localhost
+  | timeout 3 openssl s_client -quiet -connect 127.0.0.1:8444 -servername localhost
 # HTTP/1.1 101 Switching Protocols
 # Server: nginx/1.31.8
+# timeout 用于在收到 101 后主动结束（s_client 会保持连接）。
 ```
 
 浏览器侧：页面为 `https://localhost:8443`，控制台无混合内容错误；
@@ -92,10 +97,23 @@ HeadlessChrome/155.0.0.0。
 
 ## 4. 浏览器双客户端流程
 
-Playwright 用两个**独立 BrowserContext**（`ignoreHTTPSErrors: true`，
-viewport 1100×800），每个上下文一个页面；不能用同一上下文开两个页面
-（测试环境的页面会被回收）。坐标按 canvas 的 CSS/像素缩放换算；界面在
-高度 637 时走紧凑布局，棋盘坐标需按 `game_layout` 的窄屏公式计算。
+已提交脚本 `scripts/web-online-e2e.mjs`（Playwright 不随仓库分发）：
+
+```bash
+mkdir -p ~/rv-e2e/pw && cd ~/rv-e2e/pw && npm init -y
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright
+cd /path/to/repo
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-online-e2e.mjs \
+  --base https://localhost:8443/index.html --ws-port 8444 \
+  --shots ~/rv-e2e
+```
+
+脚本用两个**独立 BrowserContext**（`ignoreHTTPSErrors: true`，
+viewport 1100×800），每个上下文一个页面；同一上下文开两个页面会被测试
+环境的页面回收策略关闭。坐标按 canvas 的 CSS/像素缩放换算；界面高度
+637 时走紧凑布局，棋盘坐标按 `game_layout` 的窄屏公式计算。
+脚本通过 `__reversiTest.screenIndex/netPhase/netCode/netSeq` 断言，
+`--shots` 可选；任一步失败则以非零码退出。
 
 步骤与判定：
 
@@ -106,11 +124,12 @@ viewport 1100×800），每个上下文一个页面；不能用同一上下文�
 | A 建房 | `netPhase() == 3`（WAITING），`netCode()` 非空 | PASS（`MGQW82`） |
 | B 切白方并加入 | 双方 `netPhase() == 3` | PASS |
 | 双方 Ready | `screenIndex() == 2`（GAME），`netPhase() == 4` | PASS |
-| A 点 d3 | B 棋盘显示 d3 黑子、d4 翻黑，状态 `Last move d3` | PASS |
+| A 点 d3 | 双方 `netSeq() == 1`；B 棋盘显示 d3 黑子、d4 翻黑，`Last move d3` | PASS（`MJXHDX`，2026-10-28 脚本复跑） |
 | B 点 Resign | 双方 `gameOver() == true`、`result() == 1`（BLACK_WIN），`netPhase() == 5` | PASS |
 
-终局 HUD 文本为 `Game over: Black wins (resign)`。截图与 nginx/server
-日志保留在本机 `~/rv-e2e/`，未纳入仓库。
+终局 HUD 文本为 `Game over: Black wins (resign)`（自然终局的 `normal`
+状态不再显示）。截图与 nginx 访问日志保留在本机 `~/rv-e2e/`，未纳入仓库；
+服务端日志需自行重定向，默认写入 stderr。
 
 ## 5. 验证中发现并修复的问题
 
@@ -126,6 +145,8 @@ viewport 1100×800），每个上下文一个页面；不能用同一上下文�
 
 ## 6. 未覆盖
 
+- 桌面↔Web 联机（本次是 Web↔Web 两个浏览器）。
 - Safari/Firefox；真实设备与移动端；可信证书链、HSTS、生产代理配置。
 - 公网部署、NAT/防火墙、跨网络延迟与丢包。
 - 浏览器端断线重连与多局连续对战未做自动化。
+- 脚本未纳入 CI（需要本地 nginx/TLS 与服务端）。

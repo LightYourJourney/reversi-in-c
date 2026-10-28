@@ -134,8 +134,8 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 - 旧存档：`REVERSI_SAVE_FORMAT_VERSION` 仍为 1，Phase 14 diff 未触及
   `src/storage/`；同版本往返测试通过。**跨版本旧存档 fixture 未实测**
   ——NOT TESTED。
-- 桌面/Web：桌面三平台 CI 通过（见 CI 记录）；Web 构建通过；浏览器内
-  联机 NOT TESTED。
+- 桌面/Web：桌面三平台 CI 通过（见 CI 记录）；Web 构建通过；本地
+  Web↔Web 浏览器联机 PASS；桌面↔Web NOT TESTED。
 - Debug/Release：两者均跑全部无窗口测试；网络代码无 `NDEBUG` 分支。
 
 性能：
@@ -163,9 +163,10 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
    触发 WS 错误并关闭；协议错误码保留但永不发送。
 8. **重入修复未被饱和测试**：16 KB 发送队列溢出路径没有自动化用例
    （测试会污染后续状态），只靠代码审查与延迟关闭的单元行为验证。
-9. **在线终局入屏无自动化测试**：`app_build_net_match` 成功门控依赖 GUI
-   交互，`app.net` 仅渲染大厅；协议/会话/匹配层有单测。
-10. **UI 交互自动化**：大厅/网络 HUD 仅渲染冒烟，无点击回归。
+9. **在线终局入屏仅有本地 E2E**：`app_build_net_match` 成功门控依赖 GUI
+   交互；本地浏览器 E2E（投降→GAME_OVER）覆盖，但未进 CI。
+10. **UI 交互自动化**：`app.net` 仅渲染冒烟；大厅/对局点击由本地
+    `scripts/web-online-e2e.mjs` 覆盖，未进 CI。
 11. **在线终局导入 Lab** 未实现。
 12. **日志**：stderr 无轮转/结构化；令牌未记录（代码审查确认）。
 
@@ -178,11 +179,12 @@ Homebrew clang 23.1.4（TSan），CMake 4.4.4，Emscripten 6.0.13
 | 网络对局 | PASS | 完整对局、非法/重复、Pass、双向超时、投降、seq |
 | 安全设计 | PARTIAL | 限速、重放、令牌、资源上限有实现与部分测试；本地 TLS 终止 PASS，生产配置 NOT TESTED |
 | 联网体验 | PARTIAL | 大厅/HUD/重连/投降/终局 PASS；Lab 复盘未接入 |
-| 跨平台 | PARTIAL | 桌面三平台 CI PASS；Chrome 双客户端 HTTPS/WSS PASS；Safari/Firefox NOT TESTED |
+| 跨平台 | PARTIAL | 桌面三平台 CI PASS；Chrome↔Chrome HTTPS/WSS PASS；桌面↔Web、Safari/Firefox NOT TESTED |
 | 测试 | PARTIAL | 服务端/协议/客户端/会话与浏览器 E2E 覆盖；真实网络延迟 NOT TESTED |
 
-**结论：核心在线对战验收 PASS；浏览器双客户端与本地 TLS 已补测
-PASS；原始阶段验收仍为 PARTIAL（生产网络/Safari/Firefox 未测）。**
+**结论：核心在线对战验收 PASS；浏览器（Web↔Web）与本地 TLS 已补测
+PASS；原始阶段验收仍为 PARTIAL（桌面↔Web、生产网络、Safari/Firefox
+未测）。**
 未达成的部分全部是“真实部署/浏览器/网络环境”类验证，按本阶段约束
 （不部署、不开放公网）无法在本机补齐，不得声称完整通过。
 

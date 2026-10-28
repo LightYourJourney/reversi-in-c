@@ -272,11 +272,16 @@
         ? module._reversi_web_screen_index() : -1;
     },
     netCode: function () {
-      return module ? module.ccall('reversi_web_net_code', 'string', [], []) : '';
+      return module && module.ccall
+        ? module.ccall('reversi_web_net_code', 'string', [], []) : '';
     },
     netPhase: function () {
-      return module && module.ccall
-        ? module.ccall('reversi_web_net_phase', 'number', [], []) : -1;
+      return module && module._reversi_web_net_phase
+        ? module._reversi_web_net_phase() : -1;
+    },
+    netSeq: function () {
+      return module && module._reversi_web_net_seq
+        ? module._reversi_web_net_seq() : -1;
     },
     aiActive: function () {
       return !!(module && module._reversi_web_ai_active

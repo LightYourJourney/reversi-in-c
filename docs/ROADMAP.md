@@ -384,20 +384,24 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
 - 房间生命周期、颜色/ready、服务端规则校验、seq 防重复、Pass、终局、
   超时、断线重连、投降与离开。
 - 安全：消息/帧上限、速率限制、连接/房间上限、令牌轮换、日志不记录令牌；
-  本地只绑定回环，TLS 由反向代理终止（未实现/未测试）。
+  本地只绑定回环；进程内不实现 TLS，本地 nginx 终止已实测，生产未测。
 - 大厅与网络对局 HUD；`app.net` 渲染冒烟。
 - 文档：NETWORK_ARCHITECTURE、NETWORK_PROTOCOL、NETWORK_SECURITY、
-  PHASE_14_REPORT。
+  WEB_ONLINE_TESTING、PHASE_14_REPORT。
 
 验证（本机 macOS arm64）：
 
 - Debug / Release / ASan+UBSan 无窗口各 26/26；Debug + GUI 30/30。
 - 两名独立客户端完成整局；非法、重复、断线重连、多房间、服务端重启、
   20k 随机帧与 ASan 通过。
-- Emscripten Release 构建通过（wasm 385 KB）。
+- Emscripten Release 构建通过（wasm 394,855 B）。
+- 两个浏览器（本地 HTTPS/WSS，nginx 自签 TLSv1.3）完成建房/加入/落子/
+  投降一局；`openssl s_client` 与浏览器均收到 `101`。
 
-未验证：浏览器双客户端联机、真实网络延迟/丢包、TLS/WSS、公网部署、
-在线对局导入 Lab 复盘。详见 [PHASE_14_REPORT.md](PHASE_14_REPORT.md)。
+未验证：桌面↔Web 联机、Safari/Firefox、可信证书链/HSTS、真实网络
+延迟/丢包、公网部署、在线对局导入 Lab 复盘。详见
+[PHASE_14_REPORT.md](PHASE_14_REPORT.md) 与
+[WEB_ONLINE_TESTING.md](WEB_ONLINE_TESTING.md)。
 
 ## 非目标（当前）
 
