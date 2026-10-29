@@ -248,11 +248,87 @@ static void test_session_reconnect_budget(TestStats *stats)
     net_session_destroy(a);
 }
 
+
+static void test_session_move_log(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .move_timeout_ms = 30000,
+                              .reconnect_timeout_ms = 5000, .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    NetSession *a = net_session_create();
+    NetSession *b = net_session_create();
+    REVERSI_TEST_ASSERT(stats, a != NULL && b != NULL);
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1", port));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_LOBBY, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_create_room(a, STONE_BLACK));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_WAITING, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_connect(b, "127.0.0.1", port));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, b, a,
+                                          NET_SESSION_LOBBY, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_join_room(b, a->code,
+                                                     STONE_WHITE));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, b, a,
+                                          NET_SESSION_WAITING, 3000));
+    REVERSI_TEST_ASSERT(stats, net_session_ready(a));
+    REVERSI_TEST_ASSERT(stats, net_session_ready(b));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, b,
+                                          NET_SESSION_PLAYING, 3000));
+
+    Move legal[REVERSI_BOARD_CELL_COUNT];
+    int count = rules_generate_legal_moves(
+        &a->game.board, a->game.current_player, legal,
+        REVERSI_BOARD_CELL_COUNT);
+    REVERSI_TEST_ASSERT(stats, count > 0);
+    const Move first = legal[0];
+    REVERSI_TEST_ASSERT(stats, net_session_move(a, first));
+    for (int elapsed = 0; elapsed < 3000 && (a->seq < 1 || b->seq < 1);
+         ++elapsed) {
+        net_session_update(a, 0.002f);
+        net_session_update(b, 0.002f);
+        net_server_poll(server, 1);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->moves_count == 1);
+    REVERSI_TEST_ASSERT(stats, a->moves[0].row == first.row
+                        && a->moves[0].col == first.col);
+    REVERSI_TEST_ASSERT(stats, a->moves_complete);
+    REVERSI_TEST_ASSERT(stats, b->moves_count == 1);
+
+    count = rules_generate_legal_moves(&b->game.board,
+                                       b->game.current_player, legal,
+                                       REVERSI_BOARD_CELL_COUNT);
+    REVERSI_TEST_ASSERT(stats, count > 0);
+    const Move second = legal[0];
+    REVERSI_TEST_ASSERT(stats, net_session_move(b, second));
+    for (int elapsed = 0; elapsed < 3000 && (a->seq < 2 || b->seq < 2);
+         ++elapsed) {
+        net_session_update(a, 0.002f);
+        net_session_update(b, 0.002f);
+        net_server_poll(server, 1);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->moves_count == 2);
+    REVERSI_TEST_ASSERT(stats, a->moves[1].row == second.row
+                        && a->moves[1].col == second.col);
+    REVERSI_TEST_ASSERT(stats, b->moves_count == 2);
+    REVERSI_TEST_ASSERT(stats, b->moves_complete);
+
+    net_session_destroy(a);
+    net_session_destroy(b);
+    net_server_destroy(server);
+}
+
 int main(void)
 {
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_session_flow);
     REVERSI_RUN_TEST(&stats, test_session_server_restart);
     REVERSI_RUN_TEST(&stats, test_session_reconnect_budget);
+    REVERSI_RUN_TEST(&stats, test_session_move_log);
     return reversi_test_summary(&stats, "net.session");
 }

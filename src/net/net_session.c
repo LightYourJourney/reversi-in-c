@@ -89,6 +89,27 @@ static void on_status(void *context, NetClientStatus status,
     }
 }
 
+/* Records the server's accepted move for a later Lab review. A repeated
+ * snapshot (rejoin) must not duplicate, and a gap makes the log unusable. */
+static void record_move(NetSession *session, const NetMessage *message)
+{
+    if (message->seq == 0) {
+        session->moves_count = 0;
+        session->moves_complete = true;
+        return;
+    }
+    if (message->seq == session->moves_count + 1 && message->has_last
+        && session->moves_count
+               < (int)(sizeof(session->moves) / sizeof(session->moves[0]))) {
+        session->moves[session->moves_count++] = message->last;
+        return;
+    }
+    if (message->seq == session->moves_count && message->has_last) {
+        return;
+    }
+    session->moves_complete = false;
+}
+
 static void apply_state(NetSession *session, const NetMessage *message)
 {
     GameState state;
@@ -96,6 +117,7 @@ static void apply_state(NetSession *session, const NetMessage *message)
                                        message->result, &state)) {
         return;
     }
+    record_move(session, message);
     session->game = state;
     session->seq = message->seq;
     session->has_last = message->has_last;
@@ -125,6 +147,10 @@ static void on_message(void *context, const NetMessage *message)
         break;
     case NET_MSG_ROOM:
         session->error[0] = '\0';
+        if (strcmp(session->code, message->code) != 0) {
+            session->moves_count = 0;
+            session->moves_complete = true;
+        }
         snprintf(session->code, sizeof(session->code), "%s", message->code);
         session->color = message->color;
         session->player = message->player;
@@ -225,6 +251,8 @@ bool net_session_connect(NetSession *session, const char *host, int port)
     session->token[0] = '\0';
     session->rejoin_pending = false;
     session->reconnect_attempts = 0;
+    session->moves_count = 0;
+    session->moves_complete = true;
     return net_client_connect(session->client, host, port);
 }
 
@@ -335,6 +363,8 @@ void net_session_leave(NetSession *session)
     session->active = false;
     session->code[0] = '\0';
     session->token[0] = '\0';
+    session->moves_count = 0;
+    session->moves_complete = true;
     session->phase = session->phase == NET_SESSION_FAILED
         ? NET_SESSION_FAILED : NET_SESSION_LOBBY;
 }

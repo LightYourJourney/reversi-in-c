@@ -101,6 +101,7 @@ typedef struct App {
     bool net_move_pending;
     UiButton net_resign;
     UiButton net_leave;
+    UiButton net_review;
     SaveSlotInfo save_slots[REVERSI_SAVES_ROW_COUNT];
     bool saves_saving;
     AppScreen saves_return;
@@ -168,8 +169,35 @@ static void app_maybe_record_result(App *app);
 static void app_play_result_sound(const App *app);
 static void app_handle_net_action(App *app, NetViewAction action);
 static bool app_build_net_match(App *app);
+/* Replays the server's accepted moves into a fresh Lab session. Only offered
+ * when every state arrived in order, so the move list is the real game. */
+static void app_review_online(App *app)
+{
+    NetSession *net = app->net;
+    if (net == NULL || net->moves_count <= 0 || !net->moves_complete) {
+        return;
+    }
+    AnalysisSession session;
+    analysis_init(&session);
+    for (int i = 0; i < net->moves_count; ++i) {
+        if (!analysis_play_move(&session, net->moves[i])) {
+            app_notice(app, "Could not replay the online game");
+            return;
+        }
+    }
+    net_session_leave(net);
+    app->net_mode = false;
+    if (!lab_view_enter_session(&app->lab, &session)) {
+        app_notice(app, "Could not open the analysis lab");
+        app_request_screen(app, APP_SCREEN_NET);
+        return;
+    }
+    app_request_screen(app, APP_SCREEN_LAB);
+}
+
 static void app_update_net_game(App *app, const UiInput *input, float dt);
 static void app_draw_net_hud(const App *app);
+static void app_review_online(App *app);
 
 static UiInput read_input(void)
 {
@@ -337,6 +365,7 @@ static void app_init(App *app)
     app->net_move_pending = false;
     ui_button_init(&app->net_resign, "Resign", false);
     ui_button_init(&app->net_leave, "Leave", false);
+    ui_button_init(&app->net_review, "Review", false);
     modal_init(&app->modal);
     ui_animation_reset(&app->animation);
 
@@ -1190,8 +1219,12 @@ static void app_update_net_game(App *app, const UiInput *input, float dt)
                          (Rectangle){width - 210.0f, 12.0f, 90.0f, 30.0f});
     ui_button_set_bounds(&app->net_leave,
                          (Rectangle){width - 110.0f, 12.0f, 90.0f, 30.0f});
+    ui_button_set_bounds(&app->net_review,
+                         (Rectangle){width - 310.0f, 12.0f, 90.0f, 30.0f});
     app->net_resign.enabled = net->phase == NET_SESSION_PLAYING;
     app->net_leave.enabled = true;
+    app->net_review.enabled = net->phase == NET_SESSION_FINISHED
+        && net->moves_complete && net->moves_count > 0;
     if (ui_button_update(&app->net_resign, input, true, dt)) {
         (void)net_session_resign(net);
     }
@@ -1199,6 +1232,10 @@ static void app_update_net_game(App *app, const UiInput *input, float dt)
         net_session_leave(net);
         app->net_mode = false;
         app_request_screen(app, APP_SCREEN_NET);
+        return;
+    }
+    if (ui_button_update(&app->net_review, input, true, dt)) {
+        app_review_online(app);
         return;
     }
     if (input->escape_pressed) {
@@ -1286,6 +1323,7 @@ static void app_draw_net_hud(const App *app)
     }
     ui_button_draw(&app->net_resign, &app->fonts, false);
     ui_button_draw(&app->net_leave, &app->fonts, false);
+    ui_button_draw(&app->net_review, &app->fonts, false);
 }
 
 static void app_update_game(App *app, const UiInput *input, float dt)

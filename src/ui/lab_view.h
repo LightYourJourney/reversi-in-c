@@ -113,6 +113,12 @@ void lab_view_init(LabView *view);
  */
 void lab_view_enter(LabView *view, const Match *match, bool has_match);
 
+/*
+ * Starts from an already-built session (e.g. a replayed online game). The
+ * session is copied; the caller keeps ownership of its own copy.
+ */
+bool lab_view_enter_session(LabView *view, const AnalysisSession *session);
+
 /* Cancels any running analysis and joins the worker. */
 void lab_view_leave(LabView *view, AiWorker *worker);
 

@@ -1,6 +1,7 @@
 #ifndef REVERSI_NET_NET_SESSION_H
 #define REVERSI_NET_NET_SESSION_H
 
+#include "core/history.h"
 #include "net/net_client.h"
 
 #include <stdbool.h>
@@ -34,6 +35,11 @@ typedef struct NetSession {
     bool ready;
     GameState game;
     int seq;
+    /* Moves the server accepted, in order, for a post-game review. The log is
+     * only complete when every state arrived in sequence. */
+    Move moves[REVERSI_HISTORY_MAX_MOVES];
+    int moves_count;
+    bool moves_complete;
     bool has_last;
     Move last;
     bool pass;

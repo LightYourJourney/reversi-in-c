@@ -487,19 +487,8 @@ void lab_view_init(LabView *view)
     }
 }
 
-void lab_view_enter(LabView *view, const Match *match, bool has_match)
+static void lab_reset_analysis_state(LabView *view)
 {
-    if (view == NULL) {
-        return;
-    }
-    analysis_init(&view->session);
-    view->has_match = has_match;
-    if (has_match && match != NULL && match->history.count > 1) {
-        if (!analysis_import_history(&view->session, &match->history)) {
-            analysis_init(&view->session);
-        }
-    }
-
     memset(view->score_valid, 0, sizeof(view->score_valid));
     memset(view->score_values, 0, sizeof(view->score_values));
     memset(view->marks, 0, sizeof(view->marks));
@@ -521,6 +510,32 @@ void lab_view_enter(LabView *view, const Match *match, bool has_match)
     ++view->position_generation;
     view->notice[0] = '\0';
     view->notice_timer = 0.0f;
+}
+
+void lab_view_enter(LabView *view, const Match *match, bool has_match)
+{
+    if (view == NULL) {
+        return;
+    }
+    analysis_init(&view->session);
+    view->has_match = has_match;
+    if (has_match && match != NULL && match->history.count > 1) {
+        if (!analysis_import_history(&view->session, &match->history)) {
+            analysis_init(&view->session);
+        }
+    }
+    lab_reset_analysis_state(view);
+}
+
+bool lab_view_enter_session(LabView *view, const AnalysisSession *session)
+{
+    if (view == NULL || session == NULL) {
+        return false;
+    }
+    view->session = *session;
+    view->has_match = false;
+    lab_reset_analysis_state(view);
+    return true;
 }
 
 void lab_view_leave(LabView *view, AiWorker *worker)
