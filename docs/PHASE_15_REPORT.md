@@ -90,7 +90,7 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | `cmake --build build && ctest --test-dir build` | PASS 26/26（34.8 s） |
 | `ctest --test-dir build-release` | PASS 26/26（29.0 s） |
 | `ctest --test-dir build-sanitize -E "app.*"`（ASan+UBSan） | PASS 26/26，无报告（49.5 s） |
-| `ctest --test-dir build-gui` | **NOT TESTED**：本会话无窗口服务器（`GLFW: Failed to get primary monitor`） |
+| `ctest --test-dir build-gui` | 本机 **NOT TESTED**（无窗口服务器：`GLFW: Failed to get primary monitor`）；CI Linux Xvfb GUI 4/4 **PASS**（`40818759364`） |
 | TSan `net.session` / `net.client`（Homebrew clang 23） | PASS 71 / 32 断言，无竞争报告 |
 | `net.server` | PASS 5,757 断言（13.1 s，含延迟代理与 8 局 soak） |
 | 浏览器 Chrome 155 | PASS 房间 `38RSUR`；生产式代理下 `9J25DT` |
@@ -101,8 +101,8 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | Emscripten `scripts/build-web.sh` | PASS（wasm 395,038 B） |
 | 本地 TLS/HSTS/限速/关闭 | PASS，见 `PRODUCTION_DEPLOYMENT.md` §7 |
 | 10 分钟 ASan soak `REVERSI_SOAK_MS=600000` | PASS：`PASS net.server (865909 checks)`，退出码 0，无 ASan 报告 |
-| 安装包 `scripts/package.sh` | **NOT TESTED**（本阶段未重建归档） |
-| CI（本阶段提交） | **FAIL → 已修待复跑**：运行 `40816665469`（`4f853ff`）中 Linux/macOS Debug、ASan+UBSan、Linux Xvfb GUI 均 PASS；Windows Debug 在 `net.server` 的 503 断言失败（1/5743）。根因（Windows 关闭带未读数据 → RST；测试分段读取覆盖缓冲）已在 `2ba11ab` 修复，待推送复跑 |
+| 安装包 | CI 三平台打包 PASS（`40818759364`）；Linux 包在 Xvfb 下验收 PASS；Windows 包 `--version` PASS；macOS 包已生成、未实际启动 |
+| CI（本阶段提交） | **PASS 9/9**：运行 `40818759364`（`21c8d20`）Linux/Windows/macOS Debug、Linux ASan+UBSan、Linux Xvfb GUI、三平台打包与 Linux 包验收全部 success。此前 `4f853ff` 的运行 `40816665469` 仅 Windows Debug 失败（503 断言），修复见 `2ba11ab` |
 
 断言数（本机 Debug）：`net.protocol` 33、`net.ws` 20,026、`net.server`
 5,757、`net.client` 32、`net.session` 71、`analysis.session` 112、
@@ -139,15 +139,18 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
 
 ## 6. 未验证项目（不得改写为 PASS）
 
-1. 桌面 GUI（`app.smoke/app.net/app.lab/app.autoplay`）本机无显示器，
-   **NOT TESTED**；CI 的 Xvfb 作业未运行（提交未推送）。
+1. 桌面 GUI：本机无显示器 **NOT TESTED**；CI 的 Linux Xvfb 作业
+   `app.smoke/app.net/app.lab/app.autoplay` **PASS**。macOS/Windows 的
+   物理桌面 GUI 未验证。
 2. 桌面↔Web 联机本阶段未复验（Phase 14 曾 PASS `HVVFKP`）。
 3. Safari、iOS Safari、Android Chrome：**NOT TESTED**。字体渲染与音效
    **NOT TESTED**（浏览器 smoke 只证明无控制台错误；桌面字体/音效为
    Phase 14 GUI 证据，本阶段无显示器未复验）。
 4. 真实公网：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域延迟
    与丢包：**NOT TESTED**。
-5. Windows/Linux 物理桌面与 2.0.0 安装包验收：**NOT TESTED**（待 CI）。
+5. Windows/Linux 物理桌面：**NOT TESTED**（CI 为托管 VM）。2.0.0
+   安装包由 CI 生成并校验：Linux 在 Xvfb 下执行 `verify-package.sh` PASS，
+   Windows `--version` PASS，macOS 包未启动。
 6. 桌面端“服务器不读数据”的发送超时：实现有界写，但无自动化用例。
 7. 服务端发送队列（16 KB）饱和：只有代码审查。
 8. 代理层 `limit_conn` 并发行为：配置与语法通过，未压测。
@@ -190,19 +193,18 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
 - **Public Beta：PARTIAL（有条件可以）** —— 仅限“源码 + 自托管”，
   发布说明必须写明：未做公网安全评估、真实网络与 Safari/iOS/Android
   未验证。核心在线对战、三引擎浏览器、TLS 代理与优雅关闭均有本地证据。
-- **正式 Release：FAIL（暂不具备）** —— 阻碍：本阶段 CI 未运行、本机
-  桌面 GUI 与桌面↔Web 未复验、Safari/移动端未验证、可信证书与公网未测、
-  2.0.0 安装包未重建。详见 `RELEASE_READINESS.md` §6。
+- **正式 Release：FAIL（接近但暂不具备）** —— CI 9/9 与安装包已绿，
+  剩余阻碍：客户端改动后的桌面↔Web 未复验、Safari/iOS/Android 未验证、
+  可信证书与真实公网未测。详见 `RELEASE_READINESS.md` §6。
 
 ## 10. 下阶段建议
 
-1. 推送本阶段提交，等待三平台 CI（Debug/ASan/Xvfb GUI/打包）全绿。
-2. 在有显示器的桌面会话复跑 Phase 14 的桌面↔Web 流程（`HVVFKP` 类），
-   并补一条桌面端“服务器不读”的自动化用例。
-3. 用真实域名与 Let's Encrypt 做一次隔离环境部署，验证证书链、HSTS
+1. 在有显示器的桌面会话复跑桌面↔Web 流程（`HVVFKP` 类），并补一条
+   桌面端“服务器不读”的自动化用例。
+2. 用真实域名与 Let's Encrypt 做一次隔离环境部署，验证证书链、HSTS
    与代理超时；之后才考虑 Public Beta 的公开链接。
-4. 补 Safari（`safaridriver`）与 Android Chrome（真机/模拟器）验证。
-5. 需要公网级 DoS 防护时，评估边缘限流/IP 信誉或 WAF；应用层队列饱和
+3. 补 Safari（`safaridriver`）与 Android Chrome（真机/模拟器）验证。
+4. 需要公网级 DoS 防护时，评估边缘限流/IP 信誉或 WAF；应用层队列饱和
    仍建议保留“关闭连接 + 座位保留”的策略。
 
 ## 11. 回滚

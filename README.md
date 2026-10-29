@@ -48,9 +48,9 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口，Phase 15 复跑）；GUI 30/30 为 Phase 14 证据，Phase 15 本机会话无显示器（NOT TESTED） | 实际窗口与鼠标点击流程已验证（Phase 14）；无 Developer ID/公证 |
-| Windows x64 | GitHub Actions 托管 VM（2.0.0 最后一次已推送提交）：Debug 26/26（运行 `40706466157`），发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED；Phase 15 提交待推送后验证 |
-| Linux x86_64 | GitHub Actions 托管 VM：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收（同上） | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
+| macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口，Phase 15 复跑）；CI macOS Debug 26/26（`40818759364`）；本机 GUI Phase 15 无显示器（NOT TESTED，Phase 14 为 30/30） | 实际窗口与鼠标点击流程已验证（Phase 14）；无 Developer ID/公证 |
+| Windows x64 | GitHub Actions 托管 VM（`40818759364`）：Debug 26/26，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
+| Linux x86_64 | GitHub Actions 托管 VM（`40818759364`）：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 | Web（Chrome） | Emscripten 6.0.13；本地 HTTPS/WSS 双客户端整局（Phase 15：`38RSUR`、经生产式代理 `9J25DT`） | Chrome 桌面与移动模拟已验证 |
 | Web（Firefox / WebKit） | Playwright Firefox 157（`45H8XY`）、Playwright WebKit 27.2（`V3U9MB`）各完成一局 | WebKit 构建不等于 Safari；Safari/iOS/Android NOT TESTED |
 
@@ -523,7 +523,7 @@ ctest --test-dir build --output-on-failure
 | TSan | `net.session` 57、`net.client` 32 断言，无竞争报告（Phase 15） |
 | 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；Safari/iOS/Android **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 395,038 B，Worker 58.7 KB） |
-| GitHub Actions | HEAD（Phase 15 之前）`40707272332` 9/9 通过；Phase 15 提交未推送、CI 未运行 |
+| GitHub Actions | `40818759364`（Phase 15，`21c8d20`）9/9 通过；首跑 `40816665469` 仅 Windows 失败（已在 `2ba11ab` 修复） |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、

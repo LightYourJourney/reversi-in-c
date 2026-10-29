@@ -67,8 +67,14 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - Phase 15（2026-10-29）：Debug 26/26、Release 26/26、ASan+UBSan 无窗口
   26/26；TSan `net.session`/`net.client` 无竞争；`net.server` 5,757 断言
   （含 20 ms 延迟代理与 8 局连续 soak）；`REVERSI_SOAK_MS=600000` 的
-  10 分钟 ASan soak 结果见 `PHASE_15_REPORT.md`。GUI 30/30 在本次会话
-  **NOT TESTED**（无窗口服务器：`Failed to get primary monitor`）。
+  10 分钟 ASan soak 见 `PHASE_15_REPORT.md`。本机 GUI **NOT TESTED**
+  （无窗口服务器：`Failed to get primary monitor`）。
+- GitHub Actions 运行 `40818759364`（2026-10-29，`21c8d20`）**9/9
+  success**：Linux/Windows/macOS Debug 各 26/26、Linux ASan+UBSan
+  26/26、Linux Xvfb GUI 4/4、三平台打包与 Linux 包验收。首跑
+  `40816665469`（`4f853ff`）仅 Windows Debug 失败——新增的 503 断言在
+  Windows 上因“关闭带未读数据的 socket 触发 RST”与测试分段读取覆盖缓冲
+  而失败；修复为 `2ba11ab`（拒绝路径先非阻塞排空再写 503；测试累积读取）。
 - Debug：26/26 无窗口测试通过（v2.0.0）。
 - Debug + GUI：v2.0.0 本机 30/30，包含 `app.lab` 与 `app.net`（大厅 20 帧渲染），
   `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程

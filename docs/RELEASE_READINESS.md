@@ -12,8 +12,8 @@
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
-| 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、三引擎浏览器、TLS/代理配置与优雅关闭本地验证通过；公网证书与真实网络未测 |
-| 是否具备正式 Release 条件 | **FAIL（暂不具备）** | 见 §6 阻碍清单：本阶段提交尚未跑 CI、桌面 GUI 与桌面↔Web 本阶段未复验、Safari/iOS/Android 与实际公网未验证 |
+| 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、三引擎浏览器、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
+| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：桌面↔Web 未复验、物理桌面 GUI 与 Safari/iOS/Android 未验证、可信证书与公网未测 |
 
 “可以进入 Public Beta”的含义是：源可用、可由用户自行 `ws://127.0.0.1`
 或本地 TLS 代理运行；**不得**宣称“公网/生产就绪”。正式发布前必须补齐
@@ -80,10 +80,10 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 | 项 | 结果 | 证据 |
 |---|---|---|
-| Debug 无窗口 | PASS 26/26 | `ctest --test-dir build` |
+| Debug 无窗口 | PASS 26/26 | 本机 `ctest`；CI `40818759364` Linux/Windows/macOS 各 26/26 |
 | Release 无窗口 | PASS 26/26 | `ctest --test-dir build-release` |
 | ASan+UBSan 无窗口 | PASS 26/26（无报告） | `ctest --test-dir build-sanitize -E "app.*"` |
-| Debug GUI（本机） | NOT TESTED | 当前会话无窗口服务器：`Failed to get primary monitor`；CI 的 Xvfb 作业待推送后验证 |
+| Debug GUI | PARTIAL | 本机无显示器（NOT TESTED）；CI Linux Xvfb 4/4 PASS（`40818759364`）；macOS/Windows 物理桌面未验证 |
 | TSan `net.session` / `net.client` | PASS | Homebrew clang 23，无竞争报告 |
 | 网络边界 | PASS | `net.server` 5,757 断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局 |
 | 客户端队列溢出 | PASS | `net.client` 32 断言（`queue_overflow`） |
@@ -103,8 +103,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | 代理层限速 | PASS（本地） | 20 次连续升级：前 11 次转发（上游 502），之后 503 |
 | 代理层连接上限 | NOT TESTED | `limit_conn` 已配置、语法通过，未压测 |
 | 10 分钟 ASan soak | PASS | `PASS net.server (865909 checks)`，退出码 0，无报告 |
-| 安装包验收 | NOT TESTED（本阶段） | 未重建 CPack 归档；CI 打包作业待推送后运行 |
-| CI（本阶段提交） | FAIL（Windows）→ 已修待复跑 | `40816665469`：Linux/macOS/ASan/Xvfb PASS；Windows `net.server` 503 断言失败，修复 `2ba11ab` 待推 |
+| 安装包验收 | PASS（CI） | 三平台归档 + SHA256；Linux 包 Xvfb 验收、Windows `--version`；macOS 包未启动 |
+| CI（本阶段提交） | PASS 9/9 | `40818759364`（`21c8d20`）：三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
 断言数（本机 Debug，全部无窗口测试合计 **1,210,317**）：
@@ -112,27 +112,26 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 `net.session` 71、`analysis.session` 112、`storage.save` 102、
 `storage.settings` 68；其余见 `TESTING.md` §2。
 
-## 6. 发布阻碍（正式 Release 前必须关闭）
+## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **CI 的 Windows 作业未绿**：`40816665469` 仅 Windows Debug 失败（503
-   断言），根因修正为 `2ba11ab`；推送复跑并确认打包作业后关闭。
-2. **桌面 GUI 未在本机复验**（无窗口服务器）；`app.smoke/app.net/
-   app.lab/app.autoplay` 本阶段无本机 PASS。
-3. **桌面↔Web 联机本阶段未复验**（Phase 14 的证据仍在，但 2.0.0 的
-   客户端写入路径已改，需要重跑）。
-4. **Safari、iOS Safari、Android Chrome** 未验证；Firefox/WebKit 通过，
+1. **桌面↔Web 联机本阶段未复验**：Phase 14 的证据仍在（`HVVFKP`），但
+   2.0.0 的客户端写入路径与重连顺序已改，需要一次桌面 + 浏览器的完整
+   复验。
+2. **物理桌面 GUI 未验证**：CI 的 Linux Xvfb 4/4 通过，但 macOS/Windows
+   的真实窗口、HiDPI、字体与音频听感未复验（Phase 14 有 macOS 证据）。
+3. **Safari、iOS Safari、Android Chrome** 未验证；Firefox/WebKit 通过，
    但 WebKit 构建不等于 Safari。
-5. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
-   延迟与丢包均未测。
-6. **安装包**：未重新生成并校验 2.0.0 归档。
-7. **桌面端发送超时路径**只有代码审查与有界写实现，没有可复现的
+4. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
+   延迟与丢包均未测（本地自签与隔离代理已验证，不构成生产 PASS）。
+5. **桌面端发送超时路径**只有代码审查与有界写实现，没有可复现的
    “服务器不读”自动化用例（Web 端有自动化）。
-8. **服务端发送队列饱和**（16 KB）仍只有代码审查；集成测试无法在
+6. **服务端发送队列饱和**（16 KB）仍只有代码审查；集成测试无法在
    合理时间内填满内核发送缓冲。
 
 ## 7. 建议
 
 - 若以 **Public Beta** 名义发布：只发布源码 + 强调自托管与“未做公网
-  安全评估”；在 Release Notes 中列出 §6 的 4–5 项。
-- 正式 v2.0.0：先推送并跑 CI（至少 1–3 项），补桌面 GUI 与桌面↔Web
-  复验，再决定是否把 Safari/公网项带入后续版本。
+  安全评估”；在 Release Notes 中列出 §6 的第 3–4 项。
+- 正式 v2.0.0：补 §6 第 1–2 项（桌面↔Web 与物理桌面）复验；第 3–4 项
+  可作为已知限制在发布说明中明确披露，由发布者决定是否接受。CI、打包、
+  ASan/UBSan 与 Linux GUI 已是绿灯。
