@@ -278,7 +278,8 @@ static bool connection_queue(NetServer *server, int index,
                              const uint8_t *data, size_t length)
 {
     ServerConnection *connection = &server->connections[index];
-    if (connection->output_length + length > REVERSI_NET_SERVER_SEND_CAP) {
+    if (connection->output_length + length
+        > (size_t)server->config.send_queue_bytes) {
         return false;
     }
     memcpy(connection->output + connection->output_length, data, length);
@@ -842,7 +843,15 @@ static void handle_leave(NetServer *server, int connection)
         return;
     }
     const int room_index = conn->room;
-    const int seat = conn->seat;
+    const int seat = room_seat_for_connection(&server->rooms[room_index],
+                                              connection);
+    if (seat < 0) {
+        /* Defensive: a connection is only in a room while it holds a seat. */
+        conn->room = -1;
+        conn->seat = -1;
+        send_error(server, connection, "not_in_room");
+        return;
+    }
     detach_player(server, room_index, seat, "left", true);
     conn->room = -1;
     conn->seat = -1;
@@ -936,6 +945,8 @@ static void process_frames(NetServer *server, int index)
             --connection->tokens;
             char text[REVERSI_NET_MAX_MESSAGE + 1];
             if (frame.length > REVERSI_NET_MAX_MESSAGE) {
+                /* Unreachable while the WebSocket payload cap equals the
+                 * protocol cap; kept in case they diverge. */
                 send_error(server, index, "message_too_large");
             } else {
                 memcpy(text, frame.payload, frame.length);
@@ -1099,6 +1110,11 @@ static void accept_connections(NetServer *server)
             socket_close(socket);
             continue;
         }
+        if (server->config.send_buffer_bytes > 0) {
+            const int size = server->config.send_buffer_bytes;
+            setsockopt(socket, SOL_SOCKET, SO_SNDBUF,
+                       (const char *)&size, sizeof(size));
+        }
         ServerConnection *connection = &server->connections[index];
         memset(connection, 0, sizeof(*connection));
         connection->state = CONNECTION_HANDSHAKE;
@@ -1150,6 +1166,10 @@ NetServer *net_server_create(const NetServerConfig *config)
     }
     if (server->config.room_done_ms <= 0) {
         server->config.room_done_ms = REVERSI_NET_SERVER_ROOM_DONE_MS;
+    }
+    if (server->config.send_queue_bytes <= 0
+        || server->config.send_queue_bytes > REVERSI_NET_SERVER_SEND_CAP) {
+        server->config.send_queue_bytes = REVERSI_NET_SERVER_SEND_CAP;
     }
     server->listener = NET_INVALID;
     server->port = 0;

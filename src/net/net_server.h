@@ -16,6 +16,11 @@ typedef struct NetServerConfig {
     int idle_timeout_ms;
     int room_wait_ms;
     int room_done_ms;
+    /* Per-connection outbound queue cap (0 = 16 KiB, clamped to the built-in
+     * buffer) and SO_SNDBUF for accepted sockets (0 = OS default). Both are
+     * deployment/test knobs; the defaults are the production values. */
+    int send_queue_bytes;
+    int send_buffer_bytes;
     bool quiet;
 } NetServerConfig;
 

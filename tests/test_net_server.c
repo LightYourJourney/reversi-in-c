@@ -118,12 +118,17 @@ static void test_close_socket(TestSocket socket_fd)
 #endif
 }
 
-static bool test_connect(NetServer *server, TestClient *client, int port)
+static bool test_connect_buffer(NetServer *server, TestClient *client,
+                                int port, int receive_buffer)
 {
     memset(client, 0, sizeof(*client));
     client->socket = socket(AF_INET, SOCK_STREAM, 0);
     if (client->socket == TEST_INVALID) {
         return false;
+    }
+    if (receive_buffer > 0) {
+        setsockopt(client->socket, SOL_SOCKET, SO_RCVBUF,
+                   (const char *)&receive_buffer, sizeof(receive_buffer));
     }
     struct sockaddr_in address;
     memset(&address, 0, sizeof(address));
@@ -179,6 +184,11 @@ static bool test_connect(NetServer *server, TestClient *client, int port)
     }
     net_ws_parser_init(&client->parser);
     return true;
+}
+
+static bool test_connect(NetServer *server, TestClient *client, int port)
+{
+    return test_connect_buffer(server, client, port, 0);
 }
 
 static bool test_send(TestClient *client, const NetMessage *message)
@@ -1961,6 +1971,122 @@ static void test_soak_games(TestStats *stats)
     net_server_destroy(server);
 }
 
+
+#if !defined(__APPLE__)
+/* Pump the fast client's socket, recording whether it saw the opponent
+ * disconnect and the last state sequence. */
+static bool pump_opponent_notice(NetServer *server, TestClient *client,
+                                 int timeout_ms, bool *notice, int *last_seq)
+{
+    for (int elapsed = 0; elapsed < timeout_ms && !*notice; elapsed += 2) {
+        net_server_poll(server, 1);
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(client->socket, &read_set);
+        struct timeval timeout = {.tv_sec = 0, .tv_usec = 0};
+        if (select((int)client->socket + 1, &read_set, NULL, NULL,
+                   &timeout) > 0) {
+            test_read_available(client);
+        }
+        NetMessage message;
+        while (parse_queued(client, &message)) {
+            if (message.type == NET_MSG_OPPONENT
+                && strcmp(message.status, "disconnected") == 0) {
+                *notice = true;
+            } else if (message.type == NET_MSG_STATE) {
+                *last_seq = message.seq;
+            }
+        }
+        test_sleep_ms(1);
+    }
+    return *notice;
+}
+
+/* A client that stops reading must be closed once the outbound queue is
+ * full, without disturbing the other player. The socket buffers are shrunk
+ * through NetServerConfig so the test reaches 16 KiB-equivalent pressure in
+ * a few moves.
+ *
+ * macOS auto-tunes the receive window regardless of SO_RCVBUF (measured:
+ * a 1 KiB request still absorbed >20 KiB), so the queue cannot be filled
+ * there. Linux and Windows honour the buffers; those builds run the test. */
+static void test_send_queue_saturation(TestStats *stats)
+{
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .move_timeout_ms = 30000,
+                              .reconnect_timeout_ms = 3000,
+                              .send_queue_bytes = 1024,
+                              .send_buffer_bytes = 1024, .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+
+    TestClient b;
+    TestClient slow;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &b, port));
+    NetMessage message;
+    test_send(&b, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&b, &(NetMessage){.type = NET_MSG_CREATE, .color = STONE_BLACK});
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_ROOM,
+                                             &message, 2000));
+    NetMessage join = {.type = NET_MSG_JOIN, .color = STONE_WHITE};
+    snprintf(join.code, sizeof(join.code), "%s", message.code);
+
+    /* The slow client advertises a 1 KiB receive window and then stops
+     * reading after learning its seat. */
+    REVERSI_TEST_ASSERT(stats, test_connect_buffer(server, &slow, port, 1024));
+    /* The slow client never reads after the handshake: its receive window
+     * stays small and the server's outbound queue must fill. */
+    test_send(&slow, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&slow, &join);
+    test_send(&b, &(NetMessage){.type = NET_MSG_READY});
+    test_send(&slow, &(NetMessage){.type = NET_MSG_READY});
+    bool notice = false;
+    int last_seq = 0;
+    pump_opponent_notice(server, &b, 300, &notice, &last_seq);
+
+    GameState local;
+    game_init(&local);
+    int seq = 0;
+    for (int ply = 0; ply < 60 && !notice; ++ply) {
+        TestClient *mover = local.current_player == STONE_BLACK ? &b : &slow;
+        Move moves[REVERSI_BOARD_CELL_COUNT];
+        const int count = rules_generate_legal_moves(
+            &local.board, local.current_player, moves,
+            REVERSI_BOARD_CELL_COUNT);
+        if (count <= 0) {
+            break;
+        }
+        const NetMessage move = {.type = NET_MSG_MOVE, .seq = seq,
+                                 .last = moves[0], .has_last = true};
+        if (!test_send(mover, &move)) {
+            break;
+        }
+        GameState next = local;
+        if (!game_apply_move(&next, moves[0])) {
+            break;
+        }
+        local = next;
+        ++seq;
+        pump_opponent_notice(server, &b, 100, &notice, &last_seq);
+        if (local.result != GAME_RESULT_ONGOING) {
+            break;
+        }
+    }
+    REVERSI_TEST_ASSERT(stats, notice);
+    REVERSI_TEST_ASSERT(stats, last_seq >= 1);
+
+    /* The remaining player is still served. */
+    test_send(&b, &(NetMessage){.type = NET_MSG_PING});
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &b, NET_MSG_PONG,
+                                             &message, 2000));
+    test_close(&b);
+    test_close(&slow);
+    net_server_destroy(server);
+}
+#endif
+
 int main(void)
 {
 #if !defined(_WIN32)
@@ -1989,6 +2115,9 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_connection_cap);
     REVERSI_RUN_TEST(&stats, test_room_cap);
     REVERSI_RUN_TEST(&stats, test_server_shutdown);
+#if !defined(__APPLE__)
+    REVERSI_RUN_TEST(&stats, test_send_queue_saturation);
+#endif
     REVERSI_RUN_TEST(&stats, test_latency_game);
     REVERSI_RUN_TEST(&stats, test_soak_games);
 #if !defined(_WIN32)
