@@ -268,7 +268,11 @@ static void test_send_to_stalled_server(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, bind(listener, (struct sockaddr *)&address,
                                     sizeof(address)) == 0);
     REVERSI_TEST_ASSERT(stats, listen(listener, 1) == 0);
+#if defined(_WIN32)
+    int address_length = (int)sizeof(address);
+#else
     socklen_t address_length = sizeof(address);
+#endif
     REVERSI_TEST_ASSERT(stats,
         getsockname(listener, (struct sockaddr *)&address,
                     &address_length) == 0);
