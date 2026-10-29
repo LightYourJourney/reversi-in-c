@@ -50,7 +50,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.protocol | reversi_net_protocol_tests | 33 | 协议字段/版本/方向/棋盘/错误/终局快照 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
 | net.server | reversi_net_server_tests | 5,757 | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊、Hello 顺序、握手/空闲/房间 TTL、加入失败限速、连接/房间上限、等待房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、8 局连续 soak | PASS |
-| net.client | reversi_net_client_tests | 32 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出报错 | PASS |
+| net.client | reversi_net_client_tests | 49 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出报错、服务器不读时的有界写超时 | PASS |
 | net.session | reversi_net_session_tests | 71 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、重连预算耗尽 FAILED | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
@@ -67,8 +67,8 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - Phase 15（2026-10-29）：Debug 26/26、Release 26/26、ASan+UBSan 无窗口
   26/26；TSan `net.session`/`net.client` 无竞争；`net.server` 5,757 断言
   （含 20 ms 延迟代理与 8 局连续 soak）；`REVERSI_SOAK_MS=600000` 的
-  10 分钟 ASan soak 见 `PHASE_15_REPORT.md`。本机 GUI **NOT TESTED**
-  （无窗口服务器：`Failed to get primary monitor`）。
+  10 分钟 ASan soak 见 `PHASE_15_REPORT.md`。本机 GUI **30/30 PASS**
+  （2026-10-29 GUI 会话；含 `app.smoke/app.net/app.lab/app.autoplay`）。
 - GitHub Actions 运行 `40818759364`（2026-10-29，`21c8d20`）**9/9
   success**：Linux/Windows/macOS Debug 各 26/26、Linux ASan+UBSan
   26/26、Linux Xvfb GUI 4/4、三平台打包与 Linux 包验收。首跑
@@ -382,6 +382,8 @@ REVERSI_WEB_DEBUG_URL=http://127.0.0.1:8081 \
 | 完整对局连续运行 | 8 局连续（默认）与 `REVERSI_SOAK_MS` 长时 | PASS / 见报告 |
 | 服务端长时间稳定性 | 10 分钟 ASan soak：`PASS net.server (865909 checks)`，约 1,750 局，退出码 0 | PASS |
 | 浏览器渲染/触摸/存档 | `tests/web/run-tests.js`（Chrome）：9/9 | PASS |
+| 桌面↔Web 联机 | 本机 GUI 会话 + Playwright：房间 `D7AKVC` | PASS（桌面 d3、浏览器投降、结果保留） |
+| 服务器不读数据（桌面） | 假服务器完成握手后停止读取 | PASS（1 s 有界写失败并断开） |
 | 旧格式 | v1.0.1 存档/设置、v1.4.0 棋谱 fixture | PASS |
 | 连接/房间上限 | 48 连接、32 房间；被拒连接收到 HTTP 503 | PASS |
 | 握手/空闲超时 | 100/300 ms 配置 | PASS |

@@ -72,6 +72,7 @@ CMake 测试块。均为可维护性事项，不改变行为。
 | 连续 8 局完整对局 | 稳定性 | `test_soak_games`（默认 8 局；`REVERSI_SOAK_MS` 长时） |
 | 日志脱敏 | 安全 | `test_logs_redacted`（redirect stderr，断言 token/`token=`/`board=` 不出现；POSIX） |
 | 接收队列溢出（桌面） | 客户端 | `net.client::test_queue_overflow` |
+| 服务器不读数据（桌面） | 客户端 | `net.client::test_send_to_stalled_server`（假服务器完成握手后停止读取，写入必须在 1 s 上限内失败并断开） |
 | 中途服务端重启 → 重连回到大厅 | 会话 | `net.session::test_session_server_restart` |
 | 重连预算耗尽 → FAILED | 会话 | `net.session::test_session_reconnect_budget` |
 | v1.0.1 存档/设置 | 兼容性 | `storage.save::test_v101_fixture`、`storage.settings::test_v101_fixture` |
@@ -90,10 +91,11 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | `cmake --build build && ctest --test-dir build` | PASS 26/26（34.8 s） |
 | `ctest --test-dir build-release` | PASS 26/26（29.0 s） |
 | `ctest --test-dir build-sanitize -E "app.*"`（ASan+UBSan） | PASS 26/26，无报告（49.5 s） |
-| `ctest --test-dir build-gui` | 本机 **NOT TESTED**（无窗口服务器：`GLFW: Failed to get primary monitor`）；CI Linux Xvfb GUI 4/4 **PASS**（`40818759364`） |
+| `ctest --test-dir build-gui` | **PASS 30/30**（本机 GUI 会话，62.9 s）；CI Linux Xvfb GUI 4/4 PASS |
 | TSan `net.session` / `net.client`（Homebrew clang 23） | PASS 71 / 32 断言，无竞争报告 |
 | `net.server` | PASS 5,757 断言（13.1 s，含延迟代理与 8 局 soak） |
 | 浏览器 Chrome 155 | PASS 房间 `38RSUR`；生产式代理下 `9J25DT` |
+| 桌面↔Web（本机 GUI 会话） | PASS：桌面 `ws://127.0.0.1:8080` 黑方建房，Chrome `wss://127.0.0.1:8444` 白方加入；房间 `D7AKVC`，桌面 d3、浏览器 seq 1、浏览器投降、双方 BLACK_WIN；浏览器关闭后桌面显示 `Online room closed … opponent left` 并保留 `Game over: Black wins (resign)` |
 | Web 自动化套件（Chrome） | PASS 9/9：smoke、gameplay、persistence、responsive（5 视口）、difficulties、mobile-touch、pagehide、cancel、autoplay |
 | 浏览器 Firefox 157 | PASS 房间 `45H8XY` |
 | 浏览器 WebKit 27.2 | PASS 房间 `V3U9MB`（引擎代理，不等于 Safari） |
@@ -105,8 +107,8 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | CI（本阶段提交） | **PASS 9/9**：运行 `40818759364`（`21c8d20`）Linux/Windows/macOS Debug、Linux ASan+UBSan、Linux Xvfb GUI、三平台打包与 Linux 包验收全部 success。此前 `4f853ff` 的运行 `40816665469` 仅 Windows Debug 失败（503 断言），修复见 `2ba11ab` |
 
 断言数（本机 Debug）：`net.protocol` 33、`net.ws` 20,026、`net.server`
-5,757、`net.client` 32、`net.session` 71、`analysis.session` 112、
-`storage.save` 102、`storage.settings` 68；全部无窗口测试合计 1,210,317 断言。
+5,757、`net.client` 49、`net.session` 71、`analysis.session` 112、
+`storage.save` 102、`storage.settings` 68；全部无窗口测试合计 1,210,334 断言。
 
 ### 4.1 假阳性检查
 
@@ -139,10 +141,11 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
 
 ## 6. 未验证项目（不得改写为 PASS）
 
-1. 桌面 GUI：本机无显示器 **NOT TESTED**；CI 的 Linux Xvfb 作业
-   `app.smoke/app.net/app.lab/app.autoplay` **PASS**。macOS/Windows 的
-   物理桌面 GUI 未验证。
-2. 桌面↔Web 联机本阶段未复验（Phase 14 曾 PASS `HVVFKP`）。
+1. 桌面 GUI：**macOS 本机 30/30 PASS**（含 `app.smoke/app.net/app.lab/
+   app.autoplay`，2026-10-29 GUI 会话）；CI Linux Xvfb 4/4 PASS。
+   Windows 物理桌面 GUI 未验证。
+2. 桌面↔Web：**PASS**（房间 `D7AKVC`，2026-10-29；Phase 14 的 `HVVFKP`
+   为旧证据）。
 3. Safari、iOS Safari、Android Chrome：**NOT TESTED**。字体渲染与音效
    **NOT TESTED**（浏览器 smoke 只证明无控制台错误；桌面字体/音效为
    Phase 14 GUI 证据，本阶段无显示器未复验）。
@@ -152,7 +155,8 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
    安装包由 CI 生成并校验：Linux 在 Xvfb 下执行 `verify-package.sh` PASS，
    Windows `--version` PASS，macOS 包未启动。
 6. 桌面端“服务器不读数据”的发送超时：实现有界写，但无自动化用例。
-7. 服务端发送队列（16 KB）饱和：只有代码审查。
+7. 服务端发送队列（16 KB）饱和：只有代码审查（应用层队列需要先填满内核
+   发送缓冲，未做自动化）。
 8. 代理层 `limit_conn` 并发行为：配置与语法通过，未压测。
 9. 10 分钟 soak 之外的小时级运行：未做。
 
@@ -193,9 +197,9 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
 - **Public Beta：PARTIAL（有条件可以）** —— 仅限“源码 + 自托管”，
   发布说明必须写明：未做公网安全评估、真实网络与 Safari/iOS/Android
   未验证。核心在线对战、三引擎浏览器、TLS 代理与优雅关闭均有本地证据。
-- **正式 Release：FAIL（接近但暂不具备）** —— CI 9/9 与安装包已绿，
-  剩余阻碍：客户端改动后的桌面↔Web 未复验、Safari/iOS/Android 未验证、
-  可信证书与真实公网未测。详见 `RELEASE_READINESS.md` §6。
+- **正式 Release：FAIL（接近但暂不具备）** —— CI 9/9、安装包、macOS GUI
+  与桌面↔Web 均已绿；剩余阻碍：Safari/iOS/Android 未验证、可信证书与
+  真实公网未测、Windows 物理桌面未验证。详见 `RELEASE_READINESS.md` §6。
 
 ## 10. 下阶段建议
 

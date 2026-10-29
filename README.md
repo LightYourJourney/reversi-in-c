@@ -48,7 +48,7 @@
 
 | 平台 | 构建/测试 | GUI |
 |---|---|---|
-| macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口，Phase 15 复跑）；CI macOS Debug 26/26（`40818759364`）；本机 GUI Phase 15 无显示器（NOT TESTED，Phase 14 为 30/30） | 实际窗口与鼠标点击流程已验证（Phase 14）；无 Developer ID/公证 |
+| macOS 11+ arm64 | 本机 Debug 26/26、Release 26/26、ASan+UBSan 26/26（无窗口，Phase 15 复跑）；CI macOS Debug 26/26（`40818759364`）；本机 GUI 30/30（2026-10-29） | 实际窗口、鼠标点击与桌面↔Web 已验证（Phase 14–15）；无 Developer ID/公证 |
 | Windows x64 | GitHub Actions 托管 VM（`40818759364`）：Debug 26/26，发行包 `--version` 冒烟 | 物理桌面 GUI NOT TESTED |
 | Linux x86_64 | GitHub Actions 托管 VM（`40818759364`）：Debug 26/26、ASan+UBSan 26/26、Xvfb GUI 4/4 与发行包验收 | Xvfb 软件渲染已验证；物理桌面 NOT TESTED |
 | Web（Chrome） | Emscripten 6.0.13；本地 HTTPS/WSS 双客户端整局（Phase 15：`38RSUR`、经生产式代理 `9J25DT`） | Chrome 桌面与移动模拟已验证 |

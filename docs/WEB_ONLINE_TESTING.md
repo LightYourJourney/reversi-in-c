@@ -156,7 +156,7 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
   应用，不会向其他应用输入文本。
 - 浏览器使用 Playwright，连接 WSS 并加入给定房间码。
 
-结果（2026-10-28）：
+结果（2026-10-28，Phase 14）：
 
 | 项 | 结果 |
 |---|---|
@@ -168,8 +168,20 @@ viewport 1100×800），每个上下文一个页面；同一上下文开两个�
 | 浏览器投降 | 浏览器 `BLACK_WIN`、FINISHED；桌面 HUD `Game over: Black wins (resign)` |
 | 浏览器立即关闭 | 桌面仍保留 GAME/FINISHED 与 `Black wins (resign)`；HUD 为 `Online room closed … opponent left` |
 
-桌面↔Web 验证是手工/主机脚本流程，未纳入仓库脚本与 CI；坐标与焦点处理
-依赖 macOS 窗口管理。
+Phase 15 复验（2026-10-29）：桌面 `build-gui/bin/Reversi.app`（当前源码）
+经 `ws://127.0.0.1:8080` 建房（黑，host），Playwright Chrome 经
+`wss://127.0.0.1:8444` 加入（白）。房间 `D7AKVC`：
+
+| 步骤 | 证据 |
+|---|---|
+| 双方就座并 Ready | 服务端日志 `room D7AKVC created/joined/started`；双方 GAME/PLAYING |
+| 桌面 d3 | 浏览器 `seq 1`；桌面 `Last move d3`、4:1 |
+| 浏览器投降 | 浏览器 `{phase:5, over:true, result:1}`；桌面 `Game over: Black wins (resign)` |
+| 浏览器关闭 | 桌面 HUD `Online room closed … opponent left`，棋盘与 `Black wins (resign)` 保留 |
+
+桌面坐标按窗口 bounds（1100×832，标题栏 32 pt）与 raylib 逻辑坐标换算；
+窗口需经 `AXRaise`/激活后才能接收系统级点击。该流程仍是手工/主机脚本
+（`~/rv-e2e/cgclick2.swift`、`browser_join.mjs`），未纳入仓库与 CI。
 
 ## 6. 验证中发现并修复的问题
 

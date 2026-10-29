@@ -20,8 +20,9 @@
   `net.session` 与 `app.net` 渲染冒烟。
 - 网络加固测试：握手/空闲/房间 TTL、连接/房间上限、加入失败限速、等待
   房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、连续 8 局
-  soak；浏览器双客户端 E2E 支持 Chrome/Firefox/WebKit，新增队列溢出与
-  进程优雅关闭检查脚本；v1.0.1 存档/设置 fixture 兼容测试。
+  soak；浏览器双客户端 E2E 支持 Chrome/Firefox/WebKit，新增队列溢出、
+  服务器不读数据、进程优雅关闭检查；v1.0.1 存档/设置与 v1.4.0 棋谱
+  fixture 兼容测试。
 - `docs/NETWORK_ARCHITECTURE.md`、`NETWORK_PROTOCOL.md`、
   `NETWORK_SECURITY.md`、`PHASE_14_REPORT.md`。
 

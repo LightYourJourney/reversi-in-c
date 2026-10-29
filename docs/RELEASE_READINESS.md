@@ -13,7 +13,7 @@
 | 问题 | 结论 | 依据 |
 |---|---|---|
 | 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、三引擎浏览器、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
-| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：桌面↔Web 未复验、物理桌面 GUI 与 Safari/iOS/Android 未验证、可信证书与公网未测 |
+| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：Safari/iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
 
 “可以进入 Public Beta”的含义是：源可用、可由用户自行 `ws://127.0.0.1`
 或本地 TLS 代理运行；**不得**宣称“公网/生产就绪”。正式发布前必须补齐
@@ -83,11 +83,12 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Debug 无窗口 | PASS 26/26 | 本机 `ctest`；CI `40818759364` Linux/Windows/macOS 各 26/26 |
 | Release 无窗口 | PASS 26/26 | `ctest --test-dir build-release` |
 | ASan+UBSan 无窗口 | PASS 26/26（无报告） | `ctest --test-dir build-sanitize -E "app.*"` |
-| Debug GUI | PARTIAL | 本机无显示器（NOT TESTED）；CI Linux Xvfb 4/4 PASS（`40818759364`）；macOS/Windows 物理桌面未验证 |
+| Debug GUI | PASS（macOS）/ NOT TESTED（Windows） | macOS 本机 30/30（2026-10-29）；CI Linux Xvfb 4/4；Windows 物理桌面未验证 |
 | TSan `net.session` / `net.client` | PASS | Homebrew clang 23，无竞争报告 |
 | 网络边界 | PASS | `net.server` 5,757 断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局 |
-| 客户端队列溢出 | PASS | `net.client` 32 断言（`queue_overflow`） |
+| 客户端队列溢出 | PASS | `net.client` 49 断言（`queue_overflow`、服务器不读时的有界写超时） |
 | 会话重启 | PASS | `net.session` 71 断言（重启后重连回大厅、预算耗尽 FAILED） |
+| 桌面↔Web 联机 | PASS | 房间 `D7AKVC`（2026-10-29）：桌面黑方 d3、浏览器白方投降、双方 BLACK_WIN、对手关闭后桌面保留结果 |
 | 旧版本数据 | PASS | `storage.save` 102 / `storage.settings` 68（v1.0.1 fixture）、`analysis.session` 112（v1.4.0 棋谱 fixture） |
 | Emscripten 构建 | PASS | `scripts/build-web.sh`，wasm 395,038 B |
 | 浏览器整局（Chrome） | PASS | `scripts/web-online-e2e.mjs`，房间 `38RSUR` / `9J25DT`（生产式代理）/ `YDU8UG`（复审后） |
@@ -95,7 +96,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | 浏览器整局（WebKit） | PASS | Playwright WebKit 27.2，房间 `V3U9MB`、`JAZTR3`（复审后；**引擎代理，不等于 Safari**） |
 | Web 队列溢出（三引擎） | PASS | `scripts/web-queue-overflow-check.mjs`：FAILED(7) → 手动 Connect → LOBBY(2) |
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
-| 桌面↔Web 联机 | NOT TESTED（本阶段） | Phase 14 曾 PASS（`HVVFKP`）；需要 macOS 窗口自动化 |
+| 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
 | 字体渲染 / 音效 | NOT TESTED | 浏览器 smoke 只证明无控制台错误；桌面字体/音效为 Phase 14 GUI 证据，本阶段未复验 |
 | Safari / iOS Safari / Android Chrome | NOT TESTED | 无 Safari WebDriver、无真机/模拟器 |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
@@ -107,31 +108,27 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | CI（本阶段提交） | PASS 9/9 | `40818759364`（`21c8d20`）：三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,210,317**）：
-`net.protocol` 33、`net.ws` 20,026、`net.server` 5,757、`net.client` 32、
+断言数（本机 Debug，全部无窗口测试合计 **1,210,334**）：
+`net.protocol` 33、`net.ws` 20,026、`net.server` 5,757、`net.client` 49、
 `net.session` 71、`analysis.session` 112、`storage.save` 102、
 `storage.settings` 68；其余见 `TESTING.md` §2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **桌面↔Web 联机本阶段未复验**：Phase 14 的证据仍在（`HVVFKP`），但
-   2.0.0 的客户端写入路径与重连顺序已改，需要一次桌面 + 浏览器的完整
-   复验。
-2. **物理桌面 GUI 未验证**：CI 的 Linux Xvfb 4/4 通过，但 macOS/Windows
-   的真实窗口、HiDPI、字体与音频听感未复验（Phase 14 有 macOS 证据）。
-3. **Safari、iOS Safari、Android Chrome** 未验证；Firefox/WebKit 通过，
+1. **Safari、iOS Safari、Android Chrome** 未验证；Firefox/WebKit 通过，
    但 WebKit 构建不等于 Safari。
-4. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
+2. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
    延迟与丢包均未测（本地自签与隔离代理已验证，不构成生产 PASS）。
-5. **桌面端发送超时路径**只有代码审查与有界写实现，没有可复现的
-   “服务器不读”自动化用例（Web 端有自动化）。
-6. **服务端发送队列饱和**（16 KB）仍只有代码审查；集成测试无法在
+3. **Windows 物理桌面**未验证（CI 为托管 VM；macOS 本机 30/30 与
+   桌面↔Web 已通过）。
+4. **服务端发送队列饱和**（16 KB）仍只有代码审查；集成测试无法在
    合理时间内填满内核发送缓冲。
+5. **在线对局导入 Lab 复盘**未实现（Phase 14 已知限制）。
 
 ## 7. 建议
 
 - 若以 **Public Beta** 名义发布：只发布源码 + 强调自托管与“未做公网
-  安全评估”；在 Release Notes 中列出 §6 的第 3–4 项。
-- 正式 v2.0.0：补 §6 第 1–2 项（桌面↔Web 与物理桌面）复验；第 3–4 项
-  可作为已知限制在发布说明中明确披露，由发布者决定是否接受。CI、打包、
-  ASan/UBSan 与 Linux GUI 已是绿灯。
+  安全评估”；在 Release Notes 中列出 §6 的第 1–2 项。
+- 正式 v2.0.0：§6 第 1–2 项是外部环境验证（Safari/移动端、公网 TLS），
+  第 3 项（Windows 物理桌面）建议发布前补；第 4–5 项作为已知限制披露。
+  CI、打包、ASan/UBSan、macOS GUI 与桌面↔Web 已是绿灯。
