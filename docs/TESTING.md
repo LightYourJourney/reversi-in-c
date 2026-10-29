@@ -75,6 +75,10 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   `40816665469`（`4f853ff`）仅 Windows Debug 失败——新增的 503 断言在
   Windows 上因“关闭带未读数据的 socket 触发 RST”与测试分段读取覆盖缓冲
   而失败；修复为 `2ba11ab`（拒绝路径先非阻塞排空再写 503；测试累积读取）。
+- 第二轮提交 `5471a4e` 的 CI 运行 `40923405109` 仅 Windows Debug 失败：
+  `test_send_to_stalled_server` 在 `net_client_create()`（Windows 上调用
+  `WSAStartup`）之前创建监听 socket。修复 `ccfa435` 后运行 `40924395184`
+  **9/9 success**（Windows 首次运行连接取消、发送队列饱和与发送超时用例）。
 - Debug：26/26 无窗口测试通过（v2.0.0）。
 - Debug + GUI：v2.0.0 本机 30/30，包含 `app.lab` 与 `app.net`（大厅 20 帧渲染），
   `app.smoke` 与 `app.autoplay` 也通过；Windows/macOS 的交互式 GUI 流程

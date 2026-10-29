@@ -125,7 +125,7 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | 本地 TLS/HSTS/限速/关闭 | PASS，见 `PRODUCTION_DEPLOYMENT.md` §7 |
 | 10 分钟 ASan soak `REVERSI_SOAK_MS=600000` | PASS：`PASS net.server (865909 checks)`，退出码 0，无 ASan 报告 |
 | 安装包 | CI 三平台打包 PASS（`40818759364`）；Linux 包在 Xvfb 下验收 PASS；Windows 包 `--version` PASS；macOS 包已生成、未实际启动 |
-| CI（本阶段提交） | **PASS 9/9**：运行 `40818759364`（`21c8d20`）Linux/Windows/macOS Debug、Linux ASan+UBSan、Linux Xvfb GUI、三平台打包与 Linux 包验收全部 success。此前 `4f853ff` 的运行 `40816665469` 仅 Windows Debug 失败（503 断言），修复见 `2ba11ab` |
+| CI（本阶段提交） | **PASS 9/9**：运行 `40924395184`（`ccfa435`）三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收全部 success（Windows 首次运行连接取消/饱和/发送超时用例）。此前 `40923405109` 仅 Windows Debug 失败（测试在 `WSAStartup` 前创建 socket），修复见 `ccfa435`；再前 `40816665469` 的 Windows 503 失败见 `2ba11ab` |
 
 断言数（本机 Debug）：`net.protocol` 33、`net.ws` 20,026、`net.server`
 5,758、`net.client` 57、`net.session` 96、`analysis.session` 112、

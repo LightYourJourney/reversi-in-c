@@ -523,7 +523,7 @@ ctest --test-dir build --output-on-failure
 | TSan | `net.session` 96、`net.client` 57 断言，无竞争报告（Phase 15） |
 | 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；Safari/iOS/Android **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 395,038 B，Worker 58.7 KB） |
-| GitHub Actions | `40818759364`（Phase 15，`21c8d20`）9/9 通过；首跑 `40816665469` 仅 Windows 失败（已在 `2ba11ab` 修复） |
+| GitHub Actions | `40924395184`（Phase 15，`ccfa435`）9/9 通过；此前 Windows 失败均已修复（`2ba11ab`、`ccfa435`） |
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、
