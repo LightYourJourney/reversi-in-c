@@ -102,7 +102,7 @@ NAT、丢包、乱序、带宽限制。真实跨网络 **NOT TESTED**。字节�
 | 本地 TLS/HSTS/限速/关闭 | PASS，见 `PRODUCTION_DEPLOYMENT.md` §7 |
 | 10 分钟 ASan soak `REVERSI_SOAK_MS=600000` | PASS：`PASS net.server (865909 checks)`，退出码 0，无 ASan 报告 |
 | 安装包 `scripts/package.sh` | **NOT TESTED**（本阶段未重建归档） |
-| CI（本阶段提交） | **NOT RUN**（未推送；HEAD 的 CI 为 `40707272332` 9/9） |
+| CI（本阶段提交） | **FAIL → 已修待复跑**：运行 `40816665469`（`4f853ff`）中 Linux/macOS Debug、ASan+UBSan、Linux Xvfb GUI 均 PASS；Windows Debug 在 `net.server` 的 503 断言失败（1/5743）。根因（Windows 关闭带未读数据 → RST；测试分段读取覆盖缓冲）已在 `2ba11ab` 修复，待推送复跑 |
 
 断言数（本机 Debug）：`net.protocol` 33、`net.ws` 20,026、`net.server`
 5,757、`net.client` 32、`net.session` 71、`analysis.session` 112、

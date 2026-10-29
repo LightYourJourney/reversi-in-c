@@ -104,7 +104,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | 代理层连接上限 | NOT TESTED | `limit_conn` 已配置、语法通过，未压测 |
 | 10 分钟 ASan soak | PASS | `PASS net.server (865909 checks)`，退出码 0，无报告 |
 | 安装包验收 | NOT TESTED（本阶段） | 未重建 CPack 归档；CI 打包作业待推送后运行 |
-| CI（本阶段提交） | NOT RUN | 未推送；HEAD 的既有 CI 为 `40707272332`（9/9） |
+| CI（本阶段提交） | FAIL（Windows）→ 已修待复跑 | `40816665469`：Linux/macOS/ASan/Xvfb PASS；Windows `net.server` 503 断言失败，修复 `2ba11ab` 待推 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
 断言数（本机 Debug，全部无窗口测试合计 **1,210,317**）：
@@ -114,8 +114,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭）
 
-1. **CI 未运行本阶段提交**：需推送后确认三平台 Debug、ASan+UBSan、
-   Xvfb GUI 与打包作业全绿。
+1. **CI 的 Windows 作业未绿**：`40816665469` 仅 Windows Debug 失败（503
+   断言），根因修正为 `2ba11ab`；推送复跑并确认打包作业后关闭。
 2. **桌面 GUI 未在本机复验**（无窗口服务器）；`app.smoke/app.net/
    app.lab/app.autoplay` 本阶段无本机 PASS。
 3. **桌面↔Web 联机本阶段未复验**（Phase 14 的证据仍在，但 2.0.0 的
