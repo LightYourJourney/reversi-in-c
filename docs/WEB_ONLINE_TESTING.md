@@ -199,13 +199,15 @@ Phase 15 复验（2026-10-29）：桌面 `build-gui/bin/Reversi.app`（当前源
 
 ```bash
 # 接收队列溢出：注入 40 条服务端消息（> 32 条队列）
-NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-queue-overflow-check.mjs \
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-transport-failure-check.mjs \
   --browser chrome
 # 期望：netPhase 7（FAILED）→ 重新 Connect 后 2（LOBBY）
 ```
 
 三引擎均为 `phaseAfterOverflow=7`、`phaseAfterReconnect=2`（第二次点击
-Connect），证明浏览器端不再静默丢消息，且手动重连会关闭旧套接字。该检查
+Connect），并对连接中的套接字注入“不可发送”状态（`bufferedAmount` 超限），
+同样得到 `phaseAfterSendFailure=7`、重连后 `2`：证明浏览器端不再静默丢
+消息，且发送失败与手动重连都会关闭旧套接字。该检查
 运行在大厅（`active=false`），因此断言的是“失败可见 + 手动恢复”；房间内
 （`active=true`）的自动重连由会话层用例覆盖。实现细节与限制见
 `docs/PHASE_15_REPORT.md`。

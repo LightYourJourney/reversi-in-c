@@ -36,7 +36,7 @@
 - 可复现实验平台：配对开局与换色、固定种子、固定深度/节点/时间、
   Wilson 置信区间与 Elo、确定性回归、静态实验报告。
 - 在线对战：独立网络层、权威服务端、房间代码、ready、断线重连、
-  超时/投降；桌面与 Web 客户端共用同一协议。
+  超时/投降；桌面与 Web 客户端共用同一协议；终局可一键导入 Lab 复盘。
 - 撤销/重做、暂停、重开、历史、帮助、统计与结算页。
 - 自动存档、3 个手动存档槽、严格校验与原子写入。
 - 设置持久化、明暗主题、动画速度、合法提示与最后一步高亮。
@@ -520,7 +520,7 @@ ctest --test-dir build --output-on-failure
 | Release（无窗口） | 26/26 通过（Phase 15 复跑） |
 | ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告（Phase 15 复跑） |
 | Debug + GUI | 30/30 通过（Phase 14）；Phase 15 本机无显示器，NOT TESTED |
-| TSan | `net.session` 57、`net.client` 32 断言，无竞争报告（Phase 15） |
+| TSan | `net.session` 96、`net.client` 57 断言，无竞争报告（Phase 15） |
 | 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；Safari/iOS/Android **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 395,038 B，Worker 58.7 KB） |
 | GitHub Actions | `40818759364`（Phase 15，`21c8d20`）9/9 通过；首跑 `40816665469` 仅 Windows 失败（已在 `2ba11ab` 修复） |

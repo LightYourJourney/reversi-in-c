@@ -37,6 +37,9 @@
      UI 线程；写失败即断开并重连；
    - 等待房间断线保留座位（重连窗口），不再瞬间销毁房间；
    - 令牌持有者可在旧连接仍未回收时接管座位（NAT 变化/Half-open）；
+   - 桌面连接阶段可中断（非阻塞 connect + 5 s 上限）；
+   - 服务端发送队列/套接字缓冲可配置，并新增饱和用例（Linux/Windows）；
+   - 在线终局可导入 Reversi Lab 复盘（Review 按钮，重放服务端确认的落子）；
    - 服务端强制协议首条消息为 `hello`（版本协商前置）；
    - 房间 TTL 在加入/重连时刷新，修复“房间刚加入就过期”；
    - 每连接 8 次加入/重连失败后断开（房间代码枚举防护）；
@@ -85,16 +88,18 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | ASan+UBSan 无窗口 | PASS 26/26（无报告） | `ctest --test-dir build-sanitize -E "app.*"` |
 | Debug GUI | PASS（macOS）/ NOT TESTED（Windows） | macOS 本机 30/30（2026-10-29）；CI Linux Xvfb 4/4；Windows 物理桌面未验证 |
 | TSan `net.session` / `net.client` | PASS | Homebrew clang 23，无竞争报告 |
-| 网络边界 | PASS | `net.server` 5,757 断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局 |
-| 客户端队列溢出 | PASS | `net.client` 49 断言（`queue_overflow`、服务器不读时的有界写超时） |
-| 会话重启 | PASS | `net.session` 71 断言（重启后重连回大厅、预算耗尽 FAILED） |
+| 网络边界 | PASS | `net.server` 5,758（macOS）/5,765（Linux）断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局、发送队列饱和 |
+| 客户端队列溢出 | PASS | `net.client` 57 断言（`queue_overflow`、服务器不读、连接取消/超时） |
+| 会话重启 | PASS | `net.session` 96 断言（重启后重连回大厅、预算耗尽 FAILED、落子记录） |
 | 桌面↔Web 联机 | PASS | 房间 `D7AKVC`（2026-10-29）：桌面黑方 d3、浏览器白方投降、双方 BLACK_WIN、对手关闭后桌面保留结果 |
+| 在线终局 → Lab 复盘 | PASS | 房间 `HQ7EUE`：Review 打开 Lab 终局，First 回到开局 |
+| 代理 limit_conn | PASS（本地） | 4 条并发升级 101，第 5 条 503 |
 | 旧版本数据 | PASS | `storage.save` 102 / `storage.settings` 68（v1.0.1 fixture）、`analysis.session` 112（v1.4.0 棋谱 fixture） |
 | Emscripten 构建 | PASS | `scripts/build-web.sh`，wasm 395,038 B |
 | 浏览器整局（Chrome） | PASS | `scripts/web-online-e2e.mjs`，房间 `38RSUR` / `9J25DT`（生产式代理）/ `YDU8UG`（复审后） |
 | 浏览器整局（Firefox） | PASS | Playwright Firefox 157，房间 `45H8XY`、`SYTL45`（复审后） |
 | 浏览器整局（WebKit） | PASS | Playwright WebKit 27.2，房间 `V3U9MB`、`JAZTR3`（复审后；**引擎代理，不等于 Safari**） |
-| Web 队列溢出（三引擎） | PASS | `scripts/web-queue-overflow-check.mjs`：FAILED(7) → 手动 Connect → LOBBY(2) |
+| Web 队列溢出（三引擎） | PASS | `scripts/web-transport-failure-check.mjs`：FAILED(7) → 手动 Connect → LOBBY(2) |
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
 | 字体渲染 / 音效 | NOT TESTED | 浏览器 smoke 只证明无控制台错误；桌面字体/音效为 Phase 14 GUI 证据，本阶段未复验 |
@@ -108,10 +113,11 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | CI（本阶段提交） | PASS 9/9 | `40818759364`（`21c8d20`）：三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,210,334**）：
-`net.protocol` 33、`net.ws` 20,026、`net.server` 5,757、`net.client` 49、
-`net.session` 71、`analysis.session` 112、`storage.save` 102、
-`storage.settings` 68；其余见 `TESTING.md` §2。
+断言数（本机 Debug，全部无窗口测试合计 **1,210,368**）：
+`net.protocol` 33、`net.ws` 20,026、`net.server` 5,758、`net.client` 57、
+`net.session` 96、`analysis.session` 112、`storage.save` 102、
+`storage.settings` 68；其余见 `TESTING.md` §2。Linux/Windows 的饱和
+用例另加 7 条。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
@@ -121,14 +127,14 @@ Playwright Firefox 157、Playwright WebKit 27.2。
    延迟与丢包均未测（本地自签与隔离代理已验证，不构成生产 PASS）。
 3. **Windows 物理桌面**未验证（CI 为托管 VM；macOS 本机 30/30 与
    桌面↔Web 已通过）。
-4. **服务端发送队列饱和**（16 KB）仍只有代码审查；集成测试无法在
-   合理时间内填满内核发送缓冲。
-5. **在线对局导入 Lab 复盘**未实现（Phase 14 已知限制）。
+4. **systemd/logrotate 模板**未在真实 systemd 执行（容器内无法安装；
+   本机为 macOS）。
 
 ## 7. 建议
 
 - 若以 **Public Beta** 名义发布：只发布源码 + 强调自托管与“未做公网
   安全评估”；在 Release Notes 中列出 §6 的第 1–2 项。
 - 正式 v2.0.0：§6 第 1–2 项是外部环境验证（Safari/移动端、公网 TLS），
-  第 3 项（Windows 物理桌面）建议发布前补；第 4–5 项作为已知限制披露。
-  CI、打包、ASan/UBSan、macOS GUI 与桌面↔Web 已是绿灯。
+  第 3 项（Windows 物理桌面）建议发布前补；第 4 项（systemd/logrotate
+  模板）作为已知限制披露。CI、打包、ASan/UBSan、macOS GUI、桌面↔Web、
+  发送队列饱和（Linux/Windows）与 limit_conn 已是绿灯。

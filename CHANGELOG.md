@@ -20,9 +20,12 @@
   `net.session` 与 `app.net` 渲染冒烟。
 - 网络加固测试：握手/空闲/房间 TTL、连接/房间上限、加入失败限速、等待
   房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、连续 8 局
-  soak；浏览器双客户端 E2E 支持 Chrome/Firefox/WebKit，新增队列溢出、
-  服务器不读数据、进程优雅关闭检查；v1.0.1 存档/设置与 v1.4.0 棋谱
-  fixture 兼容测试。
+  soak、发送队列饱和（Linux/Windows）、连接取消与 5 s 超时；浏览器双客户端
+  E2E 支持 Chrome/Firefox/WebKit，新增队列溢出/发送失败、服务器不读数据、
+  进程优雅关闭检查；v1.0.1 存档/设置与 v1.4.0 棋谱 fixture 兼容测试。
+- 在线终局可在对局 HUD 点击 **Review**，把服务端确认的落子序列重放进
+  Reversi Lab（导航、分析、导出棋谱）；重连快照不会重复记录，缺少步骤时
+  按钮禁用。
 - `docs/NETWORK_ARCHITECTURE.md`、`NETWORK_PROTOCOL.md`、
   `NETWORK_SECURITY.md`、`PHASE_14_REPORT.md`。
 
@@ -32,7 +35,9 @@
 - Web 构建包含浏览器 WebSocket 适配；桌面构建包含 socket/线程客户端。
 - 服务端协议要求 `hello` 先于 `create`/`join`/`rejoin`；等待房间断线保留
   座位；`rejoin` 可接管仍在线的旧连接。
-- 新增 `net_server_shutdown()` 与 `SIGTERM` 优雅关闭；新增
+- 新增 `net_server_shutdown()` 与 `SIGTERM` 优雅关闭；`NetServerConfig`
+  新增 `send_queue_bytes` / `send_buffer_bytes`（默认 16 KiB / 系统默认，
+  用于部署调优与饱和测试）；新增
   `docs/PRODUCTION_DEPLOYMENT.md`、`docs/RELEASE_READINESS.md`、
   `docs/PHASE_15_REPORT.md` 与 `deploy/` 模板。
 
@@ -73,6 +78,11 @@
 - 浏览器重连可能留下旧 WebSocket 继续回调；重连前先关闭旧套接字。
 - 桌面客户端发送在 UI 线程阻塞：现为非阻塞套接字 + 1 s 有界写入，失败即
   断开重连，服务器卡死不再冻结界面。
+- 桌面“连接中”无法取消：`connect` 允许阻塞约 75 s，Disconnect/退出会
+  等待线程结束。现为非阻塞 connect + 5 s 上限，等待切片检查停止标志，
+  握手同样可取消。
+- `handle_leave` 直接使用连接上的座位号；现用 `room_seat_for_connection`
+  校验（防御性，正常流程不可达）。
 - 等待房间中一次断线就销毁整个房间，对手被踢回大厅；现保留座位到重连
   窗口结束（与对局中一致）。终局房间仍按原行为关闭。
 - 令牌持有者在旧连接仍被服务端持有时 `rejoin` 会失败（NAT 变化/半开

@@ -84,7 +84,8 @@ journalctl -u reversi-server -f
 | 空闲 | 120 s | 无任何帧则断开（客户端每 2 s ping） |
 | 等待房间 TTL | 10 min（加入/重连时刷新） | `roomclosed status=expired` |
 | 结束房间 TTL | 2 min | `roomclosed status=expired` |
-| 发送队列 | 16 KB/连接 | 关闭该连接，座位保留重连窗口 |
+| 发送队列 | 16 KB/连接（`send_queue_bytes`） | 关闭该连接，座位保留重连窗口 |
+| 套接字发送缓冲 | 系统默认（`send_buffer_bytes`） | 仅用于调优/测试；0 表示系统默认 |
 | 消息/帧 | 2048 B | `message_too_large` / 帧错误关闭 |
 
 以上都可通过 `NetServerConfig` 在测试或私有部署中调整；命令行只暴露
@@ -124,9 +125,11 @@ journalctl -u reversi-server -f
 | WSS 升级 | `openssl s_client` + 手工 `GET / Upgrade` | PASS：`HTTP/1.1 101 Switching Protocols` |
 | 浏览器整局 | `scripts/web-online-e2e.mjs --base https://localhost:9443 --ws-port 9444` | PASS：房间 `9J25DT`，LOBBY→PLAYING→seq 1→投降→BLACK_WIN→对手关闭后保留结果 |
 | 代理层限速 | 连续 20 次升级请求 | PASS：前 11 次被转发（上游对非 WebSocket 握手返回 502），之后 `503`；error.log 记录 `limiting requests` |
-| 连接数限制 | `limit_conn 4` | 已配置并通过语法检查；**未做并发压测**（NOT TESTED） |
+| 代理层连接上限 | 4 条并发升级 + 第 5 条 | PASS：前 4 条 `101`，第 5 条 `503`，error.log 记录 `limiting connections` |
+| 连接数限制 | `limit_conn 4` | PASS：4×`101`，第 5 条 `503` |
 | 优雅关闭 | `scripts/check-server-shutdown.mjs --pid <pid>` + `SIGTERM` | PASS：房间 `DFB5D2` 收到 `roomclosed status=shutdown`；进程退出码 0；日志 `shutdown: closed 1 room(s)` |
 | 服务重启后的客户端 | `net.session` 的服务器重启用例 | PASS：客户端进入 DISCONNECTED、保留棋盘、不崩溃；房间丢失后回到大厅 |
+| systemd/logrotate 模板 | `systemd-analyze verify` / `logrotate -d` | **NOT TESTED**：容器内 apt 被代理阻断（502/证书不可信），无 arm64 预装镜像；本机为 macOS |
 
 **明确不构成生产 PASS 的部分**：可信证书链、HSTS 预加载、公网 DNS、
 真实 HTTPS 访问、DDoS/CC 压测、跨地域延迟。这些都需要真实域名与网络。
@@ -186,4 +189,5 @@ scripts/check-server-shutdown.mjs --pid "$(pidof reversi_server)" \
 - 未做真实公网压测、DDoS 防护、WAF。
 - 未做多实例/负载均衡（房间在内存中，需要粘性会话或房间路由）。
 - 未验证 Windows/Linux 物理桌面上的 GUI 客户端与代理组合。
-- `limit_conn` 的并发行为未压测。
+- `limit_conn` 已做 5 条并发连接验证，未做更高并发压测。
+- systemd/logrotate 模板未在真实 systemd 执行（仅静态审阅）。
