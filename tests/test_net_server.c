@@ -1421,16 +1421,23 @@ static void test_connection_cap(TestStats *stats)
         && net_ws_build_handshake_request("127.0.0.1", port, key, request)) {
         (void)send(raw, request, (int)strlen(request), 0);
     }
+    /* Accumulate: the status line can arrive in more than one TCP segment
+     * (observed on Windows). */
     char response[128] = {0};
-    for (int elapsed = 0; elapsed < 2000 && response[0] == '\0';
-         elapsed += 2) {
+    size_t used = 0;
+    for (int elapsed = 0; elapsed < 2000 && used < 12; elapsed += 2) {
         net_server_poll(server, 1);
-        const int read = (int)recv(raw, response, (int)sizeof(response) - 1, 0);
+        const int read = (int)recv(raw, response + used,
+                                   (int)(sizeof(response) - 1 - used), 0);
         if (read > 0) {
-            response[read] = '\0';
+            used += (size_t)read;
+            response[used] = '\0';
+        } else if (read == 0) {
+            break;
         }
         test_sleep_ms(1);
     }
+    REVERSI_TEST_ASSERT(stats, used >= 12);
     REVERSI_TEST_ASSERT(stats, strncmp(response, "HTTP/1.1 503", 12) == 0);
     test_close_socket(raw);
     /* Existing connections keep working while the cap is in force. */

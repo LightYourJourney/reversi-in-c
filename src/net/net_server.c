@@ -1076,11 +1076,21 @@ static void accept_connections(NetServer *server)
         if (index < 0) {
             /* No slot to run a WebSocket handshake in: answer at the HTTP
              * layer so the client can tell "server full" from a network
-             * failure, then close. */
+             * failure, then close. The socket becomes non-blocking first so
+             * the drain cannot stall the accept loop; draining matters on
+             * Windows, where closing with unread data turns the close into
+             * a reset that can discard the response. */
             static const char OVER_CAPACITY[] =
                 "HTTP/1.1 503 Service Unavailable\r\n"
                 "Connection: close\r\n"
                 "Content-Length: 0\r\n\r\n";
+            uint8_t scratch[256];
+            socket_nonblocking(socket);
+            for (int i = 0; i < 4; ++i) {
+                if (recv(socket, (char *)scratch, sizeof(scratch), 0) <= 0) {
+                    break;
+                }
+            }
             (void)send(socket, OVER_CAPACITY, (int)strlen(OVER_CAPACITY), 0);
             socket_close(socket);
             continue;
