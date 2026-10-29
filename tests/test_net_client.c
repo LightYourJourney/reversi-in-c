@@ -255,6 +255,12 @@ static void close_test_socket(TestSocket socket_fd)
  * of blocking the caller (the UI thread in the real app). */
 static void test_send_to_stalled_server(TestStats *stats)
 {
+    /* Create the client first: on Windows it performs WSAStartup, which must
+     * precede any socket() call. */
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+
     TestSocket listener = socket(AF_INET, SOCK_STREAM, 0);
     REVERSI_TEST_ASSERT(stats, listener != TEST_SOCKET_INVALID);
     int buffer_size = 1024;
@@ -277,10 +283,6 @@ static void test_send_to_stalled_server(TestStats *stats)
         getsockname(listener, (struct sockaddr *)&address,
                     &address_length) == 0);
     const int port = ntohs(address.sin_port);
-
-    Events events = {0};
-    NetClient *client = net_client_create(on_message, on_status, &events);
-    REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats, net_client_connect(client, "127.0.0.1", port));
 
     TestSocket server = accept(listener, NULL, NULL);
