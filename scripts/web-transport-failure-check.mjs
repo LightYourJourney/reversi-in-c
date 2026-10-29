@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /*
- * Browser check for the Web receive-queue overflow policy.
+ * Browser checks for the Web transport failure policies.
  *
- * Before v2.0.0 hardening the browser transport dropped a message silently
- * when its 32-entry queue was full, so the client kept displaying a stale
- * board with no error. The transport now reports FAILED("queue_overflow"),
- * closes the socket and the session either reconnects or shows the failure.
+ * 1. Receive-queue overflow: before the hardening the transport dropped a
+ *    message silently when its 32-entry queue was full, leaving a stale board
+ *    with no error. It now reports FAILED("queue_overflow") and closes the
+ *    socket. The queue only fills between frames, which a normal server
+ *    cannot produce, so the check injects the browser-side callback directly
+ *    and still exercises the real C path.
+ * 2. Send failure: a socket that cannot queue a frame (full buffer or a
+ *    closing socket) must drop the connection and report FAILED("send_failed")
+ *    instead of leaving the UI authoritative in its own head.
  *
- * The queue only fills if more messages arrive between two frames, which a
- * normal server cannot produce; this check injects the browser-side callback
- * directly, so it exercises the real C path.
- *
- *   NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-queue-overflow-check.mjs \
+ *   NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-transport-failure-check.mjs \
  *     [--browser chrome] [--base https://localhost:9443/index.html] \
  *     [--ws-port 9444]
  */
@@ -100,6 +101,41 @@ try {
   check("reconnect works after overflow",
         result.phaseAfterReconnect === 2,
         String(result.phaseAfterReconnect));
+
+  // A socket that cannot queue frames must be treated as a failure.
+  const installed = await page.evaluate(() => {
+    const socket = globalThis.__reversiNetSocket;
+    if (!socket || typeof socket.send !== "function") {
+      return false;
+    }
+    globalThis.__reversiNetSocket = {
+      readyState: 1,
+      bufferedAmount: 1 << 20,
+      send() {},
+      close() {},
+    };
+    return true;
+  });
+  check("connected socket present before send check", installed === true);
+  let sendFailed = false;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await page.waitForTimeout(100);
+    if ((await netPhase(page)) === 7) {
+      sendFailed = true;
+      break;
+    }
+  }
+  result.phaseAfterSendFailure = await netPhase(page);
+  check("send failure reported as failed",
+        sendFailed && result.phaseAfterSendFailure === 7,
+        String(result.phaseAfterSendFailure));
+
+  await clickR(page, b.connect[0], b.connect[1]);
+  await page.waitForTimeout(1800);
+  result.phaseAfterSendReconnect = await netPhase(page);
+  check("reconnect works after send failure",
+        result.phaseAfterSendReconnect === 2,
+        String(result.phaseAfterSendReconnect));
   await context.close();
 } catch (error) {
   failures.push(String(error));
