@@ -41,6 +41,7 @@ typedef pthread_t ClientThread;
 
 #define REVERSI_NET_CLIENT_QUEUE 32
 #define REVERSI_NET_CLIENT_SEND_TIMEOUT_MS 1000
+#define REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS 5000
 
 typedef struct ClientQueueEntry {
     char text[REVERSI_NET_MAX_MESSAGE + 1];
@@ -154,6 +155,62 @@ static bool socket_nonblocking(ClientSocket socket)
 #endif
 }
 
+static bool socket_in_progress(void)
+{
+#if defined(_WIN32)
+    const int error = WSAGetLastError();
+    return error == WSAEWOULDBLOCK || error == WSAEINPROGRESS
+        || error == WSAEALREADY;
+#else
+    return errno == EINPROGRESS || errno == EWOULDBLOCK
+        || errno == EALREADY;
+#endif
+}
+
+/* True when the asynchronous connect reported an error. */
+static bool socket_connect_failed(ClientSocket socket_fd)
+{
+    int error = 0;
+#if defined(_WIN32)
+    int length = (int)sizeof(error);
+    if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR, (char *)&error,
+                   &length) != 0) {
+        return true;
+    }
+#else
+    socklen_t length = sizeof(error);
+    if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR, &error, &length) != 0) {
+        return true;
+    }
+#endif
+    return error != 0;
+}
+
+/* Waits for an asynchronous connect, aborting within 100 ms when the caller
+ * asks the client to stop. */
+static bool socket_wait_connected(NetClient *client, ClientSocket socket_fd,
+                                  uint64_t deadline)
+{
+    for (;;) {
+        if (atomic_load(&client->stop)) {
+            return false;
+        }
+        const uint64_t now = now_ms();
+        if (now >= deadline) {
+            return false;
+        }
+        const uint64_t remaining = deadline - now;
+        const int slice = remaining < 100 ? (int)remaining : 100;
+        const int ready = socket_wait_writable(socket_fd, slice);
+        if (ready < 0) {
+            return false;
+        }
+        if (ready > 0) {
+            return !socket_connect_failed(socket_fd);
+        }
+    }
+}
+
 static void set_status(NetClient *client, NetClientStatus status,
                        const char *reason)
 {
@@ -234,7 +291,8 @@ static bool client_handshake(NetClient *client)
     char response[1024];
     size_t used = 0;
     const uint64_t deadline = now_ms() + 5000;
-    while (used < sizeof(response) - 1 && now_ms() < deadline) {
+    while (used < sizeof(response) - 1 && now_ms() < deadline
+           && !atomic_load(&client->stop)) {
         const int ready = socket_wait_readable(client->socket, 100);
         if (ready == 0) {
             continue;
@@ -285,30 +343,37 @@ static void *client_thread(void *argument)
 #endif
     }
     ClientSocket socket_fd = CLIENT_INVALID;
+    const uint64_t connect_deadline =
+        now_ms() + REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS;
     for (struct addrinfo *it = results; it != NULL; it = it->ai_next) {
         socket_fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
         if (socket_fd == CLIENT_INVALID) {
             continue;
         }
+        if (!socket_nonblocking(socket_fd)) {
+            socket_close(socket_fd);
+            socket_fd = CLIENT_INVALID;
+            continue;
+        }
         if (connect(socket_fd, it->ai_addr, (int)it->ai_addrlen) == 0) {
+            break;
+        }
+        if (socket_in_progress()
+            && socket_wait_connected(client, socket_fd, connect_deadline)) {
             break;
         }
         socket_close(socket_fd);
         socket_fd = CLIENT_INVALID;
+        if (atomic_load(&client->stop)) {
+            break;
+        }
     }
     freeaddrinfo(results);
     if (socket_fd == CLIENT_INVALID) {
-        set_status(client, NET_CLIENT_FAILED, "connect_failed");
+        if (!atomic_load(&client->stop)) {
+            set_status(client, NET_CLIENT_FAILED, "connect_failed");
+        }
         atomic_store(&client->running, false);
-#if defined(_WIN32)
-        return 0;
-#else
-        return NULL;
-#endif
-    }
-    if (!socket_nonblocking(socket_fd)) {
-        set_status(client, NET_CLIENT_FAILED, "connect_failed");
-        socket_close(socket_fd);
 #if defined(_WIN32)
         return 0;
 #else
@@ -319,7 +384,9 @@ static void *client_thread(void *argument)
     client->socket = socket_fd;
     unlock_client(client);
     if (!client_handshake(client)) {
-        set_status(client, NET_CLIENT_FAILED, "handshake_failed");
+        if (!atomic_load(&client->stop)) {
+            set_status(client, NET_CLIENT_FAILED, "handshake_failed");
+        }
         socket_close(socket_fd);
         lock_client(client);
         client->socket = CLIENT_INVALID;

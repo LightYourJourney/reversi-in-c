@@ -350,11 +350,53 @@ static void test_send_to_stalled_server(TestStats *stats)
     close_test_socket(listener);
 }
 
+
+/* A black-holed address (TEST-NET-1) makes connect() hang on most networks.
+ * Cancelling must not wait for the OS timeout. */
+static void test_connect_cancelled(TestStats *stats)
+{
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "192.0.2.1", 9));
+    test_sleep_ms(200);
+    const uint64_t begin = test_now_ms();
+    net_client_disconnect(client);
+    const uint64_t elapsed = test_now_ms() - begin;
+    REVERSI_TEST_ASSERT(stats, elapsed < 2000);
+    REVERSI_TEST_ASSERT(stats, net_client_status(client) == NET_CLIENT_IDLE);
+    net_client_destroy(client);
+}
+
+/* The connect itself is bounded at 5 s; on networks that reject the address
+ * immediately this checks the failure reporting instead. */
+static void test_connect_timeout(TestStats *stats)
+{
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    const uint64_t begin = test_now_ms();
+    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "192.0.2.1", 9));
+    bool failed = false;
+    for (int elapsed = 0; elapsed < 8000 && !failed; ++elapsed) {
+        net_client_poll(client);
+        if (events.status == NET_CLIENT_FAILED) {
+            failed = true;
+        }
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, failed);
+    REVERSI_TEST_ASSERT(stats, test_now_ms() - begin < 7000);
+    net_client_destroy(client);
+}
+
 int main(void)
 {
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_client_flow);
     REVERSI_RUN_TEST(&stats, test_queue_overflow);
     REVERSI_RUN_TEST(&stats, test_send_to_stalled_server);
+    REVERSI_RUN_TEST(&stats, test_connect_cancelled);
+    REVERSI_RUN_TEST(&stats, test_connect_timeout);
     return reversi_test_summary(&stats, "net.client");
 }
