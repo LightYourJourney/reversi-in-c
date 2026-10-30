@@ -170,9 +170,11 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
    为旧证据）。
 3. Safari（桌面）：**PASS**（2026-10-30 追加，房间 `CD8GDJ`，60 手终局，
    `safaridriver` 驱动、真实 HID 点击；见 `WEB_ONLINE_TESTING.md` §8）。
-   iOS Safari、Android Chrome：**NOT TESTED**。字体渲染与音效
-   **NOT TESTED**（浏览器 smoke 只证明无控制台错误；桌面字体/音效为
-   Phase 14 GUI 证据，本阶段无显示器未复验）。
+   iOS Safari、Android Chrome：**NOT TESTED**。字体渲染：PASS（有限，
+   `scripts/web-runtime-checks.mjs` 三引擎标题带亮色像素 10.3–10.6%）。
+   音效：**PARTIAL**（三引擎 `audioReady()` 为 true、上下文 running；
+   未验证可听输出）。存储被禁用：PASS（三引擎均显示降级横幅）。
+   桌面字体/音效仍为 Phase 14 GUI 证据。
 4. 真实公网：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域延迟
    与丢包：**NOT TESTED**。
 5. Windows/Linux 物理桌面：**NOT TESTED**（CI 为托管 VM）。2.0.0

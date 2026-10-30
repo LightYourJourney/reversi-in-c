@@ -251,8 +251,9 @@ Debug/Release/ASan+UBSan 各 15/15（均无窗口）；v1.2.0 的 17/17 见 §2�
 Phase 10 的 GUI 测试在本机 **NOT TESTED**：当前会话没有可用显示器，
 `InitWindow` 报 `GLFW: Failed to get primary monitor`。
 
-未验证：Safari、Firefox、真实 iOS/Android 设备、真实 GPU 下的帧率、
-浏览器存储被禁用的实机路径（代码有错误横幅与只读降级）。
+未验证：真实 iOS/Android 设备、真实 GPU 下的帧率。Safari 与 Firefox 已
+验证（桌面：Safari 26.6.2 经 `safaridriver` 完成整局，Firefox 157 经
+Playwright）；浏览器存储被禁用的降级路径见 §13 的 `web-runtime-checks`。
 
 ## 8. 已知测试缺口
 
@@ -340,10 +341,17 @@ scripts/run-online.sh      # 本地服务器 + Web 静态页，手动联机
 - `scripts/web-online-e2e.mjs`：双浏览器联机脚本（需 Playwright 与本地
   nginx），断言连接/建房/加入/落子 `seq`/投降终局/对手关闭后结果保留；
   未进 CI。
+- `scripts/safari-online-e2e.mjs`：真实 Safari（`safaridriver`）对 Playwright
+  Chrome 的整局脚本，支持 `--insecure` 走本地 TLS/WSS；30 手为真实 HID
+  点击，每手等待两端 `netSeq` 一致。需开启 Safari 远程自动化，未进 CI。
+- `scripts/web-runtime-checks.mjs`：字体渲染（标题带亮色像素占比）、
+  音效就绪（`audioReady()` + running 上下文）、`localStorage` 被禁用的
+  降级横幅，三引擎各跑一遍。
 - 桌面↔Web：桌面 `ws://127.0.0.1:8080` 建房、浏览器 WSS 加入，完成
   落子与投降终局；步骤见 `docs/WEB_ONLINE_TESTING.md`（手工/主机脚本）。
-- **未覆盖**：真实网络延迟/丢包、Safari/Firefox、可信证书链与生产代理、
-  公网部署、在线终局导入 Lab 复盘。
+- **未覆盖**：真实跨网络延迟/丢包、可信证书链与生产代理、公网部署。
+  Safari/Firefox 与“在线终局导入 Lab 复盘”已补：前者见
+  `docs/WEB_ONLINE_TESTING.md` §8，后者为房间 `HQ7EUE`。
 
 ## 13. 网络加固测试（Phase 15）
 
@@ -364,6 +372,15 @@ node scripts/web-transport-failure-check.mjs --browser chrome
 # 进程级优雅关闭
 node scripts/check-server-shutdown.mjs --pid <server pid> \
   --url wss://127.0.0.1:9444/
+
+# 字体渲染 / 音效就绪 / 存储被禁用（三引擎；--browser 可只跑一个）
+NODE_PATH=~/rv-e2e/pw/node_modules \
+  node scripts/web-runtime-checks.mjs --base https://localhost:8443/index.html
+
+# 真实 Safari 整局（需开启 Safari 远程自动化）
+NODE_PATH=~/rv-e2e/pw/node_modules \
+  node scripts/safari-online-e2e.mjs --base https://localhost:8443/index.html \
+  --port 8444 --insecure
 
 # 浏览器渲染/缩放/触摸/存档/Worker（Release 8080 + Debug 8081）
 REVERSI_WEB_URL=http://127.0.0.1:8080 \

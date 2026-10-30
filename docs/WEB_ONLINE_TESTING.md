@@ -195,6 +195,10 @@ Phase 15 复验（2026-10-29）：桌面 `build-gui/bin/Reversi.app`（当前源
    已改为说明需要自托管服务器。
 4. 为浏览器自动化增加只读访问器 `reversi_web_net_code` /
    `reversi_web_net_phase`（`__reversiTest.netCode/netPhase`）。
+5. 2026-10-30 增加 `reversi_web_audio_ready`（`__reversiTest.audioReady()`）：
+   返回 `IsAudioDeviceReady()`。`audio_init()` 在设备或六个音效任一失败时会
+   卸载全部并关闭设备，因此这个值同时证明“设备起来了”和“音效都合成并加载
+   成功”，运行时检查据此断言音频路径，而不是靠猜。
 
 ## 7. Phase 15 补充检查
 
@@ -253,6 +257,35 @@ NODE_PATH=~/rv-e2e/pw/node_modules node scripts/safari-online-e2e.mjs \
 就立刻点对面，会让落后一个广播的客户端把点击当作“不是你回合”丢弃。现在
 每手都等**两端 `netSeq` 相等且前进**才继续，并在超时时输出
 `visibilityState`/帧计数现场。用这种等待方式重跑即 0 失败。
+
+### 8.1 同一脚本跑本地 TLS/WSS（2026-10-30）
+
+```bash
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/safari-online-e2e.mjs \
+  --base https://localhost:8443/index.html --port 8444 --insecure \
+  --driver http://127.0.0.1:4445
+```
+
+`--insecure` 映射到 WebDriver 的 `acceptInsecureCerts`，Safari 因此接受
+自签证书——页面与其 WebSocket 都走 TLS，**无需改钥匙串**。结果：房间
+`VFDHTZ`，同样 60 手、两端 `netSeq` 60、`result` 2（20–44），30 手为真实
+点击。它证明 WSS 路径可用，**不**证明证书链可信（自签仍是自签）。
+
+### 8.2 运行时检查（字体 / 音效 / 存储被禁用）
+
+```bash
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/web-runtime-checks.mjs \
+  --base https://localhost:8443/index.html          # 或 --browser 单个引擎
+```
+
+| 检查 | 判据 | Chrome 155 | Firefox 157 | WebKit 27.2 |
+|---|---|---|---|---|
+| 字体渲染 | 画布标题带亮色像素占比 | 10.3% | 10.6% | 10.3% |
+| 音效路径 | `audioReady()` 且存在 running 的 AudioContext | true / running | true / running | true / running |
+| 存储被禁用 | 横幅出现且模块仍启动 | 是 | 是 | 是 |
+
+三者都只在“字被画出来了 / 设备与音效就绪 / 降级横幅出现”这个层面成立：
+**没有验证可听输出、没有与参考字体逐像素比对、没有真机存储行为**。
 
 ## 9. 未覆盖
 

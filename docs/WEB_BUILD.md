@@ -147,6 +147,6 @@ node tests/web/run-tests.js
   backing store 渲染）。这是 raylib Web `SetWindowSize` 的 DPR 行为所致。
 - `localStorage` 可能被浏览器、隐私模式或用户清理；页面已提供导出/导入。
 - AI 取消是终止 Worker，不是协作式停止；未完成的搜索结果被丢弃。
-- Safari、Firefox、真实 iOS/Android 设备未验证。
+- 真实 iOS/Android 设备未验证（桌面 Safari 26.6.2 与 Firefox 157 已通过联机整局）。
 - 页面在极慢设备上首次加载可能超过 3 秒（本机冷启约 3.3 s，热启
   0.4–0.9 s）。

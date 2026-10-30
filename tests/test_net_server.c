@@ -1971,7 +1971,6 @@ static void test_soak_games(TestStats *stats)
     net_server_destroy(server);
 }
 
-
 #if !defined(__APPLE__)
 /* Pump the fast client's socket, recording whether it saw the opponent
  * disconnect and the last state sequence. */
@@ -2007,9 +2006,14 @@ static bool pump_opponent_notice(NetServer *server, TestClient *client,
  * through NetServerConfig so the test reaches 16 KiB-equivalent pressure in
  * a few moves.
  *
- * macOS auto-tunes the receive window regardless of SO_RCVBUF (measured:
- * a 1 KiB request still absorbed >20 KiB), so the queue cannot be filled
- * there. Linux and Windows honour the buffers; those builds run the test. */
+ * macOS cannot produce that pressure: it overrides the requested 1 KiB
+ * SO_RCVBUF with an auto-tuned 326,640 B window, and a full 60-move game
+ * only emits ~7.8 KiB of state frames, so the kernel never returns
+ * EWOULDBLOCK and the queue is never used. Measured 2026-10-30: with the
+ * guard removed the test ran all 60 plies and the opponent never saw a
+ * disconnect. Linux and Windows honour the requested buffer and run this
+ * case in CI; macOS exercises the same code path only through the other,
+ * smaller-queue cases. */
 static void test_send_queue_saturation(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,

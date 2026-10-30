@@ -102,8 +102,10 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Web 队列溢出（三引擎） | PASS | `scripts/web-transport-failure-check.mjs`：FAILED(7) → 手动 Connect → LOBBY(2) |
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
-| 字体渲染 / 音效 | NOT TESTED | 浏览器 smoke 只证明无控制台错误；桌面字体/音效为 Phase 14 GUI 证据，本阶段未复验 |
-| Safari 整局（macOS 26.6.2 / Safari 26.6.2） | PASS | `scripts/safari-online-e2e.mjs`（safaridriver）：房间 `CD8GDJ`，完整 60 手，两端 `netSeq` 60、`result` 2，30 手为真实 HID 点击 |
+| 字体渲染 | PASS（有限） | `scripts/web-runtime-checks.mjs`：标题带亮色像素占比 Chrome 10.3% / Firefox 10.6% / WebKit 10.3%；未与参考字体逐像素比对 |
+| 音效 | PARTIAL | 同上：三引擎 `audioReady()` 为 true（设备与六个音效均已加载）且有 running 上下文；**未验证可听输出** |
+| 存储被禁用 | PASS | 同上：三引擎均显示 “Browser storage is unavailable…” 横幅且模块正常启动 |
+| Safari 整局（macOS 26.6.2 / Safari 26.6.2） | PASS | `scripts/safari-online-e2e.mjs`（safaridriver）：房间 `CD8GDJ`（HTTP+ws://）与 `VFDHTZ`（https+wss，`acceptInsecureCerts`），均完整 60 手、两端 `netSeq` 60、`result` 2，30 手为真实 HID 点击 |
 | iOS Safari / Android Chrome | NOT TESTED | 无真机/模拟器 |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
 | 可信证书链 / 公网 HSTS | NOT TESTED | 自签证书本地验证，未申请证书/未改 DNS |

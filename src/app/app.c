@@ -1976,6 +1976,7 @@ int reversi_web_ai_active(void);
 int reversi_web_match_mode(void);
 void reversi_web_cancel_ai_test(void);
 int reversi_web_heap_bytes(void);
+int reversi_web_audio_ready(void);
 void reversi_web_resize(int width, int height);
 void reversi_web_persist(void);
 
@@ -2097,6 +2098,14 @@ EMSCRIPTEN_KEEPALIVE
 int reversi_web_heap_bytes(void)
 {
     return (int)emscripten_get_heap_size();
+}
+
+/* Read-only: raylib's audio device after audio_init(). Zero means the game
+ * is silent for this session, whatever the UI says. */
+EMSCRIPTEN_KEEPALIVE
+int reversi_web_audio_ready(void)
+{
+    return IsAudioDeviceReady() ? 1 : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE

@@ -12,10 +12,15 @@
  *   scripts/serve-web.sh 8000    (plain HTTP, so the page's ws:// is allowed)
  *   Playwright resolvable, as in scripts/web-online-e2e.mjs
  *
- * Run:
+ * Run (plain HTTP + ws://):
  *   NODE_PATH=~/rv-e2e/pw/node_modules node scripts/safari-online-e2e.mjs \
  *     --base http://127.0.0.1:8000/index.html --port 8080 \
  *     --driver http://127.0.0.1:4445 --shots /tmp/safari-shots
+ * Run over the local TLS terminator (https://localhost:8443 + wss://:8444):
+ *   ... --base https://localhost:8443/index.html --port 8444 --insecure
+ * --insecure maps to the acceptInsecureCerts capability, so Safari accepts
+ * the self-signed certificate for the page and its WebSocket without a
+ * keychain change. It proves the WSS path, not certificate trust.
  *
  * Two Safari quirks shape this script:
  *   - WebDriver pointer actions deliver mousedown/mouseup but no mousemove,
@@ -52,6 +57,7 @@ const baseUrl = arg(args, "--base", "http://127.0.0.1:8000/index.html");
 const wsPort = arg(args, "--port", "8080");
 const driverUrl = arg(args, "--driver", "http://127.0.0.1:4445");
 const shots = arg(args, "--shots", "");
+const insecure = args.includes("--insecure");
 const viewport = { width: 1200, height: 760 };
 
 const failures = [];
@@ -91,11 +97,23 @@ class SafariDriver {
     return value;
   }
 
-  async start() {
+  async start(insecure) {
     const value = await this.call("POST", "/session", {
-      capabilities: { alwaysMatch: { browserName: "safari" } },
+      capabilities: { alwaysMatch: { browserName: "safari", acceptInsecureCerts: insecure } },
     });
     this.id = value.sessionId;
+  }
+
+  /* W3C key actions: Safari delivers these to the page even though its
+   * pointer actions are incomplete. */
+  keys(values) {
+    const actions = [];
+    for (const value of values) {
+      actions.push({ type: "keyDown", value }, { type: "keyUp", value });
+    }
+    return this.call("POST", `/session/${this.id}/actions`, {
+      actions: [{ type: "key", id: "keyboard", actions }],
+    });
   }
 
   async quit() {
@@ -144,33 +162,19 @@ async function safariGeom(safari) {
              ih: window.innerHeight, ch: window.outerHeight - window.innerHeight };`);
 }
 
-/* Sets the page pointer, then presses. Two delivery modes:
- *   "real" — a real HID click at the mapped screen point (scripts/macos-click.swift)
- *   "dom"  — mousedown/mouseup dispatched on the canvas, held across frames
- * The click is real by preference; the DOM fallback exists because Safari's
- * automation occasionally drops an HID click after a pass. */
-async function safariClick(safari, clicker, pid, origin, geom, x, y,
-                           mode = "real") {
+/* Sets the page pointer, then posts a real HID click at the mapped screen
+ * point. Returns the logical position the engine reports back. */
+async function safariClick(safari, clicker, pid, origin, geom, x, y) {
   const clientX = geom.left + x * (geom.bw / geom.sw);
   const clientY = geom.top + y * (geom.bh / geom.sh);
   const at = `clientX: ${clientX}, clientY: ${clientY}, bubbles: true, `
     + "cancelable: true, view: window";
   await safari.exec(`document.getElementById('canvas').dispatchEvent(
     new MouseEvent('mousemove', { ${at} })); return true;`);
-  if (mode === "real") {
-    execFileSync(clicker, [String(pid),
-                           String(Math.round(origin.x + clientX)),
-                           String(Math.round(origin.y + geom.ch + clientY)),
-                           "150", "click"], { stdio: "ignore" });
-  } else {
-    await safari.exec(`document.getElementById('canvas').dispatchEvent(
-      new MouseEvent('mousedown', { ${at}, button: 0, buttons: 1 }));
-      return true;`);
-    await pause(140);
-    await safari.exec(`document.getElementById('canvas').dispatchEvent(
-      new MouseEvent('mouseup', { ${at}, button: 0, buttons: 0 }));
-      return true;`);
-  }
+  execFileSync(clicker, [String(pid),
+                         String(Math.round(origin.x + clientX)),
+                         String(Math.round(origin.y + geom.ch + clientY)),
+                         "150", "click"], { stdio: "ignore" });
   await pause(200);
   return safari.exec("return window.__reversiTest.mouse();");
 }
@@ -293,7 +297,7 @@ function cellCenter(g, row, col) {
 
 /* ---- main ------------------------------------------------------------ */
 
-const result = { steps: [], failures, input: { real: 0, dom: 0 } };
+const result = { steps: [], failures, clicks: 0 };
 let safari = null;
 let browser = null;
 try {
@@ -305,7 +309,7 @@ try {
     .split("\n")[0];
 
   safari = new SafariDriver(driverUrl);
-  await safari.start();
+  await safari.start(insecure);
   await safari.setRect(viewport.width, viewport.height, 60, 60);
   await safari.navigate(baseUrl);
   for (let i = 0; i < 100; i += 1) {
@@ -324,7 +328,7 @@ try {
   if (shots) await safari.screenshot(`${shots}/1-safari-menu.png`);
 
   browser = await launchBrowser("chrome");
-  const context = await browser.newContext({ viewport });
+  const context = await browser.newContext({ viewport, ignoreHTTPSErrors: insecure });
   const page = await context.newPage();
   page.on("pageerror", (error) => failures.push(`chrome pageerror: ${error}`));
   await page.goto(baseUrl, { waitUntil: "load" });
@@ -340,6 +344,18 @@ try {
 
   const sg = await safariGeom(safari);
   const sb = buttons(sg);
+  /* The lobby defaults to 8080; a TLS run terminates WSS on another port and
+   * the field has to be retyped. Safari's key actions reach the page even
+   * though its pointer actions do not. */
+  if (wsPort !== "8080") {
+    await safariClick(safari, clicker, safariPid, origin, sg,
+                      sb.port[0], sb.port[1]);
+    const keys = [];
+    for (let i = 0; i < 8; i += 1) keys.push("\uE003");
+    for (const digit of wsPort) keys.push(digit);
+    await safari.keys(keys);
+    await pause(400);
+  }
   await safariClick(safari, clicker, safariPid, origin, sg, sb.connect[0], sb.connect[1]);
   await pause(1800);
   const phaseAfterConnect = await safariPhase(safari);
@@ -439,14 +455,11 @@ try {
     /* Retries stay on the same cell: a late-landing click must never let the
      * model apply a different move than the server did. */
     let landed = null;
-    const modes = ["real", "dom", "real"];
-    for (let attempt = 0; attempt < modes.length && landed === null;
-         attempt += 1) {
+    for (let attempt = 0; attempt < 2 && landed === null; attempt += 1) {
       if (player === 1) {
         const g = await safariGeom(safari);
         const [x, y] = cellCenter(g, best[0], best[1]);
-        await safariClick(safari, clicker, safariPid, origin, g, x, y,
-                          modes[attempt]);
+        await safariClick(safari, clicker, safariPid, origin, g, x, y);
       } else {
         const g = await geom(page);
         const [x, y] = cellCenter(g, best[0], best[1]);
@@ -454,7 +467,7 @@ try {
       }
       landed = await waitSeq();
       if (landed !== null && player === 1) {
-        result.input[modes[attempt]] += 1;
+        result.clicks += 1;
       }
     }
     if (landed === null) {

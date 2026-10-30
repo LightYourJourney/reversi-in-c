@@ -302,6 +302,10 @@
       return module && module._reversi_web_heap_bytes
         ? module._reversi_web_heap_bytes() : -1;
     },
+    audioReady: function () {
+      return !!(module && module._reversi_web_audio_ready
+        && module._reversi_web_audio_ready());
+    },
     autoplay: function (seed) {
       if (module && module._reversi_web_debug_autoplay) {
         module._reversi_web_debug_autoplay(seed || 7);
