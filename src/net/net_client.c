@@ -11,6 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(REVERSI_NET_TLS) && REVERSI_NET_TLS
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#define CLIENT_TLS 1
+#else
+#define CLIENT_TLS 0
+#endif
+
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
@@ -74,6 +82,12 @@ struct NetClient {
     uint8_t outbound[REVERSI_NET_CLIENT_SEND_QUEUE_BYTES];
     size_t outbound_head;
     size_t outbound_count;
+    /* TLS (wss://). The handles live on the worker; the flag is set before
+     * the thread starts and read only by it until teardown. */
+    bool use_tls;
+    void *tls;      /* SSL * */
+    void *tls_ctx;  /* SSL_CTX * */
+    size_t tls_pending;
 #if defined(_WIN32)
     CRITICAL_SECTION mutex;
 #else
@@ -249,6 +263,139 @@ static void queue_message(NetClient *client, const char *text, size_t length)
     unlock_client(client);
 }
 
+/* Connection I/O: >0 bytes, 0 on EOF, -1 on error, -2 when the socket or the
+ * TLS state cannot make progress yet. Both transports share the callers. */
+static int connection_read(NetClient *client, void *data, size_t length)
+{
+#if CLIENT_TLS
+    if (client->tls != NULL) {
+        SSL *ssl = (SSL *)client->tls;
+        const int read = SSL_read(ssl, data, (int)length);
+        if (read > 0) {
+            return read;
+        }
+        const int error = SSL_get_error(ssl, read);
+        if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+            return -2;
+        }
+        if (error == SSL_ERROR_ZERO_RETURN) {
+            return 0;
+        }
+        return -1;
+    }
+#endif
+    const int read = (int)recv(client->socket, (char *)data, (int)length, 0);
+    if (read >= 0) {
+        return read;
+    }
+    return socket_would_block() ? -2 : -1;
+}
+
+static int connection_write(NetClient *client, const void *data, size_t length)
+{
+#if CLIENT_TLS
+    if (client->tls != NULL) {
+        SSL *ssl = (SSL *)client->tls;
+        const int written = SSL_write(ssl, data, (int)length);
+        if (written > 0) {
+            return written;
+        }
+        const int error = SSL_get_error(ssl, written);
+        if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+            return -2;
+        }
+        return -1;
+    }
+#endif
+    const int written = (int)send(client->socket, (const char *)data,
+                                  (int)length, 0);
+    if (written >= 0) {
+        return written;
+    }
+    return socket_would_block() ? -2 : -1;
+}
+
+#if CLIENT_TLS
+static void tls_release(NetClient *client)
+{
+    if (client->tls != NULL) {
+        SSL_shutdown((SSL *)client->tls);
+        SSL_free((SSL *)client->tls);
+        client->tls = NULL;
+    }
+    if (client->tls_ctx != NULL) {
+        SSL_CTX_free((SSL_CTX *)client->tls_ctx);
+        client->tls_ctx = NULL;
+    }
+    client->tls_pending = 0;
+}
+
+/* Verifies the chain against the system store (or SSL_CERT_FILE) and the
+ * host name against the address the user typed; there is no switch to skip
+ * either check. */
+static bool tls_handshake(NetClient *client, const char **reason)
+{
+    if (client->tls_ctx == NULL) {
+        SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+        if (ctx == NULL) {
+            *reason = "tls_unavailable";
+            return false;
+        }
+        SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+        SSL_CTX_set_options(ctx, SSL_OP_NO_RENEGOTIATION);
+        (void)SSL_CTX_set_default_verify_paths(ctx);
+        client->tls_ctx = ctx;
+    }
+    SSL *ssl = SSL_new((SSL_CTX *)client->tls_ctx);
+    if (ssl == NULL) {
+        *reason = "tls_unavailable";
+        return false;
+    }
+    client->tls = ssl;
+    SSL_set_fd(ssl, (int)client->socket);
+    SSL_set_tlsext_host_name(ssl, client->host);
+    if (SSL_set1_host(ssl, client->host) != 1) {
+        *reason = "tls_certificate_invalid";
+        return false;
+    }
+    SSL_set_connect_state(ssl);
+    const uint64_t deadline = now_ms() + REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS;
+    for (;;) {
+        if (atomic_load(&client->stop)) {
+            *reason = "cancelled";
+            return false;
+        }
+        const int result = SSL_connect(ssl);
+        if (result == 1) {
+            return true;
+        }
+        const int error = SSL_get_error(ssl, result);
+        if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+            *reason = SSL_get_verify_result(ssl) == X509_V_OK
+                ? "tls_handshake_failed" : "tls_certificate_invalid";
+            return false;
+        }
+        const uint64_t now = now_ms();
+        if (now >= deadline) {
+            *reason = "tls_handshake_failed";
+            return false;
+        }
+        const uint64_t remaining = deadline - now;
+        const int slice = remaining < 100 ? (int)remaining : 100;
+        if (error == SSL_ERROR_WANT_READ) {
+            if (socket_wait_readable(client->socket, slice) < 0) {
+                *reason = "tls_handshake_failed";
+                return false;
+            }
+        } else if (socket_wait_writable(client->socket, slice) < 0) {
+            *reason = "tls_handshake_failed";
+            return false;
+        }
+    }
+}
+#endif
+
 /* Writes one whole frame or fails within a bounded time. Only the worker
  * thread uses this (connect handshake); application frames go through the
  * outbound queue so no UI thread ever waits for the socket. */
@@ -258,14 +405,12 @@ static bool socket_write_all(NetClient *client, const uint8_t *data,
     size_t sent = 0;
     const uint64_t deadline = now_ms() + REVERSI_NET_CLIENT_SEND_TIMEOUT_MS;
     while (sent < length) {
-        const int written = (int)send(client->socket,
-                                      (const char *)data + sent,
-                                      (int)(length - sent), 0);
+        const int written = connection_write(client, data + sent, length - sent);
         if (written > 0) {
             sent += (size_t)written;
             continue;
         }
-        if (written < 0 && socket_would_block()) {
+        if (written == -2) {
             const uint64_t now = now_ms();
             if (now >= deadline) {
                 return false;
@@ -309,20 +454,25 @@ static bool outbound_flush(NetClient *client)
     const size_t capacity = sizeof(client->outbound);
     while (client->outbound_count > 0
            && client->socket != CLIENT_INVALID) {
-        const size_t contiguous = capacity - client->outbound_head;
-        const size_t length = client->outbound_count < contiguous
-            ? client->outbound_count : contiguous;
-        const int written = (int)send(
-            client->socket,
-            (const char *)client->outbound + client->outbound_head,
-            (int)length, 0);
+        /* TLS requires the retry to repeat the exact same call, so a
+         * would-block write keeps its length until it succeeds. */
+        size_t length = client->tls_pending;
+        if (length == 0) {
+            const size_t contiguous = capacity - client->outbound_head;
+            length = client->outbound_count < contiguous
+                ? client->outbound_count : contiguous;
+        }
+        const int written = connection_write(
+            client, client->outbound + client->outbound_head, length);
         if (written > 0) {
+            client->tls_pending = 0;
             client->outbound_head =
                 (client->outbound_head + (size_t)written) % capacity;
             client->outbound_count -= (size_t)written;
             continue;
         }
-        if (written < 0 && socket_would_block()) {
+        if (written == -2) {
+            client->tls_pending = length;
             return true;
         }
         return false;
@@ -362,8 +512,8 @@ static bool client_handshake(NetClient *client)
         if (ready < 0) {
             return false;
         }
-        const int read = (int)recv(client->socket, response + used,
-                                   (int)(sizeof(response) - 1 - used), 0);
+        const int read = connection_read(client, response + used,
+                                         sizeof(response) - 1 - used);
         if (read > 0) {
             used += (size_t)read;
             response[used] = '\0';
@@ -372,7 +522,7 @@ static bool client_handshake(NetClient *client)
             }
         } else if (read == 0) {
             return false;
-        } else if (!socket_would_block()) {
+        } else if (read != -2) {
             return false;
         }
     }
@@ -424,11 +574,13 @@ static void *client_thread(void *argument)
         return NULL;
 #endif
     }
-    bool allowed = false;
-    for (const struct addrinfo *it = results; it != NULL; it = it->ai_next) {
+    /* Plaintext is only ever sent to loopback/private addresses; with TLS
+     * any address is allowed because the certificate is verified. */
+    bool allowed = client->use_tls;
+    for (const struct addrinfo *it = results; it != NULL && !allowed;
+         it = it->ai_next) {
         if (address_is_local(it->ai_addr)) {
             allowed = true;
-            break;
         }
     }
     if (!allowed) {
@@ -445,7 +597,7 @@ static void *client_thread(void *argument)
     const uint64_t connect_deadline =
         now_ms() + REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS;
     for (struct addrinfo *it = results; it != NULL; it = it->ai_next) {
-        if (!address_is_local(it->ai_addr)) {
+        if (!client->use_tls && !address_is_local(it->ai_addr)) {
             continue;
         }
         socket_fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
@@ -485,6 +637,41 @@ static void *client_thread(void *argument)
     lock_client(client);
     client->socket = socket_fd;
     unlock_client(client);
+#if CLIENT_TLS
+    if (client->use_tls) {
+        const char *reason = "tls_handshake_failed";
+        if (!tls_handshake(client, &reason)) {
+            if (!atomic_load(&client->stop)) {
+                set_status(client, NET_CLIENT_FAILED, reason);
+            }
+            tls_release(client);
+            socket_close(socket_fd);
+            lock_client(client);
+            client->socket = CLIENT_INVALID;
+            unlock_client(client);
+            atomic_store(&client->running, false);
+#if defined(_WIN32)
+            return 0;
+#else
+            return NULL;
+#endif
+        }
+    }
+#else
+    if (client->use_tls) {
+        set_status(client, NET_CLIENT_FAILED, "tls_unavailable");
+        socket_close(socket_fd);
+        lock_client(client);
+        client->socket = CLIENT_INVALID;
+        unlock_client(client);
+        atomic_store(&client->running, false);
+#if defined(_WIN32)
+        return 0;
+#else
+        return NULL;
+#endif
+    }
+#endif
     if (!client_handshake(client)) {
         if (!atomic_load(&client->stop)) {
             set_status(client, NET_CLIENT_FAILED, "handshake_failed");
@@ -524,8 +711,7 @@ static void *client_thread(void *argument)
             set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
             break;
         }
-        const int read = (int)recv(socket_fd, (char *)buffer,
-                                   (int)sizeof(buffer), 0);
+        const int read = connection_read(client, buffer, sizeof(buffer));
         if (read == 0) {
             /* A shutdown this client asked for already carries its own
              * reason; do not overwrite it with "closed". */
@@ -535,7 +721,7 @@ static void *client_thread(void *argument)
             break;
         }
         if (read < 0) {
-            if (socket_would_block()) {
+            if (read == -2) {
                 continue;
             }
             if (!atomic_load(&client->stop)) {
@@ -587,6 +773,9 @@ static void *client_thread(void *argument)
             offset += consumed;
         }
     }
+#if CLIENT_TLS
+    tls_release(client);
+#endif
     lock_client(client);
     outbound_clear(client);
     if (client->socket != CLIENT_INVALID) {
@@ -691,14 +880,21 @@ void net_client_destroy(NetClient *client)
 #endif
 }
 
-bool net_client_connect(NetClient *client, const char *host, int port)
+static bool client_connect(NetClient *client, const char *host, int port,
+                           bool use_tls)
 {
     if (client == NULL || host == NULL || port <= 0 || port > 65535) {
         return false;
     }
     net_client_disconnect(client);
+    /* Fail fast rather than silently downgrading to plaintext. */
+    if (use_tls && !CLIENT_TLS) {
+        set_status(client, NET_CLIENT_FAILED, "tls_unavailable");
+        return false;
+    }
     snprintf(client->host, sizeof(client->host), "%s", host);
     client->port = port;
+    client->use_tls = use_tls;
     client->queue_head = 0;
     client->queue_count = 0;
     atomic_store(&client->stop, false);
@@ -712,6 +908,21 @@ bool net_client_connect(NetClient *client, const char *host, int port)
     }
     atomic_store(&client->thread_started, true);
     return true;
+}
+
+bool net_client_connect(NetClient *client, const char *host, int port)
+{
+    return client_connect(client, host, port, false);
+}
+
+bool net_client_connect_tls(NetClient *client, const char *host, int port)
+{
+    return client_connect(client, host, port, true);
+}
+
+bool net_client_tls_supported(void)
+{
+    return CLIENT_TLS != 0;
 }
 
 void net_client_disconnect(NetClient *client)

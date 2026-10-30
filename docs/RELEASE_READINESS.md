@@ -103,7 +103,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
 | 桌面发送队列（无主线程等待） | PASS | 16 KiB 有界队列；卡死服务器下 1,639 帧入队后以 `send_queue_full` 断开，单次调用最慢 6 ms |
-| 桌面公网明文拒绝 | PASS | 非回环/私网地址在开套接字前失败于 `tls_required`（`test_public_address_refused`） |
+| 桌面 WSS（macOS/Linux） | PASS | `tests/test_net_tls.c`：自建 CA 建连与往返、错误 CA、主机名不匹配、握手中断；真 nginx WSS + 服务端整局（`REVERSI_TLS_E2E`，52 断言） |
+| 桌面公网明文拒绝 | PASS | 无 TLS 的构建里仍拒绝非回环/私网地址（`test_public_address_refused`）；有 TLS 时走 wss，不降级 |
 | 无损健康检查 | PASS | `scripts/check-server-health.mjs`：`pong`、166 ms、未建房 |
 | 发布目录切换与回滚 | PASS（演练） | `scripts/rehearse-rollback.sh`：坏发布被拒 → 切回恢复 → 健康检查未建房 |
 | 发布包内容 | PASS | `Reversi-2.0.0-Darwin-arm64` 含 `bin/reversi_server`（`--help` 可运行）与 `web/`；`verify-package.sh` PASS |
@@ -130,9 +131,9 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **桌面端没有 TLS**：原生客户端只有明文 `ws://`，现在会拒绝公网地址
-   （`tls_required`）。**桌面端公网联机 NOT SUPPORTED**，Release Notes 必须
-   写明；WSS 的设计与用例见 `NETWORK_SECURITY.md` §5。
+1. **Windows 构建没有 TLS**：macOS/Linux 已支持 `wss://`（OpenSSL），
+   Windows 仍为明文模式并拒绝公网地址。Release Notes 必须写明平台差异；
+   实现与用例见 `NETWORK_SECURITY.md` §5。
 2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
    `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/
    WebKit 亦通过；本轮未重跑（会话不可见）。

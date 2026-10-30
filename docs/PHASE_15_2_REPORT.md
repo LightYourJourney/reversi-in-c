@@ -9,7 +9,7 @@
 | 问题 | 结论 |
 |---|---|
 | 任务一 部署工程 | **PASS（本地）**：发布包现在自带服务端与 Web 客户端；systemd/nginx/发行目录指向同一个 `current` 符号链接；生产验收改用无损健康检查；回滚演练可重复通过。systemd 本体仍未在真实 systemd 上执行（NOT TESTED，同前）。 |
-| 任务二 桌面 WSS | **未交付实现，已明确限制**：原生客户端没有任何 TLS 栈。新增硬性拦截——解析出的目标地址不是回环/私网时，**在建立套接字之前**以 `tls_required` 失败，桌面端不会回退到明文公网。设计、必须覆盖的用例写进 `NETWORK_SECURITY.md` §5。 |
+| 任务二 桌面 WSS | **已交付（macOS/Linux）**：原生客户端新增 OpenSSL 3 传输，证书链 + 主机名校验、TLS 1.2+、可取消握手、异步队列不变；大厅新增 “Use TLS (wss)” 复选框。Windows 构建无 OpenSSL，仍为明文并拒绝公网地址。 |
 | 任务三 主线程网络等待 | **PASS**：桌面发送改为 16 KiB 有界异步队列，主线程只入队；卡死服务器下实测单次调用最慢 6 ms（原实现单次最长 1 s）。 |
 | 任务四 文档一致性 | **PASS**：README/ROADMAP/TESTING/NETWORK_SECURITY/RELEASE_READINESS 与实测对齐；历史阶段报告保持原样。 |
 | 任务五 RC 验收 | **RC 保留**：本地 Debug/Release/ASan 各 26/26，浏览器三引擎联机与 9/9 自动化通过；Safari 本轮未重跑（见 §7）。 |
@@ -78,26 +78,37 @@ rehearse-rollback.sh: PASS 坏发布被拒 / PASS 回滚恢复 / PASS 未建房
 
 ## 4. 任务二：桌面 WSS
 
-**核实**：`src/net/net_client.c` 只实现明文 `ws://`，工程内不存在任何
-TLS 依赖；握手是手写的 HTTP Upgrade。
+**核实（改前）**：`src/net/net_client.c` 只实现明文 WebSocket，工程内没有
+任何 TLS 依赖；握手是手写的 HTTP Upgrade。
 
-**本轮交付**：
+**实现**：
 
-- 硬性拦截：`client_thread` 在 `getaddrinfo` 之后检查地址，
-  只允许回环、10/8、172.16/12、192.168/16、169.254/16、100.64/10；
-  其余**在打开套接字之前**以 `tls_required` 失败。桌面端不会把协议明文
-  发往公网，也不存在“先明文试一次”的路径。
-- 新增回归用例 `test_public_address_refused`（`8.8.8.8:443` → 1 s 内
-  `FAILED` + `tls_required`）；会话层把该原因翻成大厅可见的提示
-  “No TLS in this build: use a local or LAN server”，并用
-  `test_session_plaintext_refused` 覆盖。
-- `docs/NETWORK_SECURITY.md` §5 记录现状、设计（证书链 + 主机名校验、
-  TLS 1.2+、与现有非阻塞模型对齐、发送仍走异步队列、重连语义）与
-  必须覆盖的七类用例（有效证书、自签、主机名不匹配、过期、握手中断、
-  连接中断、服务器重启）。
+- OpenSSL 3 集成（CMake `REVERSI_ENABLE_TLS`，默认 ON；keg-only 的
+  Homebrew OpenSSL 通过 `brew --prefix openssl@3` 兜底）。找不到 OpenSSL
+  的构建自动退回明文模式，并在 UI 显示 “TLS not available in this build”。
+- 证书链走系统信任库（`SSL_CTX_set_default_verify_paths`，因此
+  `SSL_CERT_FILE` 可指向自建 CA）；主机名用用户输入的 host 做
+  `SSL_set1_host`，没有跳过校验的开关；TLS 1.2+，禁用重协商。
+- 握手在工作线程内推进，`SSL_ERROR_WANT_READ/WRITE` 接入既有的 `select`
+  与 5 s 预算，连接过程可取消；发送继续走 16 KiB 异步队列，部分写按
+  OpenSSL 要求以相同长度重试。
+- 明文限制保留：`ws://` 且目标不在回环/私网时，开套接字前以
+  `tls_required` 失败；`wss://` 则允许任意地址（证书已验证）。
+- 大厅新增 “Use TLS (wss)” 复选框；`net_session` 记住该选择并在自动重连
+  时沿用。
 
-**未交付**：WSS 传输本身。因此**桌面端公网联机标记为 NOT SUPPORTED**，
-发布说明必须写明；桌面↔Web 只在同一台机器的回环地址上验证过。
+**证据**（`tests/test_net_tls.c`）：
+
+| 场景 | 结果 |
+|---|---|
+| 自建 CA、主机名正确 | 建连成功，welcome 与 ping/pong 往返 |
+| 客户端信任另一个 CA | `tls_certificate_invalid` |
+| 证书只有 `DNS:localhost`，拨 `127.0.0.1` | `tls_certificate_invalid`（主机名不匹配） |
+| 握手成功后服务端断开 | 客户端进入 DISCONNECTED |
+| 真 nginx WSS + `reversi_server`（`REVERSI_TLS_E2E`） | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1；52 条断言全通过 |
+
+**未覆盖**：过期证书、真实公网 CA、TLS 中断后的自动重连（重连沿用同一
+传输，但自动化只覆盖明文路径）；Windows 无 TLS。
 
 ## 5. 任务三：主线程网络等待
 
@@ -138,9 +149,9 @@ ping 都由 `net_session` 直接调用）。
 
 | 套件 | 结果 |
 |---|---|
-| Debug `ctest` | **26/26 通过**，合计 **1,211,001** 条断言 |
-| Release `ctest` | 26/26 通过 |
-| ASan+UBSan `ctest`（`halt_on_error=1`） | 26/26 通过 |
+| Debug `ctest` | **27/27 通过**，合计 **1,211,034** 条断言（含 `net.tls` 33） |
+| Release `ctest` | 27/27 通过 |
+| ASan+UBSan `ctest`（`halt_on_error=1`） | 27/27 通过（含 `net.tls`） |
 | 浏览器联机 E2E（HTTPS/WSS） | Chrome `UV4QP5`、Firefox `SB6UEM`、WebKit `5B6XD4`，均 0 失败 |
 | 运行时检查（字体/音效/存储） | 三引擎全通过（标题带亮色像素 10.3–10.6%） |
 | 浏览器自动化套件 | **9/9 通过**（含此前一直 SKIP 的 `autoplay`：本轮重建 Debug Web 产物后通过） |
@@ -169,12 +180,14 @@ DMG/包体、GUI 桌面会话、桌面↔Web 实机对局**本轮未重跑**：�
 | 可信证书链、公网 HSTS/DNS | NOT TESTED | 需真实域名，未授权 |
 | Windows 物理桌面 GUI | NOT TESTED | CI 为托管 VM |
 | systemd / logrotate 实机 | NOT TESTED | 同上，属既有缺口 |
-| 桌面 WSS | **未实现** | 见 §4；桌面公网联机 NOT SUPPORTED |
+| 桌面 WSS | 已实现（macOS/Linux） | 见 §4；Windows 无 OpenSSL |
+| 过期证书 / 真实公网 CA | NOT TESTED | 本地自建 CA 已覆盖链与主机名 |
 
 ## 8. 真实发布阻碍
 
-1. **桌面端无法安全公网联机**（无 TLS，且现在会拒绝公网地址）。若要发布
-   “桌面公网可玩”，必须先完成 §4 的 WSS 实现与七类用例。
+1. **Windows 构建没有 TLS**：macOS/Linux 已可 `wss://` 联机，Windows 仍为
+   明文并拒绝公网地址。要么补 SChannel/OpenSSL 打包，要么在发布说明里
+   明确平台差异。
 2. **iOS Safari / Android Chrome 未验证**。
 3. **可信证书链与真实公网未验证**（本地自签/隔离代理不构成生产 PASS）。
 4. **Windows 物理桌面**未验证。

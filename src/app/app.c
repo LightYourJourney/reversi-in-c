@@ -1124,12 +1124,19 @@ static void app_handle_net_action(App *app, NetViewAction action)
     switch (action) {
     case NET_VIEW_CONNECT: {
         const int port = atoi(app->net_view.port);
-        if (port <= 0 || port > 65535
-            || !net_session_connect(app->net, app->net_view.host, port)) {
+        const bool started = port > 0 && port <= 65535
+            && (app->net_view.use_tls
+                    ? net_session_connect_tls(app->net, app->net_view.host,
+                                              port)
+                    : net_session_connect(app->net, app->net_view.host,
+                                          port));
+        if (!started) {
             app_notice(app, "Could not start the connection");
         }
         break;
     }
+    case NET_VIEW_TOGGLE_TLS:
+        break;
     case NET_VIEW_DISCONNECT:
         net_session_disconnect(app->net);
         break;

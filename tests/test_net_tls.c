@@ -1,0 +1,545 @@
+/*
+ * Native TLS (wss://) transport tests.
+ *
+ * An in-process TLS server speaks the same WebSocket handshake and text
+ * protocol as reversi_server, so these exercise the real client end to end:
+ * chain verification, host name verification, an untrusted issuer and a
+ * connection dropped mid-stream.
+ *
+ * Certificates are generated with the `openssl` CLI into a temp directory;
+ * the client trusts the generated CA through SSL_CERT_FILE, which is exactly
+ * the hook a self-hosted deployment uses to pin its own CA.
+ */
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#include "core/rules.h"
+#include "net/net_client.h"
+#include "net/net_session.h"
+#include "net/net_ws.h"
+#include "test_harness.h"
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <signal.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
+/* SSL_CERT_FILE as it was when the process started: the earlier cases point
+ * it at their own generated CAs, and the live case needs the real one. */
+static char g_original_cert_file[512];
+
+typedef struct TlsServer {
+    int listen_fd;
+    SSL_CTX *ctx;
+    int port;
+    bool echo;      /* echo frames back after the welcome */
+    bool drop_after_welcome;
+    bool saw_welcome;
+} TlsServer;
+
+typedef struct Events {
+    NetClientStatus status;
+    char reason[64];
+    int messages;
+    char last[256];
+} Events;
+
+static void on_message(void *context, const NetMessage *message)
+{
+    Events *events = context;
+    ++events->messages;
+    snprintf(events->last, sizeof(events->last), "%d",
+             (int)message->type);
+}
+
+static void on_status(void *context, NetClientStatus status,
+                      const char *reason)
+{
+    Events *events = context;
+    events->status = status;
+    if (reason != NULL) {
+        snprintf(events->reason, sizeof(events->reason), "%s", reason);
+    }
+}
+
+static void sleep_ms(int ms)
+{
+    struct timespec ts = {.tv_sec = ms / 1000,
+                          .tv_nsec = (long)(ms % 1000) * 1000000L};
+    nanosleep(&ts, NULL);
+}
+
+static void pump(NetClient *client, TlsServer *server, int ms)
+{
+    for (int elapsed = 0; elapsed < ms; elapsed += 2) {
+        net_client_poll(client);
+        (void)server;
+        sleep_ms(2);
+    }
+}
+
+static bool run(const char *command)
+{
+    return system(command) == 0;
+}
+
+/* Writes a CA + leaf certificate for `san` into dir; returns the CA path. */
+static bool make_certificate(const char *dir, const char *name,
+                             const char *san, char *ca_out, size_t ca_size,
+                             char *cert_out, size_t cert_size,
+                             char *key_out, size_t key_size)
+{
+    snprintf(ca_out, ca_size, "%s/%s-ca.pem", dir, name);
+    snprintf(cert_out, cert_size, "%s/%s-cert.pem", dir, name);
+    snprintf(key_out, key_size, "%s/%s-key.pem", dir, name);
+    char key_ca[512];
+    char csr[512];
+    snprintf(key_ca, sizeof(key_ca), "%s/%s-ca-key.pem", dir, name);
+    snprintf(csr, sizeof(csr), "%s/%s.csr", dir, name);
+
+    char command[2048];
+    snprintf(command, sizeof(command),
+             "openssl req -x509 -newkey rsa:2048 -nodes -days 2 "
+             "-subj /CN=%s-test-ca -keyout %s -out %s >/dev/null 2>&1",
+             name, key_ca, ca_out);
+    if (!run(command)) {
+        return false;
+    }
+    snprintf(command, sizeof(command),
+             "openssl req -newkey rsa:2048 -nodes -subj /CN=%s "
+             "-keyout %s -out %s >/dev/null 2>&1", san, key_out, csr);
+    if (!run(command)) {
+        return false;
+    }
+    /* `system()` runs /bin/sh, which has no process substitution: put the
+     * SAN into a real file instead. */
+    char ext[512];
+    snprintf(ext, sizeof(ext), "%s/%s-ext.cnf", dir, name);
+    FILE *file = fopen(ext, "w");
+    if (file == NULL) {
+        return false;
+    }
+    fprintf(file, "subjectAltName=%s\n", san);
+    fclose(file);
+    snprintf(command, sizeof(command),
+             "openssl x509 -req -in %s -CA %s -CAkey %s -CAcreateserial "
+             "-days 2 -extfile %s -out %s >/dev/null 2>&1",
+             csr, ca_out, key_ca, ext, cert_out);
+    if (!run(command)) {
+        return false;
+    }
+    return true;
+}
+
+static bool server_start(TlsServer *server, const char *cert,
+                         const char *key)
+{
+    server->ctx = SSL_CTX_new(TLS_server_method());
+    if (server->ctx == NULL) {
+        return false;
+    }
+    if (SSL_CTX_use_certificate_file(server->ctx, cert,
+                                     SSL_FILETYPE_PEM) != 1
+        || SSL_CTX_use_PrivateKey_file(server->ctx, key,
+                                       SSL_FILETYPE_PEM) != 1) {
+        return false;
+    }
+    server->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server->listen_fd < 0) {
+        return false;
+    }
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(0);
+    inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+    if (bind(server->listen_fd, (struct sockaddr *)&address,
+             sizeof(address)) != 0
+        || listen(server->listen_fd, 1) != 0) {
+        return false;
+    }
+    socklen_t length = sizeof(address);
+    if (getsockname(server->listen_fd, (struct sockaddr *)&address,
+                    &length) != 0) {
+        return false;
+    }
+    server->port = ntohs(address.sin_port);
+    return true;
+}
+
+static void server_stop(TlsServer *server)
+{
+    if (server->listen_fd >= 0) {
+        close(server->listen_fd);
+        server->listen_fd = -1;
+    }
+    if (server->ctx != NULL) {
+        SSL_CTX_free(server->ctx);
+        server->ctx = NULL;
+    }
+}
+
+/* Accepts one connection, answers the upgrade, sends a welcome and then
+ * echoes text frames until the peer leaves. */
+static void *server_thread(void *argument)
+{
+    TlsServer *server = argument;
+    const int fd = accept(server->listen_fd, NULL, NULL);
+    if (fd < 0) {
+        return NULL;
+    }
+    SSL *ssl = SSL_new(server->ctx);
+    SSL_set_fd(ssl, fd);
+    if (SSL_accept(ssl) != 1) {
+        SSL_free(ssl);
+        close(fd);
+        return NULL;
+    }
+    char request[2048];
+    size_t used = 0;
+    while (used < sizeof(request) - 1) {
+        const int read = SSL_read(ssl, request + used,
+                                  (int)(sizeof(request) - 1 - used));
+        if (read <= 0) {
+            break;
+        }
+        used += (size_t)read;
+        request[used] = '\0';
+        if (strstr(request, "\r\n\r\n") != NULL) {
+            break;
+        }
+    }
+    char key[25];
+    char response[256];
+    if (!net_ws_parse_handshake(request, used, key)
+        || !net_ws_build_handshake_response(key, response)) {
+        SSL_free(ssl);
+        close(fd);
+        return NULL;
+    }
+    if (SSL_write(ssl, response, (int)strlen(response)) <= 0) {
+        SSL_free(ssl);
+        close(fd);
+        return NULL;
+    }
+    NetWsParser parser;
+    net_ws_parser_init(&parser);
+    uint8_t buffer[2048];
+    uint64_t rng = 12345;
+    bool welcome_sent = false;
+    for (;;) {
+        const int read = SSL_read(ssl, buffer, (int)sizeof(buffer));
+        if (read <= 0) {
+            break;
+        }
+        NetWsFrame frame;
+        size_t consumed = 0;
+        const NetWsResult result = net_ws_parse(
+            &parser, buffer, (size_t)read, true, &frame, &consumed);
+
+        if (result == NET_WS_TEXT) {
+            if (!welcome_sent) {
+                welcome_sent = true;
+                server->saw_welcome = true;
+                uint8_t out[256];
+                const char *text = "welcome v=1 "
+                    "token=0123456789abcdef0123456789abcdef player=1";
+                const size_t length = net_ws_encode(
+                    0x1, (const uint8_t *)text, strlen(text), false, &rng,
+                    out, sizeof(out));
+                SSL_write(ssl, out, (int)length);
+                if (server->drop_after_welcome) {
+                    break;
+                }
+            } else if (server->echo && frame.length >= 4
+                       && memcmp(frame.payload, "ping", 4) == 0) {
+                /* Answer with a message the client direction accepts. */
+                uint8_t out[64];
+                const char *text = "pong";
+                const size_t length = net_ws_encode(
+                    0x1, (const uint8_t *)text, strlen(text), false, &rng,
+                    out, sizeof(out));
+                SSL_write(ssl, out, (int)length);
+            }
+        }
+    }
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    close(fd);
+    return NULL;
+}
+
+static bool wait_connected(NetClient *client, TlsServer *server, int ms)
+{
+    pump(client, server, ms);
+    return net_client_status(client) == NET_CLIENT_CONNECTED;
+}
+
+static void test_valid_certificate(TestStats *stats, const char *dir)
+{
+    char ca[512];
+    char cert[512];
+    char key[512];
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "valid", "DNS:localhost,IP:127.0.0.1", ca, sizeof(ca), cert,
+        sizeof(cert), key, sizeof(key)));
+    setenv("SSL_CERT_FILE", ca, 1);
+
+    TlsServer server = {.listen_fd = -1, .echo = true};
+    REVERSI_TEST_ASSERT(stats, server_start(&server, cert, key));
+    pthread_t thread;
+    REVERSI_TEST_ASSERT(stats,
+        pthread_create(&thread, NULL, server_thread, &server) == 0);
+
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    REVERSI_TEST_ASSERT(stats,
+        net_client_connect_tls(client, "localhost", server.port));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, &server, 5000));
+    /* The server answers the first text frame with a welcome. */
+    const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
+    REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
+    pump(client, &server, 800);
+    REVERSI_TEST_ASSERT(stats, events.messages >= 1);
+
+    /* Round trip through the encrypted channel. */
+    const NetMessage ping = {.type = NET_MSG_PING};
+    REVERSI_TEST_ASSERT(stats, net_client_send(client, &ping));
+    pump(client, &server, 300);
+    REVERSI_TEST_ASSERT(stats, events.messages >= 2);
+
+    net_client_destroy(client);
+    pthread_join(thread, NULL);
+    server_stop(&server);
+}
+
+static void test_untrusted_certificate(TestStats *stats, const char *dir)
+{
+    char ca[512];
+    char cert[512];
+    char key[512];
+    char other_ca[512];
+    char other_cert[512];
+    char other_key[512];
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "untrusted", "DNS:localhost,IP:127.0.0.1", ca, sizeof(ca),
+        cert, sizeof(cert), key, sizeof(key)));
+    /* The client trusts a different CA, so this chain must be rejected. */
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "other", "DNS:localhost", other_ca, sizeof(other_ca),
+        other_cert, sizeof(other_cert), other_key, sizeof(other_key)));
+    setenv("SSL_CERT_FILE", other_ca, 1);
+
+    TlsServer server = {.listen_fd = -1};
+    REVERSI_TEST_ASSERT(stats, server_start(&server, cert, key));
+    pthread_t thread;
+    REVERSI_TEST_ASSERT(stats,
+        pthread_create(&thread, NULL, server_thread, &server) == 0);
+
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    REVERSI_TEST_ASSERT(stats,
+        net_client_connect_tls(client, "localhost", server.port));
+    pump(client, &server, 3000);
+    REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_FAILED);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(events.reason, "tls_certificate_invalid") == 0);
+    net_client_destroy(client);
+    pthread_join(thread, NULL);
+    server_stop(&server);
+}
+
+static void test_hostname_mismatch(TestStats *stats, const char *dir)
+{
+    char ca[512];
+    char cert[512];
+    char key[512];
+    /* The certificate names localhost only; the client dials 127.0.0.1. */
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "hostname", "DNS:localhost", ca, sizeof(ca), cert,
+        sizeof(cert), key, sizeof(key)));
+    setenv("SSL_CERT_FILE", ca, 1);
+
+    TlsServer server = {.listen_fd = -1};
+    REVERSI_TEST_ASSERT(stats, server_start(&server, cert, key));
+    pthread_t thread;
+    REVERSI_TEST_ASSERT(stats,
+        pthread_create(&thread, NULL, server_thread, &server) == 0);
+
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    REVERSI_TEST_ASSERT(stats,
+        net_client_connect_tls(client, "127.0.0.1", server.port));
+    pump(client, &server, 3000);
+    REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_FAILED);
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(events.reason, "tls_certificate_invalid") == 0);
+    net_client_destroy(client);
+    pthread_join(thread, NULL);
+    server_stop(&server);
+}
+
+static void test_dropped_after_handshake(TestStats *stats, const char *dir)
+{
+    char ca[512];
+    char cert[512];
+    char key[512];
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "drop", "DNS:localhost,IP:127.0.0.1", ca, sizeof(ca), cert,
+        sizeof(cert), key, sizeof(key)));
+    setenv("SSL_CERT_FILE", ca, 1);
+
+    TlsServer server = {.listen_fd = -1, .drop_after_welcome = true};
+    REVERSI_TEST_ASSERT(stats, server_start(&server, cert, key));
+    pthread_t thread;
+    REVERSI_TEST_ASSERT(stats,
+        pthread_create(&thread, NULL, server_thread, &server) == 0);
+
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    REVERSI_TEST_ASSERT(stats,
+        net_client_connect_tls(client, "localhost", server.port));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, &server, 5000));
+    const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
+    REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
+    pump(client, &server, 2000);
+    REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_DISCONNECTED);
+    net_client_destroy(client);
+    pthread_join(thread, NULL);
+    server_stop(&server);
+}
+
+/* Opt-in: two TLS sessions play a full round against a real reversi_server
+ * behind a TLS terminator. Set REVERSI_TLS_E2E=host:port and SSL_CERT_FILE to
+ * the CA that signed the endpoint's certificate. */
+static void test_live_server(TestStats *stats)
+{
+    if (g_original_cert_file[0] != '\0') {
+        setenv("SSL_CERT_FILE", g_original_cert_file, 1);
+    }
+    const char *target = getenv("REVERSI_TLS_E2E");
+    if (target == NULL || target[0] == '\0') {
+        printf("  (set REVERSI_TLS_E2E=host:port to run the live case)\n");
+        return;
+    }
+    char host[128];
+    size_t length = strcspn(target, ":");
+    if (length == 0 || length >= sizeof(host)) {
+        REVERSI_TEST_ASSERT(stats, false);
+        return;
+    }
+    memcpy(host, target, length);
+    host[length] = '\0';
+    const int port = atoi(target + length + 1);
+    REVERSI_TEST_ASSERT(stats, port > 0);
+
+    NetSession *a = net_session_create();
+    NetSession *b = net_session_create();
+    REVERSI_TEST_ASSERT(stats, a != NULL && b != NULL);
+    REVERSI_TEST_ASSERT(stats, net_session_connect_tls(a, host, port));
+    REVERSI_TEST_ASSERT(stats, net_session_connect_tls(b, host, port));
+
+    const int step = 5;
+    for (int elapsed = 0; elapsed < 5000; elapsed += step) {
+        net_session_update(a, 0.01f);
+        net_session_update(b, 0.01f);
+        sleep_ms(step);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_LOBBY);
+    REVERSI_TEST_ASSERT(stats, b->phase == NET_SESSION_LOBBY);
+
+    REVERSI_TEST_ASSERT(stats, net_session_create_room(a, STONE_BLACK));
+    for (int elapsed = 0; elapsed < 5000 && a->phase != NET_SESSION_WAITING;
+         elapsed += step) {
+        net_session_update(a, 0.01f);
+        net_session_update(b, 0.01f);
+        sleep_ms(step);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_WAITING);
+    REVERSI_TEST_ASSERT(stats, strlen(a->code) == REVERSI_NET_CODE_LEN);
+
+    REVERSI_TEST_ASSERT(stats, net_session_join_room(b, a->code, STONE_WHITE));
+    for (int elapsed = 0; elapsed < 5000 && b->phase != NET_SESSION_WAITING;
+         elapsed += step) {
+        net_session_update(a, 0.01f);
+        net_session_update(b, 0.01f);
+        sleep_ms(step);
+    }
+    REVERSI_TEST_ASSERT(stats, b->phase == NET_SESSION_WAITING);
+
+    REVERSI_TEST_ASSERT(stats, net_session_ready(a));
+    REVERSI_TEST_ASSERT(stats, net_session_ready(b));
+    for (int elapsed = 0; elapsed < 5000
+         && (a->phase != NET_SESSION_PLAYING
+             || b->phase != NET_SESSION_PLAYING); elapsed += step) {
+        net_session_update(a, 0.01f);
+        net_session_update(b, 0.01f);
+        sleep_ms(step);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_PLAYING);
+    REVERSI_TEST_ASSERT(stats, b->phase == NET_SESSION_PLAYING);
+
+    Move moves[REVERSI_BOARD_CELL_COUNT];
+    const int count = rules_generate_legal_moves(
+        &a->game.board, a->game.current_player, moves,
+        REVERSI_BOARD_CELL_COUNT);
+    REVERSI_TEST_ASSERT(stats, count > 0);
+    REVERSI_TEST_ASSERT(stats, net_session_move(a, moves[0]));
+    for (int elapsed = 0; elapsed < 5000 && (a->seq < 1 || b->seq < 1);
+         elapsed += step) {
+        net_session_update(a, 0.01f);
+        net_session_update(b, 0.01f);
+        sleep_ms(step);
+    }
+    REVERSI_TEST_ASSERT(stats, a->seq == 1);
+    REVERSI_TEST_ASSERT(stats, b->seq == 1);
+
+    net_session_destroy(a);
+    net_session_destroy(b);
+}
+
+int main(void)
+{
+#if !defined(_WIN32)
+    signal(SIGPIPE, SIG_IGN);
+#endif
+    char dir[256];
+    snprintf(dir, sizeof(dir), "/tmp/reversi-tls-%ld", (long)getpid());
+    (void)mkdir(dir, 0700);
+    if (!run("command -v openssl >/dev/null 2>&1")) {
+        fprintf(stderr, "openssl CLI not found; cannot generate test certs\n");
+        return 1;
+    }
+    const char *cert_file = getenv("SSL_CERT_FILE");
+    if (cert_file != NULL) {
+        snprintf(g_original_cert_file, sizeof(g_original_cert_file), "%s",
+                 cert_file);
+    }
+    TestStats stats = {0};
+    printf("RUN  test_valid_certificate\n");
+    test_valid_certificate(&stats, dir);
+    printf("RUN  test_untrusted_certificate\n");
+    test_untrusted_certificate(&stats, dir);
+    printf("RUN  test_hostname_mismatch\n");
+    test_hostname_mismatch(&stats, dir);
+    printf("RUN  test_dropped_after_handshake\n");
+    test_dropped_after_handshake(&stats, dir);
+    printf("RUN  test_live_server\n");
+    test_live_server(&stats);
+    return reversi_test_summary(&stats, "net.tls");
+}

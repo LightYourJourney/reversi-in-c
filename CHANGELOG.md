@@ -20,6 +20,9 @@
 
 ### Added
 
+- 桌面端 `wss://`：OpenSSL 3 传输（证书链 + 主机名校验、TLS 1.2+、可取消
+  握手），大厅新增 “Use TLS (wss)” 复选框；无 OpenSSL 的构建仍为明文并
+  拒绝公网地址。
 - `scripts/check-server-health.mjs`（无损健康检查）与
   `scripts/rehearse-rollback.sh`（发布切换/回滚演练）。
 

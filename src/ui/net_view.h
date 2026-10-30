@@ -17,7 +17,8 @@ typedef enum NetViewAction {
     NET_VIEW_JOIN,
     NET_VIEW_READY,
     NET_VIEW_LEAVE,
-    NET_VIEW_COPY_CODE
+    NET_VIEW_COPY_CODE,
+    NET_VIEW_TOGGLE_TLS
 } NetViewAction;
 
 typedef enum NetViewButton {
@@ -38,6 +39,7 @@ typedef struct NetView {
     char code[REVERSI_NET_CODE_LEN + 1];
     int focus;
     Stone color;
+    bool use_tls;
     float caret;
     UiButton buttons[NET_BTN_COUNT];
 } NetView;

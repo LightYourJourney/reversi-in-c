@@ -50,6 +50,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.protocol | reversi_net_protocol_tests | 33 | 协议字段/版本/方向/棋盘/错误/终局快照 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
 | net.server | reversi_net_server_tests | 5,758（macOS）/ 5,765（Linux/Windows） | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊、Hello 顺序、握手/空闲/房间 TTL、加入失败限速、连接/房间上限、等待房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、8 局连续 soak、发送队列饱和（非 macOS） | PASS |
+| net.tls | reversi_net_tls_tests | 33 | TLS 1.2+ 握手、证书链与主机名校验、错误 CA、握手中断；可选整局（`REVERSI_TLS_E2E`） | PASS |
 | net.client | reversi_net_client_tests | 63 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出、服务器不读时的队列饱和与主线程零等待、连接取消与 5 s 超时、公网地址拒绝 | PASS |
 | net.session | reversi_net_session_tests | 96 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、重连预算耗尽 FAILED、落子记录 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
@@ -368,6 +369,10 @@ NODE_PATH=~/rv-e2e/pw/node_modules \
   node scripts/web-online-e2e.mjs --browser chrome \
   --base https://localhost:9443/index.html --ws-port 9444
 node scripts/web-transport-failure-check.mjs --browser chrome
+
+# 桌面 WSS（可选：对着本地 nginx WSS + 真服务端跑一局）
+REVERSI_TLS_E2E=localhost:8444 SSL_CERT_FILE=/path/to/ca.pem \
+  ./build/reversi_net_tls_tests
 
 # 健康检查（无损，可随时对着运行中的服务执行）
 node scripts/check-server-health.mjs --url ws://127.0.0.1:8080/

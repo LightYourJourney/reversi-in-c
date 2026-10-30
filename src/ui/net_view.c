@@ -84,6 +84,16 @@ static void edit_field(NetView *view, NetField *field)
     }
 }
 
+static Rectangle net_view_tls_bounds(void)
+{
+    const float width = (float)GetScreenWidth();
+    const float height = (float)GetScreenHeight();
+    const float panel_width = fminf(560.0f, width - 40.0f);
+    const float x = (width - panel_width) * 0.5f;
+    const float top = fmaxf(80.0f, height * 0.16f);
+    return (Rectangle){x, top + 168.0f, 260.0f, 24.0f};
+}
+
 NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
                               const NetSession *session)
 {
@@ -100,6 +110,12 @@ NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
                 view->focus = i;
                 break;
             }
+        }
+        if (net_client_tls_supported()
+            && CheckCollisionPointRec(input->mouse,
+                                      net_view_tls_bounds())) {
+            view->use_tls = !view->use_tls;
+            return NET_VIEW_TOGGLE_TLS;
         }
     }
     if (view->focus >= 0 && view->focus < 3) {
@@ -232,6 +248,28 @@ void net_view_draw(const NetView *view, const NetSession *session,
                          (Rectangle){x, top + 140.0f, panel_width, 20.0f},
                          REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT,
                          UI_ALIGN_LEFT);
+    {
+        const Rectangle box = net_view_tls_bounds();
+        ui_draw_panel((Rectangle){box.x, box.y + 4.0f, 16.0f, 16.0f},
+                      REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_SURFACE_ALT,
+                      view->use_tls ? REVERSI_UI_COLOR_ACCENT
+                                    : REVERSI_UI_COLOR_BORDER);
+        if (view->use_tls) {
+            ui_draw_panel((Rectangle){box.x + 4.0f, box.y + 8.0f, 8.0f, 8.0f},
+                          REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_ACCENT,
+                          REVERSI_UI_COLOR_ACCENT);
+        }
+        const bool supported = net_client_tls_supported();
+        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR,
+                             supported ? "Use TLS (wss)"
+                                       : "TLS not available in this build",
+                             (Rectangle){box.x + 26.0f, box.y,
+                                         box.width - 26.0f, box.height},
+                             REVERSI_UI_FONT_SMALL,
+                             supported ? REVERSI_UI_COLOR_TEXT
+                                       : REVERSI_UI_COLOR_TEXT_MUTED,
+                             UI_ALIGN_LEFT);
+    }
     if (session->code[0] != '\0') {
         char room[128];
         snprintf(room, sizeof(room), "Room %s   You: %s%s", session->code,

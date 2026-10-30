@@ -27,6 +27,7 @@ typedef struct NetSession {
     NetSessionPhase phase;
     char host[64];
     int port;
+    bool use_tls;
     char code[REVERSI_NET_CODE_LEN + 1];
     char token[REVERSI_NET_TOKEN_LEN + 1];
     int player;
@@ -62,6 +63,10 @@ NetSession *net_session_create(void);
 void net_session_destroy(NetSession *session);
 
 bool net_session_connect(NetSession *session, const char *host, int port);
+/* wss:// instead of ws://; remembered across automatic reconnects. A build
+ * without OpenSSL reports NET_SESSION_FAILED with "tls_unavailable". */
+bool net_session_connect_tls(NetSession *session, const char *host,
+                             int port);
 void net_session_disconnect(NetSession *session);
 void net_session_update(NetSession *session, float dt);
 

@@ -28,7 +28,17 @@ NetClient *net_client_create(NetClientMessageFn on_message,
                              NetClientStatusFn on_status, void *context);
 void net_client_destroy(NetClient *client);
 
+/* Plain ws://. Non-local addresses are refused (reason "tls_required") so the
+ * protocol is never sent in clear text to a public peer. */
 bool net_client_connect(NetClient *client, const char *host, int port);
+
+/* wss://: TLS 1.2+, chain verified against the system store (SSL_CERT_FILE is
+ * honoured) and the host name verified against `host`. A build without
+ * OpenSSL fails with "tls_unavailable" instead of falling back to plaintext. */
+bool net_client_connect_tls(NetClient *client, const char *host, int port);
+
+/* Whether this build was compiled with a TLS stack. */
+bool net_client_tls_supported(void);
 void net_client_disconnect(NetClient *client);
 void net_client_poll(NetClient *client);
 

@@ -226,6 +226,35 @@ if(NOT EMSCRIPTEN)
         find_package(Threads REQUIRED)
         target_link_libraries(reversi_net_client PRIVATE Threads::Threads)
     endif()
+    # Optional native TLS (wss://). Without OpenSSL the desktop client stays
+    # plaintext-only and refuses non-local peers (see NETWORK_SECURITY.md §5).
+    # The Web build never uses this: the browser owns its TLS stack.
+    option(REVERSI_ENABLE_TLS "Build the native client with OpenSSL (wss://)"
+           ON)
+    if(REVERSI_ENABLE_TLS)
+        find_package(OpenSSL 3.0 QUIET)
+        if(NOT OpenSSL_FOUND AND APPLE)
+            # Homebrew's openssl is keg-only: CMake does not search its prefix.
+            execute_process(COMMAND brew --prefix openssl@3
+                OUTPUT_VARIABLE REVERSI_BREW_OPENSSL
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET)
+            if(REVERSI_BREW_OPENSSL AND EXISTS "${REVERSI_BREW_OPENSSL}")
+                set(OPENSSL_ROOT_DIR "${REVERSI_BREW_OPENSSL}")
+                find_package(OpenSSL 3.0 QUIET)
+            endif()
+        endif()
+        if(OpenSSL_FOUND)
+            target_link_libraries(reversi_net_client
+                PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+            target_compile_definitions(reversi_net_client
+                PUBLIC REVERSI_NET_TLS=1)
+            set(REVERSI_HAVE_TLS TRUE)
+            message(STATUS "Reversi: native TLS enabled (${OPENSSL_VERSION})")
+        else()
+            message(STATUS "Reversi: OpenSSL not found, native TLS disabled")
+        endif()
+    endif()
 endif()
 
 if(NOT EMSCRIPTEN)
@@ -596,6 +625,20 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
     set_tests_properties(net.client PROPERTIES
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         TIMEOUT 60)
+
+    if(REVERSI_HAVE_TLS)
+        add_executable(reversi_net_tls_tests tests/test_net_tls.c)
+        target_include_directories(reversi_net_tls_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        target_link_libraries(reversi_net_tls_tests PRIVATE
+            reversi_net_client reversi_warnings
+            OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+        add_test(NAME net.tls COMMAND reversi_net_tls_tests)
+        set_tests_properties(net.tls PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            TIMEOUT 120)
+    endif()
 
     add_executable(reversi_net_server_tests tests/test_net_server.c)
     target_include_directories(reversi_net_server_tests PRIVATE

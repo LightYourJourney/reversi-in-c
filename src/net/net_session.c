@@ -79,6 +79,10 @@ static void on_status(void *context, NetClientStatus status,
         if (reason != NULL && strcmp(reason, "tls_required") == 0) {
             snprintf(session->error, sizeof(session->error),
                      "No TLS in this build: use a local or LAN server");
+        } else if (reason != NULL
+                   && strcmp(reason, "tls_unavailable") == 0) {
+            snprintf(session->error, sizeof(session->error),
+                     "This build has no TLS support");
         }
         if (session->active && session->token[0] != '\0'
             && session->reconnect_attempts < 5) {
@@ -245,20 +249,33 @@ void net_session_destroy(NetSession *session)
     free(session);
 }
 
-bool net_session_connect(NetSession *session, const char *host, int port)
+static bool session_connect(NetSession *session, const char *host, int port,
+                            bool use_tls)
 {
     if (session == NULL || host == NULL || host[0] == '\0') {
         return false;
     }
     snprintf(session->host, sizeof(session->host), "%s", host);
     session->port = port;
+    session->use_tls = use_tls;
     session->active = false;
     session->token[0] = '\0';
     session->rejoin_pending = false;
     session->reconnect_attempts = 0;
     session->moves_count = 0;
     session->moves_complete = true;
-    return net_client_connect(session->client, host, port);
+    return use_tls ? net_client_connect_tls(session->client, host, port)
+                   : net_client_connect(session->client, host, port);
+}
+
+bool net_session_connect(NetSession *session, const char *host, int port)
+{
+    return session_connect(session, host, port, false);
+}
+
+bool net_session_connect_tls(NetSession *session, const char *host, int port)
+{
+    return session_connect(session, host, port, true);
 }
 
 void net_session_disconnect(NetSession *session)
@@ -284,7 +301,13 @@ void net_session_update(NetSession *session, float dt)
             session->reconnect_timer = 0.0f;
             ++session->reconnect_attempts;
             session->rejoin_pending = true;
-            net_client_connect(session->client, session->host, session->port);
+            if (session->use_tls) {
+                net_client_connect_tls(session->client, session->host,
+                                       session->port);
+            } else {
+                net_client_connect(session->client, session->host,
+                                   session->port);
+            }
         }
     }
     if (net_client_status(session->client) == NET_CLIENT_CONNECTED) {

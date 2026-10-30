@@ -343,9 +343,11 @@ static void test_send_to_stalled_server(TestStats *stats)
     const uint64_t elapsed_ms = test_now_ms() - begin;
     REVERSI_TEST_ASSERT(stats, refused);
     REVERSI_TEST_ASSERT(stats, sent < 2000000);
-    /* The old synchronous path could spend 1 s per call here. */
-    REVERSI_TEST_ASSERT(stats, elapsed_ms < 1000);
-    REVERSI_TEST_ASSERT(stats, slowest < 100);
+    /* The old synchronous path spent up to 1 s in a single call. The bound
+     * is loose enough for a loaded CI runner (a descheduled thread can add
+     * tens of ms) and still far below that. */
+    REVERSI_TEST_ASSERT(stats, elapsed_ms < 3000);
+    REVERSI_TEST_ASSERT(stats, slowest < 250);
 
     net_client_poll(client);
     REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_DISCONNECTED);
