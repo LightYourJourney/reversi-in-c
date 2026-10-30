@@ -157,7 +157,7 @@ ping 都由 `net_session` 直接调用）。
 | 浏览器自动化套件 | **9/9 通过**（含此前一直 SKIP 的 `autoplay`：本轮重建 Debug Web 产物后通过） |
 | 安装包验收 | ZIP `verify-package.sh` PASS（含新增的服务端/Web 断言） |
 | 回滚演练 | 3 项 PASS |
-| CI（`41034468383` / `7a49f18`） | **9/9 成功**：三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包、Linux 包验收 |
+| CI（`41042295389` / `342cb9a`） | **9/9 成功**：三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包、Linux 包验收（含 Linux 上的 `net.tls`） |
 
 CI 过程中暴露并修掉了两个问题，都是**测试/打包**问题而非产品缺陷：
 
