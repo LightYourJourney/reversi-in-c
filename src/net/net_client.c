@@ -790,17 +790,22 @@ bool net_client_send(NetClient *client, const NetMessage *message)
         queued = outbound_push(client, frame, length);
         overflow = !queued;
     }
+    if (overflow && socket != CLIENT_INVALID) {
+        /* Shut the socket down while the mutex still pins it: the descriptor
+         * could otherwise be closed and reused by the worker before this
+         * call reaches shutdown(). */
+#if defined(_WIN32)
+        shutdown(socket, SD_BOTH);
+#else
+        shutdown(socket, SHUT_RDWR);
+#endif
+    }
     unlock_client(client);
     if (overflow) {
         /* The queue is the only buffer between this call and a peer that
          * stopped reading. Once it is full the frame cannot arrive in time,
          * so drop the connection and let the session resync. */
         set_status(client, NET_CLIENT_DISCONNECTED, "send_queue_full");
-#if defined(_WIN32)
-        shutdown(socket, SD_BOTH);
-#else
-        shutdown(socket, SHUT_RDWR);
-#endif
         atomic_store(&client->stop, true);
     }
     return queued;
