@@ -232,6 +232,18 @@ bool net_client_send(NetClient *client, const NetMessage *message)
     return true;
 }
 
+/* The browser owns TLS: a https:// page upgrades to wss:// automatically, so
+ * there is no separate transport to select and nothing to toggle. */
+bool net_client_connect_tls(NetClient *client, const char *host, int port)
+{
+    return net_client_connect(client, host, port);
+}
+
+bool net_client_tls_supported(void)
+{
+    return false;
+}
+
 NetClientStatus net_client_status(const NetClient *client)
 {
     return client != NULL ? client->status : NET_CLIENT_IDLE;

@@ -97,8 +97,10 @@
 | `REVERSI_TLS_E2E=host:port` + 真 nginx WSS + `reversi_server` | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1（本机实测，52 条断言） |
 
 **平台差异**：macOS 与 Linux 构建带 TLS（CI 的 Linux 任务安装
-`libssl-dev`）；**Windows 构建没有 OpenSSL**，因此仍为明文模式并拒绝公网
-地址。发布说明必须写明这一点。
+`libssl-dev`）。**Windows 构建刻意关闭 TLS**：链接 OpenSSL 后发布包还必须
+携带 `libssl-3-x64.dll` / `libcrypto-3-x64.dll`，在没有 Windows 打包验证
+之前，宁可保持“明文 + 拒绝公网”，也不发布一个可能起不来的包。启用路径：
+把这两个 DLL 放进发布包并加一条 Windows 包启动验收。发布说明必须写明。
 
 **仍未覆盖**：有效但已过期的证书、真实公网 CA、TLS 中断后的自动重连
 （重连路径复用同一传输，但只有明文路径有自动化）。

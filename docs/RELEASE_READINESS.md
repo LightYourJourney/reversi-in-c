@@ -132,8 +132,9 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
 1. **Windows 构建没有 TLS**：macOS/Linux 已支持 `wss://`（OpenSSL），
-   Windows 仍为明文模式并拒绝公网地址。Release Notes 必须写明平台差异；
-   实现与用例见 `NETWORK_SECURITY.md` §5。
+   Windows 刻意保持明文并拒绝公网地址（链接 OpenSSL 后需随包分发 DLL，
+   未验证前不启用）。Release Notes 必须写明平台差异；见
+   `NETWORK_SECURITY.md` §5。
 2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
    `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/
    WebKit 亦通过；本轮未重跑（会话不可见）。

@@ -231,6 +231,13 @@ if(NOT EMSCRIPTEN)
     # The Web build never uses this: the browser owns its TLS stack.
     option(REVERSI_ENABLE_TLS "Build the native client with OpenSSL (wss://)"
            ON)
+    # Windows would link OpenSSL but the package cannot ship its DLLs yet, and
+    # a release that fails to start is worse than one without TLS: keep the
+    # Windows build plaintext-only until the runtime is bundled.
+    if(WIN32)
+        set(REVERSI_ENABLE_TLS OFF)
+        message(STATUS "Reversi: native TLS disabled on Windows (see NETWORK_SECURITY.md §5)")
+    endif()
     if(REVERSI_ENABLE_TLS)
         find_package(OpenSSL 3.0 QUIET)
         if(NOT OpenSSL_FOUND AND APPLE)
@@ -626,7 +633,7 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         TIMEOUT 60)
 
-    if(REVERSI_HAVE_TLS)
+    if(REVERSI_HAVE_TLS AND NOT WIN32)
         add_executable(reversi_net_tls_tests tests/test_net_tls.c)
         target_include_directories(reversi_net_tls_tests PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/src"
