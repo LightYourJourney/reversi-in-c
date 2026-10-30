@@ -168,7 +168,9 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
    Windows 物理桌面 GUI 未验证。
 2. 桌面↔Web：**PASS**（房间 `D7AKVC`，2026-10-29；Phase 14 的 `HVVFKP`
    为旧证据）。
-3. Safari、iOS Safari、Android Chrome：**NOT TESTED**。字体渲染与音效
+3. Safari（桌面）：**PASS**（2026-10-30 追加，房间 `CD8GDJ`，60 手终局，
+   `safaridriver` 驱动、真实 HID 点击；见 `WEB_ONLINE_TESTING.md` §8）。
+   iOS Safari、Android Chrome：**NOT TESTED**。字体渲染与音效
    **NOT TESTED**（浏览器 smoke 只证明无控制台错误；桌面字体/音效为
    Phase 14 GUI 证据，本阶段无显示器未复验）。
 4. 真实公网：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域延迟
@@ -217,22 +219,23 @@ REVERSI_SOAK_MS=600000 ASAN_OPTIONS=halt_on_error=1 \
 ## 9. 是否具备 Public Beta / 正式 Release 条件
 
 - **Public Beta：PARTIAL（有条件可以）** —— 仅限“源码 + 自托管”，
-  发布说明必须写明：未做公网安全评估、真实网络与 Safari/iOS/Android
-  未验证。核心在线对战、三引擎浏览器、TLS 代理与优雅关闭均有本地证据。
+  发布说明必须写明：未做公网安全评估、真实网络与 iOS/Android 未验证。
+  核心在线对战、四引擎浏览器（Chrome/Firefox/WebKit/Safari）、TLS 代理
+  与优雅关闭均有本地证据。
 - **正式 Release：FAIL（接近但暂不具备）** —— CI 9/9、安装包、macOS GUI、
   桌面↔Web、发送队列饱和（Linux/Windows）与本地 limit_conn 均已验证；
-  剩余阻碍：Safari/iOS/Android 未验证、可信证书与真实公网未测、Windows
-  物理桌面未验证、systemd/logrotate 模板未在真实 systemd 执行。详见
-  `RELEASE_READINESS.md` §6。
+  剩余阻碍：iOS Safari/Android Chrome 未验证、可信证书与真实公网未测、
+  Windows 物理桌面未验证、systemd/logrotate 模板未在真实 systemd 执行。
+  详见 `RELEASE_READINESS.md` §6。
 
 ## 10. 下阶段建议
 
-1. 在 Safari 中启用“Allow Remote Automation”后执行 Safari 联机 E2E。
-2. 用真实域名与 Let's Encrypt 做一次隔离环境部署，验证证书链、HSTS
+1. 用真实域名与 Let's Encrypt 做一次隔离环境部署，验证证书链、HSTS
    与代理超时；并在真实 systemd 主机上执行 `systemd-analyze verify` 与
    `logrotate -d`。
-3. 补 Safari（`safaridriver`）与 Android Chrome（真机/模拟器）验证。
-4. 需要公网级 DoS 防护时，评估边缘限流/IP 信誉或 WAF；应用层队列饱和
+2. 补 iOS Safari 与 Android Chrome（真机/模拟器）验证；桌面 Safari 已于
+   2026-10-30 通过（`scripts/safari-online-e2e.mjs`）。
+3. 需要公网级 DoS 防护时，评估边缘限流/IP 信誉或 WAF；应用层队列饱和
    仍建议保留“关闭连接 + 座位保留”的策略。
 
 ## 11. 回滚

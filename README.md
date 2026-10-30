@@ -521,7 +521,7 @@ ctest --test-dir build --output-on-failure
 | ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告（Phase 15 复跑） |
 | Debug + GUI | 30/30 通过（Phase 14）；Phase 15 本机无显示器，NOT TESTED |
 | TSan | `net.session` 96、`net.client` 57 断言，无竞争报告（Phase 15） |
-| 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；Safari/iOS/Android **NOT TESTED** |
+| 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；桌面 Safari 60 手整局通过（2026-10-30）；iOS Safari/Android **NOT TESTED** |
 | Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 395,038 B，Worker 58.7 KB） |
 | GitHub Actions | `40924395184`（Phase 15，`ccfa435`）9/9 通过；此前 Windows 失败均已修复（`2ba11ab`、`ccfa435`） |
 

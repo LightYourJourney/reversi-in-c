@@ -1,11 +1,12 @@
 # 在线联机（Web / 桌面↔Web）与 TLS 本地验证
 
 日期：2026-10-28（桌面↔Web 追加于同日；2026-10-29 Phase 15 补充
-Chrome/Firefox/WebKit 与生产式代理）
+Chrome/Firefox/WebKit 与生产式代理；2026-10-30 追加真实 Safari）
 范围：本地回环验证；**未部署公网、未购买云资源**  
 环境：macOS 26.6.2 arm64，Chrome 155（Headless，Playwright 1.64.1，
 channel `chrome`），Playwright Firefox 157，Playwright WebKit 27.2，
-nginx 1.31.8（Homebrew），OpenSSL 4.1.0，Emscripten 6.0.13
+Safari 26.6.2（`safaridriver`），nginx 1.31.8（Homebrew），
+OpenSSL 4.1.0，Emscripten 6.0.13
 
 本文件记录“浏览器双客户端联机”和“TLS/WSS 终止”的验证拓扑、可复现步骤与
 结果。自动化使用 Playwright，通过 `window.__reversiTest` 的只读接口
@@ -212,10 +213,52 @@ Connect），并对连接中的套接字注入“不可发送”状态（`buffer
 （`active=true`）的自动重连由会话层用例覆盖。实现细节与限制见
 `docs/PHASE_15_REPORT.md`。
 
-## 8. 未覆盖
+## 8. 真实 Safari（safaridriver）整局
 
-- Safari、iOS Safari、Android Chrome；真实设备与移动端。
+2026-10-30，macOS 26.6.2 上的 Safari 26.6.2（`safaridriver`，WebDriver）。
+本机无 nginx 侧改动，页面走明文 HTTP、WebSocket 走 `ws://`：Safari 没有
+Chrome 的 `--ignore-certificate-errors` 等价物，自签证书页面测的是信任
+设置而不是游戏本身。
+
+```bash
+sudo safaridriver --enable          # 一次性
+# Safari → 设置 → 开发者 → 允许远程自动化（未开启时 session 创建会超时并报
+# "waiting for its RWIApplication to appear and become ready"）
+safaridriver -p 4445 &
+build/bin/reversi_server --port 8080 --quiet &
+scripts/serve-web.sh 8000 &
+NODE_PATH=~/rv-e2e/pw/node_modules node scripts/safari-online-e2e.mjs \
+  --base http://127.0.0.1:8000/index.html --port 8080 \
+  --driver http://127.0.0.1:4445 --shots /tmp/safari-shots
+```
+
+结果：房间 `CD8GDJ`，Safari 执黑（创建者默认色）、Chrome 执白，**完整 60 手
+终局**，双方 `netSeq` 均为 60、`netPhase` 5（FINISHED）、`result` 2
+（White wins，20–44），与驱动侧独立棋模的终局计数一致；Safari 的 30 手全部
+由 **真实 HID 点击**（`scripts/macos-click.swift`）完成。截图
+`/tmp/safari-shots/4-safari-over.png`（Safari）与 `5-chrome-over.png`
+（Chrome）棋盘完全相同。
+
+驱动方式与两条 Safari 限制（均已在脚本里处理，不是产品缺陷）：
+
+1. **WebDriver 指针事件不完整**：`pointerMove` 不产生 `mousemove`，只有
+   `pointerDown/Up` 到达页面，引擎因此始终认为指针在 (0,0)，菜单/棋盘按钮
+   永远不命中。脚本改为“页面内派发 `mousemove` 定位 + 操作系统级真实点击”。
+   它同时验证了真实 HID 点击能正确落到 canvas 的目标坐标。
+2. **窗口高度不能超出屏幕**：窗口 1200×900 时底部约 128 pt 落在屏幕外，
+   点击丢失。脚本改用 1200×760（页面因此走紧凑棋盘布局，坐标公式按
+   `src/ui/game_view.c` 的两条分支实现）。
+
+自动化还发现一个**测试方法**问题，已修正：驱动只等“落子方”的 `netSeq`
+就立刻点对面，会让落后一个广播的客户端把点击当作“不是你回合”丢弃。现在
+每手都等**两端 `netSeq` 相等且前进**才继续，并在超时时输出
+`visibilityState`/帧计数现场。用这种等待方式重跑即 0 失败。
+
+## 9. 未覆盖
+
+- iOS Safari、Android Chrome；真实设备与移动端。
 - 可信证书链、HSTS 预加载、公网 DNS。
 - 公网部署、NAT/防火墙、跨网络延迟与丢包。
 - 浏览器端自动重连 UI 的断网长时抖动（只有会话层与重启用例）。
-- 脚本未纳入 CI（需要本地 nginx/TLS 与服务端）。
+- 脚本未纳入 CI（需要本地 nginx/TLS 与服务端，Safari 用例另需开启远程
+  自动化并占用真实光标）。

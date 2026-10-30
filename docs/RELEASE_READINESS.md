@@ -12,8 +12,8 @@
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
-| 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、三引擎浏览器、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
-| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：Safari/iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
+| 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、四个浏览器（Chrome/Firefox/WebKit/Safari）、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
+| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：iOS Safari/Android Chrome 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
 
 “可以进入 Public Beta”的含义是：源可用、可由用户自行 `ws://127.0.0.1`
 或本地 TLS 代理运行；**不得**宣称“公网/生产就绪”。正式发布前必须补齐
@@ -103,7 +103,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
 | 字体渲染 / 音效 | NOT TESTED | 浏览器 smoke 只证明无控制台错误；桌面字体/音效为 Phase 14 GUI 证据，本阶段未复验 |
-| Safari / iOS Safari / Android Chrome | NOT TESTED | 无 Safari WebDriver、无真机/模拟器 |
+| Safari 整局（macOS 26.6.2 / Safari 26.6.2） | PASS | `scripts/safari-online-e2e.mjs`（safaridriver）：房间 `CD8GDJ`，完整 60 手，两端 `netSeq` 60、`result` 2，30 手为真实 HID 点击 |
+| iOS Safari / Android Chrome | NOT TESTED | 无真机/模拟器 |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
 | 可信证书链 / 公网 HSTS | NOT TESTED | 自签证书本地验证，未申请证书/未改 DNS |
 | 代理层限速 | PASS（本地） | 20 次连续升级：前 11 次转发（上游 502），之后 503 |
@@ -121,8 +122,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **Safari、iOS Safari、Android Chrome** 未验证；Firefox/WebKit 通过，
-   但 WebKit 构建不等于 Safari。
+1. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
+   `safaridriver` 完成整局（房间 `CD8GDJ`），Chrome/Firefox/WebKit 亦通过。
 2. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
    延迟与丢包均未测（本地自签与隔离代理已验证，不构成生产 PASS）。
 3. **Windows 物理桌面**未验证（CI 为托管 VM；macOS 本机 30/30 与
