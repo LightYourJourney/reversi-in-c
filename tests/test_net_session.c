@@ -77,6 +77,10 @@ static void test_session_flow(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, net_session_ready(b));
     REVERSI_TEST_ASSERT(stats, wait_phase(server, a, b,
                                            NET_SESSION_PLAYING, 3000));
+    /* Sends are queued now, so the peer's broadcast can land an iteration
+     * later; wait for it instead of sampling the same instant. */
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, b, a,
+                                           NET_SESSION_PLAYING, 3000));
     REVERSI_TEST_ASSERT(stats, b->phase == NET_SESSION_PLAYING);
     REVERSI_TEST_ASSERT(stats, net_session_can_move(a));
     REVERSI_TEST_ASSERT(stats, !net_session_can_move(b));
