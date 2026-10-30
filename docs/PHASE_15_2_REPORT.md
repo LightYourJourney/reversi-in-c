@@ -146,6 +146,15 @@ ping 都由 `net_session` 直接调用）。
 | 浏览器自动化套件 | **9/9 通过**（含此前一直 SKIP 的 `autoplay`：本轮重建 Debug Web 产物后通过） |
 | 安装包验收 | ZIP `verify-package.sh` PASS（含新增的服务端/Web 断言） |
 | 回滚演练 | 3 项 PASS |
+| CI（`41034468383` / `7a49f18`） | **9/9 成功**：三平台 Debug、ASan+UBSan、Xvfb GUI、三平台打包、Linux 包验收 |
+
+CI 过程中暴露并修掉了两个问题，都是**测试/打包**问题而非产品缺陷：
+
+- 异步发送后，`net.session` 的流程用例在同一瞬间采样对端状态，Linux 上
+  偶发差一个轮询（`b->phase == PLAYING` 失败）。改为等双方都到达该阶段。
+- `verify-package.sh` 一度要求归档必须含 `web/index.html`，而 CI 的打包
+  任务不构建 Web。改为“服务端必须存在、Web 存在才校验”，并让
+  `scripts/package.sh` 在有 emsdk 时先构建 Web。
 
 DMG/包体、GUI 桌面会话、桌面↔Web 实机对局**本轮未重跑**：桌面 UI 未改动，
 改动集中在 `NetClient` 传输层，已由 `net.client`（63）与 `net.session`
