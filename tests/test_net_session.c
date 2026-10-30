@@ -249,6 +249,23 @@ static void test_session_reconnect_budget(TestStats *stats)
 }
 
 
+/* A public address is refused by the transport (no TLS) and the lobby must
+ * explain why rather than showing a generic failure. */
+static void test_session_plaintext_refused(TestStats *stats)
+{
+    NetSession *a = net_session_create();
+    REVERSI_TEST_ASSERT(stats, a != NULL);
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "8.8.8.8", 443));
+    for (int elapsed = 0; elapsed < 3000 && a->phase != NET_SESSION_FAILED;
+         ++elapsed) {
+        net_session_update(a, 0.01f);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FAILED);
+    REVERSI_TEST_ASSERT(stats, strstr(a->error, "No TLS") != NULL);
+    net_session_destroy(a);
+}
+
 static void test_session_move_log(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
@@ -329,6 +346,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_session_flow);
     REVERSI_RUN_TEST(&stats, test_session_server_restart);
     REVERSI_RUN_TEST(&stats, test_session_reconnect_budget);
+    REVERSI_RUN_TEST(&stats, test_session_plaintext_refused);
     REVERSI_RUN_TEST(&stats, test_session_move_log);
     return reversi_test_summary(&stats, "net.session");
 }

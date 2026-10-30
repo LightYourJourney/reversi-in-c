@@ -83,7 +83,9 @@ TLS 依赖；握手是手写的 HTTP Upgrade。
   其余**在打开套接字之前**以 `tls_required` 失败。桌面端不会把协议明文
   发往公网，也不存在“先明文试一次”的路径。
 - 新增回归用例 `test_public_address_refused`（`8.8.8.8:443` → 1 s 内
-  `FAILED` + `tls_required`）。
+  `FAILED` + `tls_required`）；会话层把该原因翻成大厅可见的提示
+  “No TLS in this build: use a local or LAN server”，并用
+  `test_session_plaintext_refused` 覆盖。
 - `docs/NETWORK_SECURITY.md` §5 记录现状、设计（证书链 + 主机名校验、
   TLS 1.2+、与现有非阻塞模型对齐、发送仍走异步队列、重连语义）与
   必须覆盖的七类用例（有效证书、自签、主机名不匹配、过期、握手中断、
@@ -131,7 +133,7 @@ ping 都由 `net_session` 直接调用）。
 
 | 套件 | 结果 |
 |---|---|
-| Debug `ctest` | **26/26 通过**，合计 **1,210,997** 条断言 |
+| Debug `ctest` | **26/26 通过**，合计 **1,211,001** 条断言 |
 | Release `ctest` | 26/26 通过 |
 | ASan+UBSan `ctest`（`halt_on_error=1`） | 26/26 通过 |
 | 浏览器联机 E2E（HTTPS/WSS） | Chrome `UV4QP5`、Firefox `SB6UEM`、WebKit `5B6XD4`，均 0 失败 |
@@ -142,7 +144,7 @@ ping 都由 `net_session` 直接调用）。
 
 DMG/包体、GUI 桌面会话、桌面↔Web 实机对局**本轮未重跑**：桌面 UI 未改动，
 改动集中在 `NetClient` 传输层，已由 `net.client`（63）与 `net.session`
-（96，真实套接字整局）覆盖。
+（100，真实套接字整局）覆盖。
 
 ## 7. 未完成 / 未验证
 

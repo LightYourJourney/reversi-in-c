@@ -90,7 +90,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | TSan `net.session` / `net.client` | PASS | Homebrew clang 23，无竞争报告 |
 | 网络边界 | PASS | `net.server` 5,758（macOS）/5,765（Linux）断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局、发送队列饱和 |
 | 客户端队列溢出 | PASS | `net.client` 57 断言（`queue_overflow`、服务器不读、连接取消/超时） |
-| 会话重启 | PASS | `net.session` 96 断言（重启后重连回大厅、预算耗尽 FAILED、落子记录） |
+| 会话重启 | PASS | `net.session` 100 断言（重启后重连回大厅、预算耗尽 FAILED、落子记录） |
 | 桌面↔Web 联机 | PASS | 房间 `D7AKVC`（2026-10-29）：桌面黑方 d3、浏览器白方投降、双方 BLACK_WIN、对手关闭后桌面保留结果 |
 | 在线终局 → Lab 复盘 | PASS | 房间 `HQ7EUE`：Review 打开 Lab 终局，First 回到开局 |
 | 代理 limit_conn | PASS（本地） | 4 条并发升级 101，第 5 条 503 |
@@ -122,9 +122,9 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | CI（最新提交） | PASS 9/9 | `41025107751`（`3b91351`）：三平台 Debug（含 Windows 的连接/饱和用例）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收；上一轮 `40924395184`（`ccfa435`）同样 9/9 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,210,997**）：
+断言数（本机 Debug，全部无窗口测试合计 **1,211,001**）：
 `net.protocol` 33、`net.ws` 20,026、`net.server` 5,758、`net.client` 63、
-`net.session` 96、`analysis.session` 112、`storage.save` 102、
+`net.session` 100、`analysis.session` 112、`storage.save` 102、
 `storage.settings` 68；其余见 `TESTING.md` §2。Linux/Windows 的饱和
 用例另加 7 条。
 

@@ -44,7 +44,6 @@ static void on_status(void *context, NetClientStatus status,
                       const char *reason)
 {
     NetSession *session = context;
-    (void)reason;
     switch (status) {
     case NET_CLIENT_CONNECTED:
         /* Protocol v1: hello is always the first message, including on a
@@ -74,6 +73,12 @@ static void on_status(void *context, NetClientStatus status,
     case NET_CLIENT_FAILED:
         if (session->phase == NET_SESSION_FINISHED) {
             break;
+        }
+        /* The native client has no TLS and refuses public addresses before
+         * connecting; say so instead of a bare "Connection failed". */
+        if (reason != NULL && strcmp(reason, "tls_required") == 0) {
+            snprintf(session->error, sizeof(session->error),
+                     "No TLS in this build: use a local or LAN server");
         }
         if (session->active && session->token[0] != '\0'
             && session->reconnect_attempts < 5) {
