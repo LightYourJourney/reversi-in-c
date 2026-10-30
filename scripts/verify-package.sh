@@ -102,9 +102,14 @@ if [ -z "${server}" ]; then
     echo "Missing server executable: bin/reversi_server" >&2
     exit 1
 fi
-if [ ! -f "${root}/web/index.html" ]; then
-    echo "Missing Web client: web/index.html" >&2
-    exit 1
+if [ -d "${root}/web" ]; then
+    if [ ! -f "${root}/web/index.html" ]; then
+        echo "Incomplete Web client: web/ has no index.html" >&2
+        exit 1
+    fi
+    echo "Web client: present (web/index.html)"
+else
+    echo "Web client: absent (packaged without scripts/build-web.sh)" >&2
 fi
 if ! "${server}" --help 2>&1 | grep -q "usage:"; then
     echo "Packaged server does not start" >&2

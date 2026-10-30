@@ -8,6 +8,16 @@ version="$(tr -d '[:space:]' < "${root}/VERSION")"
 
 echo "Packaging Reversi ${version}"
 
+# A release archive is meant to be everything an operator needs, so build the
+# Web client first when the toolchain is present. Without emsdk the archive
+# simply has no web/ directory (verify-package.sh reports that).
+emsdk_dir="${EMSDK_DIR:-$HOME/emsdk}"
+if [ -f "${emsdk_dir}/emsdk_env.sh" ]; then
+    "${root}/scripts/build-web.sh"
+else
+    echo "Emscripten not found at ${emsdk_dir}: packaging without web/" >&2
+fi
+
 cmake -S "${root}" -B "${build_dir}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DREVERSI_ENABLE_GUI_TESTS=OFF \

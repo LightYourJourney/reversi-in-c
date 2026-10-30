@@ -68,6 +68,11 @@ check-server-health.mjs: {"reply":"pong","latency_ms":166,"failures":[]}
 rehearse-rollback.sh: PASS 坏发布被拒 / PASS 回滚恢复 / PASS 未建房
 ```
 
+**包内容与 CI 的差异**：`scripts/package.sh` 现在会先跑
+`scripts/build-web.sh`（有 emsdk 时），因此按发布流程构建的归档同时包含
+`bin/` 与 `web/`；CI 的 `package.yml` 不构建 Web，其产物只有 `bin/`，
+`verify-package.sh` 会打印 “Web client: absent” 而不是失败。
+
 **未验证**：systemd 单元与 logrotate 仍未在真实 systemd 上执行
 （开发机为 macOS，容器内无法安装；这是既有 NOT TESTED，本轮未改善）。
 
