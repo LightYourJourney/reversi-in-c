@@ -305,8 +305,6 @@ try {
     mkdirSync(shots, { recursive: true });
   }
   const clicker = buildClicker();
-  const safariPid = execFileSync("pgrep", ["-x", "Safari"]).toString().trim()
-    .split("\n")[0];
 
   safari = new SafariDriver(driverUrl);
   await safari.start(insecure);
@@ -320,6 +318,21 @@ try {
     await pause(100);
   }
   await pause(600);
+
+  /* safaridriver launches Safari itself, so the pid only exists once the
+   * session is up. */
+  let safariPid = "";
+  for (let i = 0; i < 50 && safariPid === ""; i += 1) {
+    try {
+      safariPid = execFileSync("pgrep", ["-x", "Safari"]).toString().trim()
+        .split("\n")[0];
+    } catch {
+      await pause(200);
+    }
+  }
+  if (safariPid === "") {
+    throw new Error("Safari did not start");
+  }
 
   const rect = await safari.windowRect();
   const origin = { x: rect.x, y: rect.y };

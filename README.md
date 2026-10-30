@@ -385,7 +385,10 @@ cmake --build build -j
 
 该脚本执行 Release 配置、构建、CTest 与 CPack，产物位于
 `build-release/package/`：macOS 为 `Reversi.app` 的 zip，Linux 为 zip 和
-tar.gz，Windows 为 zip；每个归档附带 `.sha256`。也可以手动执行：
+tar.gz，Windows 为 zip；每个归档附带 `.sha256`。归档里同时有
+`bin/reversi_server`（联机服务端）与 `web/`（Web 客户端，需先运行
+`scripts/build-web.sh`），部署见 `docs/PRODUCTION_DEPLOYMENT.md`。
+也可以手动执行：
 
 ```bash
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \

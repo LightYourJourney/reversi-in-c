@@ -65,8 +65,11 @@ certbot certonly --webroot -w /var/www/acme \
   刷出队列后以退出码 0 结束（本地实测见 §7）。
 - `LimitNOFILE=4096` 覆盖 48 连接 + 监听套接字 + nginx 侧连接。
 
+发布包同时包含服务端（`bin/reversi_server`）与 Web 客户端（`web/`），
+按 §8 的目录布局解压即可，不需要从构建目录手工拷贝二进制：
+
 ```bash
-install -m 0755 build/bin/reversi_server /opt/reversi/bin/reversi_server
+ls /opt/reversi/current/bin/reversi_server   # 由 §8 的 releases/current 提供
 systemctl daemon-reload
 systemctl enable --now reversi-server
 journalctl -u reversi-server -f
@@ -127,7 +130,9 @@ journalctl -u reversi-server -f
 | 代理层限速 | 连续 20 次升级请求 | PASS：前 11 次被转发（上游对非 WebSocket 握手返回 502），之后 `503`；error.log 记录 `limiting requests` |
 | 代理层连接上限 | 4 条并发升级 + 第 5 条 | PASS：前 4 条 `101`，第 5 条 `503`，error.log 记录 `limiting connections` |
 | 连接数限制 | `limit_conn 4` | PASS：4×`101`，第 5 条 `503` |
-| 优雅关闭 | `scripts/check-server-shutdown.mjs --pid <pid>` + `SIGTERM` | PASS：房间 `DFB5D2` 收到 `roomclosed status=shutdown`；进程退出码 0；日志 `shutdown: closed 1 room(s)` |
+| 健康检查（可重复、无损） | `scripts/check-server-health.mjs --url ...` | PASS：`pong`，延迟 166 ms，未建房 |
+| 优雅关闭（**仅 staging 演练**） | `scripts/check-server-shutdown.mjs --pid <pid>` + `SIGTERM` | PASS：房间 `DFB5D2` 收到 `roomclosed status=shutdown`；进程退出码 0；日志 `shutdown: closed 1 room(s)`。**不用于生产验收**：它主动结束进程 |
+| 发布目录切换与回滚 | `scripts/rehearse-rollback.sh --package ...` | PASS：坏发布被健康检查拒绝；切回上一版后恢复健康；健康检查未建房 |
 | 服务重启后的客户端 | `net.session` 的服务器重启用例 | PASS：客户端进入 DISCONNECTED、保留棋盘、不崩溃；房间丢失后回到大厅 |
 | systemd/logrotate 模板 | `systemd-analyze verify` / `logrotate -d` | **NOT TESTED**：容器内 apt 被代理阻断（502/证书不可信），无 arm64 预装镜像；本机为 macOS |
 
@@ -141,28 +146,33 @@ journalctl -u reversi-server -f
 scripts/package.sh                      # Release 构建 + CTest + CPack
 sha256sum build-release/package/*.zip   # macOS 用 shasum -a 256
 
-# 2) 发布目录用符号链接原子切换
+# 2) 解压到按版本命名的发布目录，用符号链接原子切换
 REV=/opt/reversi/releases/2.0.0
 mkdir -p "$REV"
-unzip -q Reversi-2.0.0-Linux-x86_64.zip -d "$REV"
+tar -xzf Reversi-2.0.0-<平台>.tar.gz -C "$REV" --strip-components=1
+ls "$REV"/bin/reversi_server "$REV"/web/index.html   # 包内路径自检
 ln -sfn "$REV" /opt/reversi/current
 systemctl restart reversi-server
-
-# 3) 静态站点同样原子切换
-rsync -a --delete web/dist/ /var/www/reversi-next/
-mv /var/www/reversi-next /var/www/reversi-live   # 需要两次 rename 时保持旧目录
 ```
 
-验收（每次部署）：
+`current` 同时决定服务端二进制（`bin/reversi_server`）与静态站点
+（`/opt/reversi/current/web`，见 `deploy/nginx/reversi.conf`），所以切换
+一次符号链接就同时换掉两者，回滚也只需换回。
+
+验收（每次部署，**不动正在对局的玩家**）：
 
 ```bash
 systemctl is-active reversi-server
 journalctl -u reversi-server -n 20 --no-pager
 curl -skI https://reversi.example.com/ | grep -i strict-transport
-scripts/check-server-shutdown.mjs --pid "$(pidof reversi_server)" \
-  --url wss://ws.example.com/
+node scripts/check-server-health.mjs --url wss://ws.example.com/
 # 浏览器：开两个窗口各完成一局（建房/加入/落子/投降/重连）
 ```
+
+`check-server-health.mjs` 只做 `hello` + `ping` → `pong`，不建房、不占座、
+不碰任何玩家状态，可以随时重复执行。**不要**把
+`scripts/check-server-shutdown.mjs`（发 SIGTERM）放进生产验收：它会主动
+结束进程。优雅关闭只在隔离 staging 演练，见 §7 的“演练”一列。
 
 回滚：
 

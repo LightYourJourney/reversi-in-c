@@ -1,6 +1,6 @@
 # Reversi 2.0.0 发布就绪评估（Release Candidate）
 
-日期：2026-10-29  
+日期：2026-10-30（Phase 15.2 更新）  
 源码版本：`VERSION` = 2.0.0  
 最新已发布版本：v1.0.1（2026-10-22）  
 状态：**Release Candidate（RC）— 未发布、未打标签、未创建 GitHub Release**
@@ -13,7 +13,7 @@
 | 问题 | 结论 | 依据 |
 |---|---|---|
 | 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、四个浏览器（Chrome/Firefox/WebKit/Safari）、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
-| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：iOS Safari/Android Chrome 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
+| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：桌面端无 TLS（公网联机 NOT SUPPORTED）、iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
 
 “可以进入 Public Beta”的含义是：源可用、可由用户自行 `ws://127.0.0.1`
 或本地 TLS 代理运行；**不得**宣称“公网/生产就绪”。正式发布前必须补齐
@@ -102,10 +102,16 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Web 队列溢出（三引擎） | PASS | `scripts/web-transport-failure-check.mjs`：FAILED(7) → 手动 Connect → LOBBY(2) |
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
+| 桌面发送队列（无主线程等待） | PASS | 16 KiB 有界队列；卡死服务器下 1,639 帧入队后以 `send_queue_full` 断开，单次调用最慢 6 ms |
+| 桌面公网明文拒绝 | PASS | 非回环/私网地址在开套接字前失败于 `tls_required`（`test_public_address_refused`） |
+| 无损健康检查 | PASS | `scripts/check-server-health.mjs`：`pong`、166 ms、未建房 |
+| 发布目录切换与回滚 | PASS（演练） | `scripts/rehearse-rollback.sh`：坏发布被拒 → 切回恢复 → 健康检查未建房 |
+| 发布包内容 | PASS | `Reversi-2.0.0-Darwin-arm64` 含 `bin/reversi_server`（`--help` 可运行）与 `web/`；`verify-package.sh` PASS |
 | 字体渲染 | PASS（有限） | `scripts/web-runtime-checks.mjs`：标题带亮色像素占比 Chrome 10.3% / Firefox 10.6% / WebKit 10.3%；未与参考字体逐像素比对 |
 | 音效 | PARTIAL | 同上：三引擎 `audioReady()` 为 true（设备与六个音效均已加载）且有 running 上下文；**未验证可听输出** |
 | 存储被禁用 | PASS | 同上：三引擎均显示 “Browser storage is unavailable…” 横幅且模块正常启动 |
 | Safari 整局（macOS 26.6.2 / Safari 26.6.2） | PASS | `scripts/safari-online-e2e.mjs`（safaridriver）：房间 `CD8GDJ`（HTTP+ws://）与 `VFDHTZ`（https+wss，`acceptInsecureCerts`），均完整 60 手、两端 `netSeq` 60、`result` 2，30 手为真实 HID 点击 |
+| Safari 整局（本轮） | NOT TESTED | 会话不可见（`visibilityState=hidden`、帧计数 0），本轮无法驱动；上一轮 `CD8GDJ`/`VFDHTZ` 仍有效，产物仅差只读钩子 |
 | iOS Safari / Android Chrome | NOT TESTED | 无真机/模拟器 |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
 | 可信证书链 / 公网 HSTS | NOT TESTED | 自签证书本地验证，未申请证书/未改 DNS |
@@ -116,27 +122,32 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | CI（最新提交） | PASS 9/9 | `41025107751`（`3b91351`）：三平台 Debug（含 Windows 的连接/饱和用例）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收；上一轮 `40924395184`（`ccfa435`）同样 9/9 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,210,368**）：
-`net.protocol` 33、`net.ws` 20,026、`net.server` 5,758、`net.client` 57、
+断言数（本机 Debug，全部无窗口测试合计 **1,210,997**）：
+`net.protocol` 33、`net.ws` 20,026、`net.server` 5,758、`net.client` 63、
 `net.session` 96、`analysis.session` 112、`storage.save` 102、
 `storage.settings` 68；其余见 `TESTING.md` §2。Linux/Windows 的饱和
 用例另加 7 条。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
-   `safaridriver` 完成整局（房间 `CD8GDJ`），Chrome/Firefox/WebKit 亦通过。
-2. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
+1. **桌面端没有 TLS**：原生客户端只有明文 `ws://`，现在会拒绝公网地址
+   （`tls_required`）。**桌面端公网联机 NOT SUPPORTED**，Release Notes 必须
+   写明；WSS 的设计与用例见 `NETWORK_SECURITY.md` §5。
+2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
+   `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/
+   WebKit 亦通过；本轮未重跑（会话不可见）。
+3. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
    延迟与丢包均未测（本地自签与隔离代理已验证，不构成生产 PASS）。
-3. **Windows 物理桌面**未验证（CI 为托管 VM；macOS 本机 30/30 与
+4. **Windows 物理桌面**未验证（CI 为托管 VM；macOS 本机 30/30 与
    桌面↔Web 已通过）。
-4. **systemd/logrotate 模板**未在真实 systemd 执行（容器内无法安装；
+5. **systemd/logrotate 模板**未在真实 systemd 执行（容器内无法安装；
    本机为 macOS）。
 
 ## 7. 建议
 
 - 若以 **Public Beta** 名义发布：只发布源码 + 强调自托管与“未做公网
-  安全评估”；在 Release Notes 中列出 §6 的第 1–2 项。
+  安全评估”；在 Release Notes 中列出 §6 的第 1–3 项，其中第 1 项
+  （桌面无 TLS）必须写成限制而不是缺陷修复承诺之外的事。
 - 正式 v2.0.0：§6 第 1–2 项是外部环境验证（Safari/移动端、公网 TLS），
   第 3 项（Windows 物理桌面）建议发布前补；第 4 项（systemd/logrotate
   模板）作为已知限制披露。CI、打包、ASan/UBSan、macOS GUI、桌面↔Web、

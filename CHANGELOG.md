@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 桌面发送改为 16 KiB 有界异步队列：主线程只入队，不再等待网络可写；
+  队列满以 `send_queue_full` 断开并由会话层重连（卡死服务器下实测单次调用
+  最慢 6 ms）。
+- 发布包新增 `bin/reversi_server` 与 `web/`；systemd 与 nginx 统一指向
+  `/opt/reversi/current`，回滚是一次符号链接切换。
+
+### Security
+
+- 原生客户端没有 TLS：解析出的目标不是回环/私网时，在建立套接字前即以
+  `tls_required` 失败，不再可能向公网明文发送协议。桌面端公网联机
+  NOT SUPPORTED，设计见 `docs/NETWORK_SECURITY.md` §5。
+
+### Added
+
+- `scripts/check-server-health.mjs`（无损健康检查）与
+  `scripts/rehearse-rollback.sh`（发布切换/回滚演练）。
+
 ## [2.0.0] - 未发布（Release Candidate，源码截至 2026-10-29）
 
 ### Added

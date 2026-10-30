@@ -40,6 +40,10 @@ typedef pthread_t ClientThread;
 #endif
 
 #define REVERSI_NET_CLIENT_QUEUE 32
+/* Outbound frames wait here until the worker thread can write them. Sized
+ * like the server's per-connection queue: a stalled peer fills it in a few
+ * dozen moves, long before latency becomes the user's problem. */
+#define REVERSI_NET_CLIENT_SEND_QUEUE_BYTES 16384
 #define REVERSI_NET_CLIENT_SEND_TIMEOUT_MS 1000
 #define REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS 5000
 
@@ -65,6 +69,11 @@ struct NetClient {
     ClientQueueEntry queue[REVERSI_NET_CLIENT_QUEUE];
     int queue_head;
     int queue_count;
+    /* Outbound bytes: written by the caller (any thread) and drained by the
+     * worker, always under the mutex. */
+    uint8_t outbound[REVERSI_NET_CLIENT_SEND_QUEUE_BYTES];
+    size_t outbound_head;
+    size_t outbound_count;
 #if defined(_WIN32)
     CRITICAL_SECTION mutex;
 #else
@@ -240,10 +249,9 @@ static void queue_message(NetClient *client, const char *text, size_t length)
     unlock_client(client);
 }
 
-/* Writes one whole frame or fails within a bounded time. The socket is
- * non-blocking, so a stalled server cannot freeze the UI thread that calls
- * net_client_send(); a partial frame leaves the stream unusable and the
- * caller must drop the connection. */
+/* Writes one whole frame or fails within a bounded time. Only the worker
+ * thread uses this (connect handshake); application frames go through the
+ * outbound queue so no UI thread ever waits for the socket. */
 static bool socket_write_all(NetClient *client, const uint8_t *data,
                              size_t length)
 {
@@ -272,6 +280,60 @@ static bool socket_write_all(NetClient *client, const uint8_t *data,
         return false;
     }
     return true;
+}
+
+/* Appends a frame to the outbound ring. The mutex must be held. */
+static bool outbound_push(NetClient *client, const uint8_t *data,
+                          size_t length)
+{
+    const size_t capacity = sizeof(client->outbound);
+    if (length > capacity - client->outbound_count) {
+        return false;
+    }
+    const size_t tail = (client->outbound_head + client->outbound_count)
+        % capacity;
+    const size_t first = capacity - tail;
+    const size_t head_length = length < first ? length : first;
+    memcpy(client->outbound + tail, data, head_length);
+    if (length > head_length) {
+        memcpy(client->outbound, data + head_length, length - head_length);
+    }
+    client->outbound_count += length;
+    return true;
+}
+
+/* Writes what the socket accepts, keeping the rest queued. Returns false
+ * only when the stream is unusable. The mutex must be held. */
+static bool outbound_flush(NetClient *client)
+{
+    const size_t capacity = sizeof(client->outbound);
+    while (client->outbound_count > 0
+           && client->socket != CLIENT_INVALID) {
+        const size_t contiguous = capacity - client->outbound_head;
+        const size_t length = client->outbound_count < contiguous
+            ? client->outbound_count : contiguous;
+        const int written = (int)send(
+            client->socket,
+            (const char *)client->outbound + client->outbound_head,
+            (int)length, 0);
+        if (written > 0) {
+            client->outbound_head =
+                (client->outbound_head + (size_t)written) % capacity;
+            client->outbound_count -= (size_t)written;
+            continue;
+        }
+        if (written < 0 && socket_would_block()) {
+            return true;
+        }
+        return false;
+    }
+    return true;
+}
+
+static void outbound_clear(NetClient *client)
+{
+    client->outbound_head = 0;
+    client->outbound_count = 0;
 }
 
 static bool client_handshake(NetClient *client)
@@ -317,6 +379,26 @@ static bool client_handshake(NetClient *client)
     return net_ws_validate_handshake_response(response, used, key);
 }
 
+/* This client speaks plain ws://; there is no TLS in the build. Until a WSS
+ * transport lands (docs/NETWORK_SECURITY.md §4), only loopback and private
+ * ranges are allowed, so the protocol is never put on the wire in clear text
+ * towards a public address. Refusing here — before any socket is opened —
+ * keeps the rule enforceable without a dial-out to check reachability. */
+static bool address_is_local(const struct sockaddr *address)
+{
+    if (address == NULL || address->sa_family != AF_INET) {
+        return false;
+    }
+    const struct sockaddr_in *in = (const struct sockaddr_in *)address;
+    const uint32_t host = ntohl(in->sin_addr.s_addr);
+    return (host >> 24) == 127      /* 127/8 loopback */
+        || (host >> 24) == 10       /* 10/8 private */
+        || (host >> 20) == 0xAC1    /* 172.16/12 private */
+        || (host >> 16) == 0xC0A8   /* 192.168/16 private */
+        || (host >> 16) == 0xA9FE   /* 169.254/16 link-local */
+        || (host >> 22) == 0x191;   /* 100.64/10 carrier NAT */
+}
+
 #if defined(_WIN32)
 static DWORD WINAPI client_thread(LPVOID argument)
 {
@@ -342,10 +424,30 @@ static void *client_thread(void *argument)
         return NULL;
 #endif
     }
+    bool allowed = false;
+    for (const struct addrinfo *it = results; it != NULL; it = it->ai_next) {
+        if (address_is_local(it->ai_addr)) {
+            allowed = true;
+            break;
+        }
+    }
+    if (!allowed) {
+        freeaddrinfo(results);
+        set_status(client, NET_CLIENT_FAILED, "tls_required");
+        atomic_store(&client->running, false);
+#if defined(_WIN32)
+        return 0;
+#else
+        return NULL;
+#endif
+    }
     ClientSocket socket_fd = CLIENT_INVALID;
     const uint64_t connect_deadline =
         now_ms() + REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS;
     for (struct addrinfo *it = results; it != NULL; it = it->ai_next) {
+        if (!address_is_local(it->ai_addr)) {
+            continue;
+        }
         socket_fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
         if (socket_fd == CLIENT_INVALID) {
             continue;
@@ -403,7 +505,16 @@ static void *client_thread(void *argument)
     net_ws_parser_init(&parser);
     uint8_t buffer[4096];
     while (!atomic_load(&client->stop)) {
-        /* Selecting first keeps teardown join bounded: a blocked recv is not
+        /* Drain the outbound queue before sleeping: queued frames are at
+         * most one poll interval (20 ms) old. */
+        lock_client(client);
+        const bool flushed = outbound_flush(client);
+        unlock_client(client);
+        if (!flushed) {
+            set_status(client, NET_CLIENT_DISCONNECTED, "send_failed");
+            break;
+        }
+        /* Selecting keeps teardown join bounded: a blocked recv is not
          * reliably interrupted by shutdown() from another thread on Windows. */
         const int ready = socket_wait_readable(socket_fd, 20);
         if (ready == 0) {
@@ -416,14 +527,20 @@ static void *client_thread(void *argument)
         const int read = (int)recv(socket_fd, (char *)buffer,
                                    (int)sizeof(buffer), 0);
         if (read == 0) {
-            set_status(client, NET_CLIENT_DISCONNECTED, "closed");
+            /* A shutdown this client asked for already carries its own
+             * reason; do not overwrite it with "closed". */
+            if (!atomic_load(&client->stop)) {
+                set_status(client, NET_CLIENT_DISCONNECTED, "closed");
+            }
             break;
         }
         if (read < 0) {
             if (socket_would_block()) {
                 continue;
             }
-            set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
+            if (!atomic_load(&client->stop)) {
+                set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
+            }
             break;
         }
         size_t offset = 0;
@@ -451,7 +568,8 @@ static void *client_thread(void *argument)
                 bool written = false;
                 if (length > 0) {
                     lock_client(client);
-                    written = socket_write_all(client, pong, length);
+                    written = outbound_push(client, pong, length)
+                        && outbound_flush(client);
                     unlock_client(client);
                 }
                 if (length > 0 && !written) {
@@ -470,6 +588,7 @@ static void *client_thread(void *argument)
         }
     }
     lock_client(client);
+    outbound_clear(client);
     if (client->socket != CLIENT_INVALID) {
         socket_close(client->socket);
         client->socket = CLIENT_INVALID;
@@ -663,27 +782,28 @@ bool net_client_send(NetClient *client, const NetMessage *message)
     const size_t length = net_ws_encode(
         0x1, (const uint8_t *)text, strlen(text), true, &client->rng, frame,
         sizeof(frame));
-    bool ok = false;
-    bool failed = false;
-    if (length > 0 && client->socket != CLIENT_INVALID
+    bool queued = false;
+    bool overflow = false;
+    ClientSocket socket = client->socket;
+    if (length > 0 && socket != CLIENT_INVALID
         && atomic_load(&client->status) == NET_CLIENT_CONNECTED) {
-        ok = socket_write_all(client, frame, length);
-        if (!ok) {
-            /* A partial frame corrupts the stream: drop the connection and
-             * let the session reconnect and resync from the server. */
-            failed = true;
-#if defined(_WIN32)
-            shutdown(client->socket, SD_BOTH);
-#else
-            shutdown(client->socket, SHUT_RDWR);
-#endif
-        }
+        queued = outbound_push(client, frame, length);
+        overflow = !queued;
     }
     unlock_client(client);
-    if (failed) {
-        set_status(client, NET_CLIENT_DISCONNECTED, "send_failed");
+    if (overflow) {
+        /* The queue is the only buffer between this call and a peer that
+         * stopped reading. Once it is full the frame cannot arrive in time,
+         * so drop the connection and let the session resync. */
+        set_status(client, NET_CLIENT_DISCONNECTED, "send_queue_full");
+#if defined(_WIN32)
+        shutdown(socket, SD_BOTH);
+#else
+        shutdown(socket, SHUT_RDWR);
+#endif
+        atomic_store(&client->stop, true);
     }
-    return ok;
+    return queued;
 }
 
 NetClientStatus net_client_status(const NetClient *client)

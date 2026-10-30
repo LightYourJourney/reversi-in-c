@@ -31,6 +31,13 @@ void net_client_destroy(NetClient *client);
 bool net_client_connect(NetClient *client, const char *host, int port);
 void net_client_disconnect(NetClient *client);
 void net_client_poll(NetClient *client);
+
+/* Queues one message and returns immediately: the caller never waits for the
+ * socket, and frames go out in call order. Returns false when the client is
+ * not connected or when the 16 KiB outbound queue is full; a full queue also
+ * drops the connection (reason "send_queue_full") so the session can reconnect
+ * and resync instead of drifting behind. Partial writes are kept in the
+ * queue and finished by the next poll. */
 bool net_client_send(NetClient *client, const NetMessage *message);
 NetClientStatus net_client_status(const NetClient *client);
 

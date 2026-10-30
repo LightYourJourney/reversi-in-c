@@ -88,6 +88,29 @@ else
     done
 fi
 
+# The online server and the Web client ship in the same archive; an operator
+# installs one directory. Both are checked from the extracted tree, never
+# from the build directory.
+server=""
+for candidate in "${root}/bin/reversi_server" "${root}/bin/reversi_server.exe"; do
+    if [ -x "${candidate}" ]; then
+        server="${candidate}"
+        break
+    fi
+done
+if [ -z "${server}" ]; then
+    echo "Missing server executable: bin/reversi_server" >&2
+    exit 1
+fi
+if [ ! -f "${root}/web/index.html" ]; then
+    echo "Missing Web client: web/index.html" >&2
+    exit 1
+fi
+if ! "${server}" --help 2>&1 | grep -q "usage:"; then
+    echo "Packaged server does not start" >&2
+    exit 1
+fi
+
 if [ "$(uname -s)" = "Linux" ]; then
     missing="$(ldd "${exe}" | grep "not found" || true)"
     if [ -n "${missing}" ]; then

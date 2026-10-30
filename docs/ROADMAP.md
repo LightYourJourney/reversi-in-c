@@ -423,8 +423,19 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
   饱和用例（Linux/Windows）；在线终局可导入 Lab 复盘；Web 发送失败用例；
   本地 `limit_conn` 5 条并发验证；macOS GUI 30/30 与桌面↔Web 复验
   （`D7AKVC`、`HQ7EUE`）。
-- 仍未验证：真实公网、可信证书、Safari/iOS/Android、Windows 物理桌面、
+- 未验证：真实公网、可信证书、iOS/Android、Windows 物理桌面、
   systemd/logrotate 模板在真实 systemd 执行。
+
+### Phase 15.2（2026-10-30）
+
+- 发布工程：包内新增 `bin/reversi_server` 与 `web/`；systemd/nginx 统一走
+  `/opt/reversi/current`；生产验收换成无损健康检查，SIGTERM 优雅关闭只在
+  staging 演练；回滚演练脚本可重复执行。
+- 桌面发送改为 16 KiB 有界异步队列，主线程不再等待网络可写（卡死服务器下
+  单次调用最慢 6 ms）。
+- 桌面端确认没有 TLS：公网地址在开套接字前以 `tls_required` 拒绝；
+  桌面公网联机 NOT SUPPORTED，WSS 设计见 `NETWORK_SECURITY.md` §5。
+- 详情见 `docs/PHASE_15_2_REPORT.md`。
 
 结论：**Release Candidate**，不发布正式 v2.0.0。
 

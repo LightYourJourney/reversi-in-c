@@ -320,29 +320,36 @@ static void test_send_to_stalled_server(TestStats *stats)
     }
     REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_CONNECTED);
 
-    /* Fill both socket buffers; the write must fail within its 1 s budget
-     * rather than blocking forever. */
+    /* The caller must never wait for the socket. A peer that stopped
+     * reading fills the 16 KiB outbound queue; every send up to that point
+     * returns without touching the network, and the next one is refused.
+     * A tight loop is deliberate: it lets the queue, not the kernel's
+     * auto-tuned receive window, decide when the client gives up. */
     const uint64_t begin = test_now_ms();
-    bool failed = false;
+    bool refused = false;
     int sent = 0;
-    for (int i = 0; i < 2000000 && !failed; ++i) {
+    uint64_t slowest = 0;
+    for (int i = 0; i < 2000000 && !refused; ++i) {
+        const uint64_t call_begin = test_now_ms();
         if (!net_client_send(client, &(NetMessage){.type = NET_MSG_PING})) {
-            failed = true;
+            refused = true;
+        }
+        const uint64_t took = test_now_ms() - call_begin;
+        if (took > slowest) {
+            slowest = took;
         }
         ++sent;
     }
     const uint64_t elapsed_ms = test_now_ms() - begin;
-    REVERSI_TEST_ASSERT(stats, failed);
+    REVERSI_TEST_ASSERT(stats, refused);
     REVERSI_TEST_ASSERT(stats, sent < 2000000);
-    REVERSI_TEST_ASSERT(stats, elapsed_ms < 5000);
+    /* The old synchronous path could spend 1 s per call here. */
+    REVERSI_TEST_ASSERT(stats, elapsed_ms < 1000);
+    REVERSI_TEST_ASSERT(stats, slowest < 100);
 
     net_client_poll(client);
     REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_DISCONNECTED);
-    /* The send path reports "send_failed"; the worker may observe the same
-     * shutdown as EOF first and report "closed". Either reason is correct. */
-    REVERSI_TEST_ASSERT(stats,
-        strcmp(events.reason, "send_failed") == 0
-        || strcmp(events.reason, "closed") == 0);
+    REVERSI_TEST_ASSERT(stats, strcmp(events.reason, "send_queue_full") == 0);
     /* Further sends fail immediately instead of waiting again. */
     REVERSI_TEST_ASSERT(stats,
         !net_client_send(client, &(NetMessage){.type = NET_MSG_PING}));
@@ -353,14 +360,16 @@ static void test_send_to_stalled_server(TestStats *stats)
 }
 
 
-/* A black-holed address (TEST-NET-1) makes connect() hang on most networks.
- * Cancelling must not wait for the OS timeout. */
+/* A black-holed *private* address makes connect() hang on most networks.
+ * Cancelling must not wait for the OS timeout. The client refuses public
+ * addresses outright (see test_public_address_refused), so this has to stay
+ * inside 10/8. */
 static void test_connect_cancelled(TestStats *stats)
 {
     Events events = {0};
     NetClient *client = net_client_create(on_message, on_status, &events);
     REVERSI_TEST_ASSERT(stats, client != NULL);
-    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "192.0.2.1", 9));
+    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "10.255.255.1", 9));
     test_sleep_ms(200);
     const uint64_t begin = test_now_ms();
     net_client_disconnect(client);
@@ -378,7 +387,7 @@ static void test_connect_timeout(TestStats *stats)
     NetClient *client = net_client_create(on_message, on_status, &events);
     REVERSI_TEST_ASSERT(stats, client != NULL);
     const uint64_t begin = test_now_ms();
-    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "192.0.2.1", 9));
+    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "10.255.255.1", 9));
     bool failed = false;
     for (int elapsed = 0; elapsed < 8000 && !failed; ++elapsed) {
         net_client_poll(client);
@@ -392,6 +401,29 @@ static void test_connect_timeout(TestStats *stats)
     net_client_destroy(client);
 }
 
+/* The native client has no TLS, so a public peer is refused before any
+ * socket is opened rather than downgraded to clear text. */
+static void test_public_address_refused(TestStats *stats)
+{
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    const uint64_t begin = test_now_ms();
+    REVERSI_TEST_ASSERT(stats, net_client_connect(client, "8.8.8.8", 443));
+    bool failed = false;
+    for (int elapsed = 0; elapsed < 3000 && !failed; ++elapsed) {
+        net_client_poll(client);
+        if (events.status == NET_CLIENT_FAILED) {
+            failed = true;
+        }
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, failed);
+    REVERSI_TEST_ASSERT(stats, strcmp(events.reason, "tls_required") == 0);
+    REVERSI_TEST_ASSERT(stats, test_now_ms() - begin < 1000);
+    net_client_destroy(client);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -400,5 +432,6 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_send_to_stalled_server);
     REVERSI_RUN_TEST(&stats, test_connect_cancelled);
     REVERSI_RUN_TEST(&stats, test_connect_timeout);
+    REVERSI_RUN_TEST(&stats, test_public_address_refused);
     return reversi_test_summary(&stats, "net.client");
 }

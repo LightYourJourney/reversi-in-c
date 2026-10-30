@@ -478,6 +478,21 @@ install(DIRECTORY docs DESTINATION . COMPONENT Reversi)
 install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md CHANGELOG.md VERSION
         DESTINATION . COMPONENT Reversi)
 
+# The online server is a second program, not part of the game bundle: a
+# release archive must be everything an operator needs, and
+# deploy/systemd/reversi-server.service runs bin/reversi_server.
+if(TARGET reversi_server)
+    install(TARGETS reversi_server RUNTIME DESTINATION bin
+            COMPONENT Reversi)
+endif()
+
+# Web client, when the Web build has been produced (scripts/build-web.sh).
+# Packaged under web/ so a release directory is self-contained and the
+# reverse proxy can point straight at it.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/web/dist/index.html")
+    install(DIRECTORY web/dist/ DESTINATION web COMPONENT Reversi)
+endif()
+
 # ---------------------------------------------------------------------------
 # Tests. Core tests are GUI-free and link only reversi_core; the optional
 # app.smoke test opens a window and therefore requires a display.
