@@ -213,6 +213,37 @@ static void send_text(SSL *ssl, uint64_t *rng, const char *text)
     }
 }
 
+/* SSL_read/SSL_accept return -1 with WANT_READ when the socket timeout
+ * expires; that is not the peer closing. Retry until a deadline. */
+static uint64_t test_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}
+
+static int server_read(SSL *ssl, void *buffer, int length)
+{
+    const uint64_t deadline = test_now_ms() + 5000;
+    for (;;) {
+        const int read = SSL_read(ssl, buffer, length);
+        if (read > 0) {
+            return read;
+        }
+        const int error = SSL_get_error(ssl, read);
+        if (error == SSL_ERROR_ZERO_RETURN) {
+            return 0;
+        }
+        if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+            return read == 0 ? 0 : -1;
+        }
+        if (test_now_ms() >= deadline) {
+            return -1;
+        }
+        sleep_ms(2);
+    }
+}
+
 static void serve_one(TlsServer *server, int fd, bool drop)
 {
     /* The listener carries a 100 ms accept timeout; Linux does not propagate
@@ -223,16 +254,23 @@ static void serve_one(TlsServer *server, int fd, bool drop)
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     SSL *ssl = SSL_new(server->ctx);
     SSL_set_fd(ssl, fd);
-    if (SSL_accept(ssl) != 1) {
-        SSL_free(ssl);
-        close(fd);
-        return;
+    for (;;) {
+        const int accepted = SSL_accept(ssl);
+        if (accepted == 1) {
+            break;
+        }
+        const int error = SSL_get_error(ssl, accepted);
+        if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+            SSL_free(ssl);
+            close(fd);
+            return;
+        }
     }
     char request[2048];
     size_t used = 0;
     while (used < sizeof(request) - 1) {
-        const int read = SSL_read(ssl, request + used,
-                                  (int)(sizeof(request) - 1 - used));
+        const int read = server_read(ssl, request + used,
+                                     (int)(sizeof(request) - 1 - used));
         if (read <= 0) {
             break;
         }
@@ -264,8 +302,8 @@ static void serve_one(TlsServer *server, int fd, bool drop)
     uint64_t rng = 12345;
     bool welcome_sent = false;
     for (;;) {
-        const int read = SSL_read(ssl, pending + pending_length,
-                                  (int)(sizeof(pending) - pending_length));
+        const int read = server_read(ssl, pending + pending_length,
+                                     (int)(sizeof(pending) - pending_length));
         if (read <= 0) {
             break;
         }
