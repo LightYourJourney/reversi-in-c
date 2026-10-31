@@ -215,6 +215,12 @@ static void send_text(SSL *ssl, uint64_t *rng, const char *text)
 
 static void serve_one(TlsServer *server, int fd, bool drop)
 {
+    /* The listener carries a 100 ms accept timeout; Linux does not propagate
+     * it, other systems might, and either way 100 ms is far too short for the
+     * upgrade handshake on a loaded runner. Pin generous timeouts here. */
+    struct timeval timeout = {.tv_sec = 10, .tv_usec = 0};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     SSL *ssl = SSL_new(server->ctx);
     SSL_set_fd(ssl, fd);
     if (SSL_accept(ssl) != 1) {
