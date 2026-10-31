@@ -236,8 +236,6 @@ static int server_read(SSL *ssl, void *buffer, int length)
             return 0;
         }
         if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
-            fprintf(stderr, "[srv] read end: read=%d error=%d errno=%d\n",
-                    read, error, errno);
             return read == 0 ? 0 : -1;
         }
         if (test_now_ms() >= deadline) {
@@ -260,7 +258,6 @@ static void serve_one(TlsServer *server, int fd, bool drop)
     for (;;) {
         const int accepted = SSL_accept(ssl);
         if (accepted == 1) {
-            fprintf(stderr, "[srv] tls handshake ok\n");
             break;
         }
         const int error = SSL_get_error(ssl, accepted);
@@ -292,7 +289,6 @@ static void serve_one(TlsServer *server, int fd, bool drop)
         close(fd);
         return;
     }
-    fprintf(stderr, "[srv] upgrade request read, replying\n");
     if (SSL_write(ssl, response, (int)strlen(response)) <= 0) {
         SSL_free(ssl);
         close(fd);
@@ -353,8 +349,6 @@ static void serve_one(TlsServer *server, int fd, bool drop)
         memmove(pending, pending + offset, pending_length - offset);
         pending_length -= offset;
     }
-    fprintf(stderr, "[srv] leaving frame loop (drop=%d accepted=%d)\n",
-            (int)drop, server->accepted);
     SSL_shutdown(ssl);
     SSL_free(ssl);
     close(fd);
@@ -375,17 +369,22 @@ static void *server_thread(void *argument)
     return NULL;
 }
 
+/* Polls until the client is connected: pumping the full budget would let the
+ * server's read deadline expire before the test sends anything. */
 static bool wait_connected(NetClient *client, const Events *events, int ms)
 {
-    pump(client, ms);
-    const bool connected = net_client_status(client) == NET_CLIENT_CONNECTED;
-    if (!connected) {
-        /* The reason is the only clue when a trust chain behaves differently
-         * across distros. */
-        fprintf(stderr, "[tls] connect failed: status=%d reason=%s\n",
-                (int)events->status, events->reason);
+    for (int elapsed = 0; elapsed < ms; elapsed += 2) {
+        net_client_poll(client);
+        if (net_client_status(client) == NET_CLIENT_CONNECTED) {
+            return true;
+        }
+        sleep_ms(2);
     }
-    return connected;
+    /* The reason is the only clue when a trust chain behaves differently
+     * across distros. */
+    fprintf(stderr, "[tls] connect failed: status=%d reason=%s\n",
+            (int)events->status, events->reason);
+    return false;
 }
 
 static void test_valid_certificate(TestStats *stats, const char *dir)

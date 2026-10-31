@@ -239,8 +239,6 @@ static bool socket_wait_connected(NetClient *client, ClientSocket socket_fd,
 static void set_status(NetClient *client, NetClientStatus status,
                        const char *reason)
 {
-    fprintf(stderr, "[cli] status=%d reason=%s\n", (int)status,
-            reason != NULL ? reason : "-");
     atomic_store_explicit(&client->status, (int)status, memory_order_release);
     if (reason != NULL) {
         lock_client(client);
@@ -279,8 +277,6 @@ static int connection_read(NetClient *client, void *data, size_t length)
             return read;
         }
         const int error = SSL_get_error(ssl, read);
-        fprintf(stderr, "[cli] tls read=%d error=%d errno=%d\n", read, error,
-                errno);
         if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
             return -2;
         }
