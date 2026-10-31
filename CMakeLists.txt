@@ -231,13 +231,6 @@ if(NOT EMSCRIPTEN)
     # The Web build never uses this: the browser owns its TLS stack.
     option(REVERSI_ENABLE_TLS "Build the native client with OpenSSL (wss://)"
            ON)
-    # Windows would link OpenSSL but the package cannot ship its DLLs yet, and
-    # a release that fails to start is worse than one without TLS: keep the
-    # Windows build plaintext-only until the runtime is bundled.
-    if(WIN32)
-        set(REVERSI_ENABLE_TLS OFF)
-        message(STATUS "Reversi: native TLS disabled on Windows (see NETWORK_SECURITY.md §5)")
-    endif()
     if(REVERSI_ENABLE_TLS)
         find_package(OpenSSL 3.0 QUIET)
         if(NOT OpenSSL_FOUND AND APPLE)
@@ -257,6 +250,39 @@ if(NOT EMSCRIPTEN)
             target_compile_definitions(reversi_net_client
                 PUBLIC REVERSI_NET_TLS=1)
             set(REVERSI_HAVE_TLS TRUE)
+            if(WIN32)
+                # Windows links OpenSSL DLLs at run time; a package without
+                # them fails to start. Find the runtime that belongs to the
+                # import library we just linked.
+                get_target_property(REVERSI_SSL_LOCATION OpenSSL::SSL
+                                    IMPORTED_LOCATION)
+                if(NOT REVERSI_SSL_LOCATION)
+                    get_target_property(REVERSI_SSL_LOCATION OpenSSL::SSL
+                                        IMPORTED_IMPLIB)
+                endif()
+                if(NOT REVERSI_SSL_LOCATION)
+                    get_target_property(REVERSI_SSL_LOCATION OpenSSL::SSL
+                                        IMPORTED_LOCATION_RELEASE)
+                endif()
+                if(NOT REVERSI_SSL_LOCATION)
+                    set(REVERSI_SSL_LOCATION "${OPENSSL_SSL_LIBRARY}")
+                endif()
+                get_filename_component(REVERSI_SSL_DIR
+                                       "${REVERSI_SSL_LOCATION}" DIRECTORY)
+                file(GLOB REVERSI_OPENSSL_DLLS
+                     "${REVERSI_SSL_DIR}/libssl*.dll"
+                     "${REVERSI_SSL_DIR}/libcrypto*.dll"
+                     "${REVERSI_SSL_DIR}/../bin/libssl*.dll"
+                     "${REVERSI_SSL_DIR}/../bin/libcrypto*.dll")
+                if(REVERSI_OPENSSL_DLLS)
+                    message(STATUS "Reversi: bundling OpenSSL runtime: "
+                                   "${REVERSI_OPENSSL_DLLS}")
+                else()
+                    message(WARNING
+                        "OpenSSL runtime DLLs not found next to "
+                        "${REVERSI_SSL_LOCATION}; packaging will fail")
+                endif()
+            endif()
             message(STATUS "Reversi: native TLS enabled (${OPENSSL_VERSION})")
         else()
             message(STATUS "Reversi: OpenSSL not found, native TLS disabled")
@@ -519,6 +545,15 @@ install(FILES LICENSE THIRD_PARTY_NOTICES.md README.md CHANGELOG.md VERSION
 # deploy/systemd/reversi-server.service runs bin/reversi_server.
 if(TARGET reversi_server)
     install(TARGETS reversi_server RUNTIME DESTINATION bin
+            COMPONENT Reversi)
+endif()
+
+# Windows: the executables load OpenSSL at run time, so the runtime ships in
+# the archive — next to reversi.exe at the root and next to the server in bin/.
+if(WIN32 AND REVERSI_OPENSSL_DLLS)
+    install(FILES ${REVERSI_OPENSSL_DLLS} DESTINATION .
+            COMPONENT Reversi)
+    install(FILES ${REVERSI_OPENSSL_DLLS} DESTINATION bin
             COMPONENT Reversi)
 endif()
 

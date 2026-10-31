@@ -13,7 +13,7 @@
 | 问题 | 结论 | 依据 |
 |---|---|---|
 | 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、四个浏览器（Chrome/Firefox/WebKit/Safari）、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
-| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：Windows 构建无 TLS、iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
+| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：Windows 上的 TLS 行为未测试、iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
 
 “可以进入 Public Beta”的含义是：源可用、可由用户自行 `ws://127.0.0.1`
 或本地 TLS 代理运行；**不得**宣称“公网/生产就绪”。正式发布前必须补齐
@@ -149,7 +149,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 - 若以 **Public Beta** 名义发布：只发布源码 + 强调自托管与“未做公网
   安全评估”；在 Release Notes 中列出 §6 的第 1–3 项，其中第 1 项
-  （Windows 无 TLS）必须写成限制而不是缺陷修复承诺之外的事。
+  （Windows 的 TLS 只有打包冒烟验证）必须写成限制而不是缺陷修复承诺之外的事。
 - 正式 v2.0.0：§6 第 2–3 项是外部环境验证（移动端、公网 TLS），第 1 项
   （Windows TLS）需要把 OpenSSL 运行时打进包，第 4 项（Windows 物理桌面）
   建议发布前补；第 5 项（systemd/logrotate 模板）作为已知限制披露。CI、打包、ASan/UBSan、macOS GUI、桌面↔Web、

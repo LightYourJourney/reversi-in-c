@@ -15,8 +15,9 @@
 ### Security
 
 - 明文传输限制：`ws://` 目标不是回环/私网时，在建立套接字前即以
-  `tls_required` 失败，不会向公网明文发送协议；公网联机走 `wss://`
-  （Windows 构建暂不支持）。见 `docs/NETWORK_SECURITY.md` §5。
+  `tls_required` 失败，不会向公网明文发送协议；公网联机走 `wss://`。
+  Windows 包自带 OpenSSL 运行时（`libssl`/`libcrypto`），由打包冒烟验证
+  可启动。见 `docs/NETWORK_SECURITY.md` §5。
 
 ### Added
 

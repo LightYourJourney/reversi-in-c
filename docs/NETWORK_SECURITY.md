@@ -96,11 +96,17 @@
 | 握手成功后服务端断开 | 客户端进入 DISCONNECTED |
 | `REVERSI_TLS_E2E=host:port` + 真 nginx WSS + `reversi_server` | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1（本机实测，52 条断言） |
 
-**平台差异**：macOS 与 Linux 构建带 TLS（CI 的 Linux 任务安装
-`libssl-dev`）。**Windows 构建刻意关闭 TLS**：链接 OpenSSL 后发布包还必须
-携带 `libssl-3-x64.dll` / `libcrypto-3-x64.dll`，在没有 Windows 打包验证
-之前，宁可保持“明文 + 拒绝公网”，也不发布一个可能起不来的包。启用路径：
-把这两个 DLL 放进发布包并加一条 Windows 包启动验收。发布说明必须写明。
+**平台**：macOS、Linux、Windows 三个构建都带 TLS（Linux CI 安装
+`libssl-dev`；Windows 使用 runner 自带的 OpenSSL）。Windows 的可执行文件
+在运行期加载 OpenSSL，因此发布包**自带运行时**：`libssl-3-x64.dll` /
+`libcrypto-3-x64.dll` 同时放在包根（与 `reversi.exe` 同级）和 `bin/`
+（与 `reversi_server.exe` 同级）。打包工作流的冒烟步骤会检查这两个目录都
+有 DLL，并把 `PATH` 收窄到包目录 + `System32` 后运行 `reversi.exe --version`
+与 `reversi_server.exe --help`，因此“漏打 DLL”会在 CI 失败，而不是在用户
+机器上。
+
+实现细节：Windows 上 OpenSSL 的 `SSL_set_fd()` 接收 `int`，套接字句柄按
+OpenSSL 的惯例转换（64 位句柄值在实际运行中落在 int 范围内）。
 
 **仍未覆盖**：有效但已过期的证书、真实公网 CA、TLS 中断后的自动重连
 （重连路径复用同一传输，但只有明文路径有自动化）。

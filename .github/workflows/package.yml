@@ -74,6 +74,22 @@ jobs:
           Expand-Archive $zip.FullName -DestinationPath build/package/smoke -Force
           $exe = Get-ChildItem build/package/smoke -Recurse -Filter reversi.exe |
             Select-Object -First 1
+          $root = Split-Path $exe.FullName -Parent
+          $server = Join-Path $root 'bin/reversi_server.exe'
+
+          # The package must carry its own OpenSSL runtime: the game links it
+          # and so does the server, in a different directory.
+          foreach ($dir in @($root, (Join-Path $root 'bin'))) {
+            foreach ($pattern in @('libssl-*.dll', 'libcrypto-*.dll')) {
+              if (-not (Get-ChildItem $dir -Filter $pattern -ErrorAction SilentlyContinue)) {
+                throw "Missing $pattern in $dir"
+              }
+            }
+          }
+
+          # Run with a PATH that cannot reach a system OpenSSL, so a missing
+          # bundled DLL fails here instead of on a user's machine.
+          $env:PATH = "$root;C:\Windows\System32;C:\Windows"
           $output = (& $exe.FullName --version | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) {
             throw "reversi.exe --version exited with $LASTEXITCODE"
@@ -81,6 +97,13 @@ jobs:
           $version = (Get-Content VERSION -Raw).Trim()
           if ($output -notmatch "^Reversi $([regex]::Escape($version)) ") {
             throw "Unexpected version output: $output"
+          }
+          if (-not (Test-Path $server)) {
+            throw "Missing bin/reversi_server.exe"
+          }
+          $help = (& $server --help 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $help -notmatch 'usage:') {
+            throw "Packaged server does not start: $help"
           }
 
       - name: Upload package and checksum
