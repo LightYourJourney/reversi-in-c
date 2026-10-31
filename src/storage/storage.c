@@ -1,3 +1,9 @@
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+/* fsync(fileno(...)) needs POSIX declarations; newer libc/clang hide them
+ * under -std=c11 otherwise. */
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "storage/storage.h"
 
 #include <errno.h>
