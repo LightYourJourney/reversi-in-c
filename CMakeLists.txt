@@ -283,7 +283,12 @@ if(NOT EMSCRIPTEN)
                     file(GLOB found
                          "${candidate}/libssl*.dll"
                          "${candidate}/libcrypto*.dll")
-                    list(APPEND REVERSI_OPENSSL_DLLS ${found})
+                    foreach(dll ${found})
+                        # Normalise first: the candidates reach the same file
+                        # by different relative routes.
+                        get_filename_component(dll "${dll}" ABSOLUTE)
+                        list(APPEND REVERSI_OPENSSL_DLLS "${dll}")
+                    endforeach()
                 endforeach()
                 list(REMOVE_DUPLICATES REVERSI_OPENSSL_DLLS)
                 if(REVERSI_OPENSSL_DLLS)
