@@ -113,7 +113,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | 存储被禁用 | PASS | 同上：三引擎均显示 “Browser storage is unavailable…” 横幅且模块正常启动 |
 | Safari 整局（macOS 26.6.2 / Safari 26.6.2） | PASS | `scripts/safari-online-e2e.mjs`（safaridriver）：房间 `CD8GDJ`（HTTP+ws://）与 `VFDHTZ`（https+wss，`acceptInsecureCerts`），均完整 60 手、两端 `netSeq` 60、`result` 2，30 手为真实 HID 点击 |
 | Safari 整局（本轮） | NOT TESTED | 会话不可见（`visibilityState=hidden`、帧计数 0），本轮无法驱动；上一轮 `CD8GDJ`/`VFDHTZ` 仍有效，产物仅差只读钩子 |
-| iOS Safari / Android Chrome | NOT TESTED | 2026-10-31 尝试：iOS runtime 下载在 4.4% 时因磁盘不足中断（需 8.34 GB）；Android SDK + emulator + API 35 镜像已装（5.3 GB）、AVD 已建，但数据卷 99% 满（剩余 4.8 GB），模拟器无法完成启动。需约 10 GB 空闲后重试；Android 脚本已就绪（`scripts/android-web-e2e.mjs`） |
+| iOS Safari / Android Chrome | NOT TESTED | 2026-10-31 尝试：iOS runtime 下载在 4.4% 时因磁盘不足中断（需 8.34 GB）；Android SDK + emulator + API 35 镜像曾装好（5.3 GB）、AVD 已建，但数据卷 99% 满（当时剩 4.8 GB），模拟器无法完成启动；为腾空间已删除 SDK（2026-11-01）。需约 10 GB 空闲后重装并重试；Android 脚本已就绪（`scripts/android-web-e2e.mjs`） |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
 | 真实公共 CA 链 | PASS | `REVERSI_TLS_PUBLIC=1`：`example.com` 通过，`expired`/`self-signed`/`wrong.host.badssl.com` 被拒 |
 | 可信证书链 / 公网 HSTS | NOT TESTED | 自签证书本地验证，未申请证书/未改 DNS |
