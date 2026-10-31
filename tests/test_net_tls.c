@@ -257,6 +257,7 @@ static void serve_one(TlsServer *server, int fd, bool drop)
     for (;;) {
         const int accepted = SSL_accept(ssl);
         if (accepted == 1) {
+            fprintf(stderr, "[srv] tls handshake ok\n");
             break;
         }
         const int error = SSL_get_error(ssl, accepted);
@@ -288,6 +289,7 @@ static void serve_one(TlsServer *server, int fd, bool drop)
         close(fd);
         return;
     }
+    fprintf(stderr, "[srv] upgrade request read, replying\n");
     if (SSL_write(ssl, response, (int)strlen(response)) <= 0) {
         SSL_free(ssl);
         close(fd);
@@ -348,6 +350,8 @@ static void serve_one(TlsServer *server, int fd, bool drop)
         memmove(pending, pending + offset, pending_length - offset);
         pending_length -= offset;
     }
+    fprintf(stderr, "[srv] leaving frame loop (drop=%d accepted=%d)\n",
+            (int)drop, server->accepted);
     SSL_shutdown(ssl);
     SSL_free(ssl);
     close(fd);
