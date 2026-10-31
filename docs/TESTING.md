@@ -254,7 +254,9 @@ Debug/Release/ASan+UBSan 各 15/15（均无窗口）；v1.2.0 的 17/17 见 §2�
 Phase 10 的 GUI 测试在本机 **NOT TESTED**：当前会话没有可用显示器，
 `InitWindow` 报 `GLFW: Failed to get primary monitor`。
 
-未验证：真实 iOS/Android 设备、真实 GPU 下的帧率。Safari 与 Firefox 已
+未验证：真实 iOS/Android 设备、真实 GPU 下的帧率（2026-10-31 尝试装模拟器，
+受本机磁盘 99% 满所限未成；Android 自动化脚本 `scripts/android-web-e2e.mjs`
+已就绪）。Safari 与 Firefox 已
 验证（桌面：Safari 26.6.2 经 `safaridriver` 完成整局，Firefox 157 经
 Playwright）；浏览器存储被禁用的降级路径见 §13 的 `web-runtime-checks`。
 

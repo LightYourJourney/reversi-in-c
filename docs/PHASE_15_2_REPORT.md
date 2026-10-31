@@ -178,7 +178,7 @@ DMG/包体、GUI 桌面会话、桌面↔Web 实机对局**本轮未重跑**：�
 | 项 | 状态 | 说明 |
 |---|---|---|
 | Safari 整局 | **本轮未重跑** | 会话不可见：`document.visibilityState=hidden`、帧计数 0，点击无法驱动。上一轮的 `CD8GDJ` / `VFDHTZ` 证据对应的 Web 产物与当前仅差一个只读钩子（`audioReady`）。 |
-| iOS Safari / Android Chrome | NOT TESTED | 无真机/模拟器 |
+| iOS Safari / Android Chrome | **NOT TESTED（已尝试，磁盘受限）** | 2026-10-31：`xcodebuild -downloadPlatform iOS` 需 8.34 GB，下载至 4.4% 时因空间不足中断；Android SDK/emulator/API 35 已装（5.3 GB）、AVD 已建，但数据卷 418/460 GB，模拟器起不来。解锁条件：约 10 GB 空闲；Android 自动化脚本已在仓库内 |
 | 可信证书链、公网 HSTS/DNS | NOT TESTED | 需真实域名，未授权 |
 | Windows 物理桌面 GUI | NOT TESTED | CI 为托管 VM |
 | systemd / logrotate 实机 | NOT TESTED | 同上，属既有缺口 |
