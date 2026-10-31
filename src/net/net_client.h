@@ -37,8 +37,10 @@ bool net_client_connect(NetClient *client, const char *host, int port);
  * OpenSSL fails with "tls_unavailable" instead of falling back to plaintext. */
 bool net_client_connect_tls(NetClient *client, const char *host, int port);
 
-/* Whether this build was compiled with a TLS stack. */
-bool net_client_tls_supported(void);
+/* Whether this build exposes a *selectable* native TLS transport. The Web
+ * build returns false: the browser upgrades https:// to wss:// by itself, so
+ * there is nothing for the player to choose. */
+bool net_client_tls_selectable(void);
 void net_client_disconnect(NetClient *client);
 void net_client_poll(NetClient *client);
 

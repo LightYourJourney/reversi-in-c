@@ -1135,8 +1135,6 @@ static void app_handle_net_action(App *app, NetViewAction action)
         }
         break;
     }
-    case NET_VIEW_TOGGLE_TLS:
-        break;
     case NET_VIEW_DISCONNECT:
         net_session_disconnect(app->net);
         break;

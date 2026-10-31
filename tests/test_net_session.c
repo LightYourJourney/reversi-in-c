@@ -266,7 +266,9 @@ static void test_session_plaintext_refused(TestStats *stats)
         test_sleep_ms(1);
     }
     REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FAILED);
-    REVERSI_TEST_ASSERT(stats, strstr(a->error, "No TLS") != NULL);
+    /* The wording depends on whether this build can offer wss; both name
+     * TLS as the thing that is missing. */
+    REVERSI_TEST_ASSERT(stats, strstr(a->error, "TLS") != NULL);
     net_session_destroy(a);
 }
 

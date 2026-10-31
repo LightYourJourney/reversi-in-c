@@ -17,7 +17,9 @@ const {
   startLocalMobile, startPve, startPveHard, playOpeningMove,
   waitForAiActive, waitForFrames, waitForMoves, autosaveMoves, assert
 } = require('./lib');
-const SCREENSHOT_DIR = 'tests/web/screenshots';
+/* Relative to this file, not the caller's cwd: running from tests/ used to
+ * write a second, tracked copy under tests/web/tests/. */
+const SCREENSHOT_DIR = require('node:path').join(__dirname, 'screenshots');
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
 const URL = process.env.REVERSI_WEB_URL || 'http://127.0.0.1:8080';

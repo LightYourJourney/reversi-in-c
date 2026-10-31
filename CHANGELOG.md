@@ -14,9 +14,9 @@
 
 ### Security
 
-- 原生客户端没有 TLS：解析出的目标不是回环/私网时，在建立套接字前即以
-  `tls_required` 失败，不再可能向公网明文发送协议。桌面端公网联机
-  NOT SUPPORTED，设计见 `docs/NETWORK_SECURITY.md` §5。
+- 明文传输限制：`ws://` 目标不是回环/私网时，在建立套接字前即以
+  `tls_required` 失败，不会向公网明文发送协议；公网联机走 `wss://`
+  （Windows 构建暂不支持）。见 `docs/NETWORK_SECURITY.md` §5。
 
 ### Added
 

@@ -12,7 +12,7 @@
 | 任务二 桌面 WSS | **已交付（macOS/Linux）**：原生客户端新增 OpenSSL 3 传输，证书链 + 主机名校验、TLS 1.2+、可取消握手、异步队列不变；大厅新增 “Use TLS (wss)” 复选框。Windows 构建无 OpenSSL，仍为明文并拒绝公网地址。 |
 | 任务三 主线程网络等待 | **PASS**：桌面发送改为 16 KiB 有界异步队列，主线程只入队；卡死服务器下实测单次调用最慢 6 ms（原实现单次最长 1 s）。 |
 | 任务四 文档一致性 | **PASS**：README/ROADMAP/TESTING/NETWORK_SECURITY/RELEASE_READINESS 与实测对齐；历史阶段报告保持原样。 |
-| 任务五 RC 验收 | **RC 保留**：本地 Debug/Release/ASan 各 26/26，浏览器三引擎联机与 9/9 自动化通过；Safari 本轮未重跑（见 §7）。 |
+| 任务五 RC 验收 | **RC 保留**：本地 Debug/Release/ASan 各 27/27，浏览器三引擎联机与 9/9 自动化通过；Safari 本轮未重跑（见 §7）。 |
 
 **正式 Release 仍不建议**：剩余阻碍见 §8。
 
@@ -104,11 +104,12 @@ rehearse-rollback.sh: PASS 坏发布被拒 / PASS 回滚恢复 / PASS 未建房
 | 自建 CA、主机名正确 | 建连成功，welcome 与 ping/pong 往返 |
 | 客户端信任另一个 CA | `tls_certificate_invalid` |
 | 证书只有 `DNS:localhost`，拨 `127.0.0.1` | `tls_certificate_invalid`（主机名不匹配） |
+| IP 字面量主机（大厅默认 `127.0.0.1`，证书含 IP SAN） | 建连成功（用 `X509_VERIFY_PARAM_set1_ip_asc` 校验） |
 | 握手成功后服务端断开 | 客户端进入 DISCONNECTED |
+| TLS 断线 | 会话以 TLS 自动重连，服务端收到第 2 条连接 |
 | 真 nginx WSS + `reversi_server`（`REVERSI_TLS_E2E`） | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1；52 条断言全通过 |
 
-**未覆盖**：过期证书、真实公网 CA、TLS 中断后的自动重连（重连沿用同一
-传输，但自动化只覆盖明文路径）；Windows 无 TLS。
+**未覆盖**：过期证书、真实公网 CA；Windows 无 TLS。
 
 ## 5. 任务三：主线程网络等待
 
@@ -149,7 +150,7 @@ ping 都由 `net_session` 直接调用）。
 
 | 套件 | 结果 |
 |---|---|
-| Debug `ctest` | **27/27 通过**，合计 **1,211,034** 条断言（含 `net.tls` 33） |
+| Debug `ctest` | **27/27 通过**，合计 **1,211,054** 条断言（`net.tls` 52、`net.client` 63、`net.session` 101） |
 | Release `ctest` | 27/27 通过 |
 | ASan+UBSan `ctest`（`halt_on_error=1`） | 27/27 通过（含 `net.tls`） |
 | 浏览器联机 E2E（HTTPS/WSS） | Chrome `UV4QP5`、Firefox `SB6UEM`、WebKit `5B6XD4`，均 0 失败 |
@@ -167,9 +168,10 @@ CI 过程中暴露并修掉了两个问题，都是**测试/打包**问题而非
   任务不构建 Web。改为“服务端必须存在、Web 存在才校验”，并让
   `scripts/package.sh` 在有 emsdk 时先构建 Web。
 
-DMG/包体、GUI 桌面会话、桌面↔Web 实机对局**本轮未重跑**：桌面 UI 未改动，
-改动集中在 `NetClient` 传输层，已由 `net.client`（63）与 `net.session`
-（100，真实套接字整局）覆盖。
+DMG/包体、GUI 桌面会话、桌面↔Web 实机对局**本轮未重跑**：桌面改动集中在
+`NetClient` 传输层与大厅的一个复选框，已由 `net.client`（63）、
+`net.session`（101，真实套接字整局）与 `net.tls`（52）覆盖；`app.net`
+渲染冒烟在 27/27 里通过，但复选框的视觉位置没有截图复核。
 
 ## 7. 未完成 / 未验证
 

@@ -239,7 +239,7 @@ bool net_client_connect_tls(NetClient *client, const char *host, int port)
     return net_client_connect(client, host, port);
 }
 
-bool net_client_tls_supported(void)
+bool net_client_tls_selectable(void)
 {
     return false;
 }

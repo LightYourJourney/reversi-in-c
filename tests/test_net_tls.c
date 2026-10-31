@@ -43,9 +43,12 @@ typedef struct TlsServer {
     int listen_fd;
     SSL_CTX *ctx;
     int port;
-    bool echo;      /* echo frames back after the welcome */
-    bool drop_after_welcome;
+    int accepts;    /* how many connections to serve (default 1) */
+    int accepted;   /* connections served so far */
+    bool echo;      /* answer ping with pong */
+    bool drop_after_welcome; /* first connection only */
     bool saw_welcome;
+    volatile bool stopping;  /* lets the accept loop exit on shutdown */
 } TlsServer;
 
 typedef struct Events {
@@ -80,11 +83,10 @@ static void sleep_ms(int ms)
     nanosleep(&ts, NULL);
 }
 
-static void pump(NetClient *client, TlsServer *server, int ms)
+static void pump(NetClient *client, int ms)
 {
     for (int elapsed = 0; elapsed < ms; elapsed += 2) {
         net_client_poll(client);
-        (void)server;
         sleep_ms(2);
     }
 }
@@ -175,11 +177,19 @@ static bool server_start(TlsServer *server, const char *cert,
         return false;
     }
     server->port = ntohs(address.sin_port);
+    /* accept() must be interruptible: a test that never connects would
+     * otherwise leave the thread blocked and pthread_join hanging. */
+    struct timeval timeout = {.tv_sec = 0, .tv_usec = 100000};
+    setsockopt(server->listen_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+               sizeof(timeout));
     return true;
 }
 
-static void server_stop(TlsServer *server)
+/* Stops the accept loop, joins it, then releases the listener and context. */
+static void server_finish(TlsServer *server, pthread_t thread)
 {
+    server->stopping = true;
+    pthread_join(thread, NULL);
     if (server->listen_fd >= 0) {
         close(server->listen_fd);
         server->listen_fd = -1;
@@ -192,19 +202,25 @@ static void server_stop(TlsServer *server)
 
 /* Accepts one connection, answers the upgrade, sends a welcome and then
  * echoes text frames until the peer leaves. */
-static void *server_thread(void *argument)
+static void send_text(SSL *ssl, uint64_t *rng, const char *text)
 {
-    TlsServer *server = argument;
-    const int fd = accept(server->listen_fd, NULL, NULL);
-    if (fd < 0) {
-        return NULL;
+    uint8_t out[256];
+    const size_t length = net_ws_encode(0x1, (const uint8_t *)text,
+                                        strlen(text), false, rng, out,
+                                        sizeof(out));
+    if (length > 0) {
+        SSL_write(ssl, out, (int)length);
     }
+}
+
+static void serve_one(TlsServer *server, int fd, bool drop)
+{
     SSL *ssl = SSL_new(server->ctx);
     SSL_set_fd(ssl, fd);
     if (SSL_accept(ssl) != 1) {
         SSL_free(ssl);
         close(fd);
-        return NULL;
+        return;
     }
     char request[2048];
     size_t used = 0;
@@ -226,63 +242,91 @@ static void *server_thread(void *argument)
         || !net_ws_build_handshake_response(key, response)) {
         SSL_free(ssl);
         close(fd);
-        return NULL;
+        return;
     }
     if (SSL_write(ssl, response, (int)strlen(response)) <= 0) {
         SSL_free(ssl);
         close(fd);
-        return NULL;
+        return;
     }
     NetWsParser parser;
     net_ws_parser_init(&parser);
-    uint8_t buffer[2048];
+    /* Frames are read into a buffer that keeps whatever the parser has not
+     * consumed: one SSL_read can carry several frames (hello + rejoin). */
+    uint8_t pending[4096];
+    size_t pending_length = 0;
     uint64_t rng = 12345;
     bool welcome_sent = false;
     for (;;) {
-        const int read = SSL_read(ssl, buffer, (int)sizeof(buffer));
+        const int read = SSL_read(ssl, pending + pending_length,
+                                  (int)(sizeof(pending) - pending_length));
         if (read <= 0) {
             break;
         }
-        NetWsFrame frame;
-        size_t consumed = 0;
-        const NetWsResult result = net_ws_parse(
-            &parser, buffer, (size_t)read, true, &frame, &consumed);
-
-        if (result == NET_WS_TEXT) {
+        pending_length += (size_t)read;
+        size_t offset = 0;
+        bool dropped = false;
+        while (offset < pending_length) {
+            NetWsFrame frame;
+            size_t consumed = 0;
+            const NetWsResult result = net_ws_parse(
+                &parser, pending + offset, pending_length - offset, true,
+                &frame, &consumed);
+            if (result == NET_WS_NEED_MORE || consumed == 0) {
+                break;
+            }
+            offset += consumed;
+            if (result != NET_WS_TEXT) {
+                continue;
+            }
             if (!welcome_sent) {
                 welcome_sent = true;
                 server->saw_welcome = true;
-                uint8_t out[256];
-                const char *text = "welcome v=1 "
-                    "token=0123456789abcdef0123456789abcdef player=1";
-                const size_t length = net_ws_encode(
-                    0x1, (const uint8_t *)text, strlen(text), false, &rng,
-                    out, sizeof(out));
-                SSL_write(ssl, out, (int)length);
-                if (server->drop_after_welcome) {
+                send_text(ssl, &rng, "welcome v=1 "
+                          "token=0123456789abcdef0123456789abcdef player=1");
+                if (drop && server->accepted == 1) {
+                    dropped = true;
                     break;
                 }
+            } else if (frame.length >= 6
+                       && memcmp(frame.payload, "rejoin", 6) == 0) {
+                /* No rooms here: tell the session the seat is gone so it can
+                 * settle in the lobby instead of waiting for a room frame. */
+                send_text(ssl, &rng, "error error=rejoin_failed");
             } else if (server->echo && frame.length >= 4
                        && memcmp(frame.payload, "ping", 4) == 0) {
-                /* Answer with a message the client direction accepts. */
-                uint8_t out[64];
-                const char *text = "pong";
-                const size_t length = net_ws_encode(
-                    0x1, (const uint8_t *)text, strlen(text), false, &rng,
-                    out, sizeof(out));
-                SSL_write(ssl, out, (int)length);
+                send_text(ssl, &rng, "pong");
             }
         }
+        if (dropped) {
+            break;
+        }
+        memmove(pending, pending + offset, pending_length - offset);
+        pending_length -= offset;
     }
     SSL_shutdown(ssl);
     SSL_free(ssl);
     close(fd);
+}
+
+static void *server_thread(void *argument)
+{
+    TlsServer *server = argument;
+    const int total = server->accepts > 0 ? server->accepts : 1;
+    while (!server->stopping && server->accepted < total) {
+        const int fd = accept(server->listen_fd, NULL, NULL);
+        if (fd < 0) {
+            continue; /* receive timeout, re-check stopping */
+        }
+        server->accepted += 1;
+        serve_one(server, fd, server->drop_after_welcome);
+    }
     return NULL;
 }
 
-static bool wait_connected(NetClient *client, TlsServer *server, int ms)
+static bool wait_connected(NetClient *client, int ms)
 {
-    pump(client, server, ms);
+    pump(client, ms);
     return net_client_status(client) == NET_CLIENT_CONNECTED;
 }
 
@@ -307,22 +351,21 @@ static void test_valid_certificate(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "localhost", server.port));
-    REVERSI_TEST_ASSERT(stats, wait_connected(client, &server, 5000));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, 5000));
     /* The server answers the first text frame with a welcome. */
     const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
     REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
-    pump(client, &server, 800);
+    pump(client, 800);
     REVERSI_TEST_ASSERT(stats, events.messages >= 1);
 
     /* Round trip through the encrypted channel. */
     const NetMessage ping = {.type = NET_MSG_PING};
     REVERSI_TEST_ASSERT(stats, net_client_send(client, &ping));
-    pump(client, &server, 300);
+    pump(client, 300);
     REVERSI_TEST_ASSERT(stats, events.messages >= 2);
 
     net_client_destroy(client);
-    pthread_join(thread, NULL);
-    server_stop(&server);
+    server_finish(&server, thread);
 }
 
 static void test_untrusted_certificate(TestStats *stats, const char *dir)
@@ -353,13 +396,12 @@ static void test_untrusted_certificate(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "localhost", server.port));
-    pump(client, &server, 3000);
+    pump(client, 3000);
     REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_FAILED);
     REVERSI_TEST_ASSERT(stats,
         strcmp(events.reason, "tls_certificate_invalid") == 0);
     net_client_destroy(client);
-    pthread_join(thread, NULL);
-    server_stop(&server);
+    server_finish(&server, thread);
 }
 
 static void test_hostname_mismatch(TestStats *stats, const char *dir)
@@ -384,13 +426,96 @@ static void test_hostname_mismatch(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "127.0.0.1", server.port));
-    pump(client, &server, 3000);
+    pump(client, 3000);
     REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_FAILED);
     REVERSI_TEST_ASSERT(stats,
         strcmp(events.reason, "tls_certificate_invalid") == 0);
     net_client_destroy(client);
-    pthread_join(thread, NULL);
-    server_stop(&server);
+    server_finish(&server, thread);
+}
+
+/* The lobby defaults to 127.0.0.1; an IP literal must be checked against the
+ * certificate's IP SAN (SSL_set1_host would reject it outright). */
+static void test_ip_literal_host(TestStats *stats, const char *dir)
+{
+    char ca[512];
+    char cert[512];
+    char key[512];
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "literal", "DNS:localhost,IP:127.0.0.1", ca, sizeof(ca), cert,
+        sizeof(cert), key, sizeof(key)));
+    setenv("SSL_CERT_FILE", ca, 1);
+
+    TlsServer server = {.listen_fd = -1};
+    REVERSI_TEST_ASSERT(stats, server_start(&server, cert, key));
+    pthread_t thread;
+    REVERSI_TEST_ASSERT(stats,
+        pthread_create(&thread, NULL, server_thread, &server) == 0);
+
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    REVERSI_TEST_ASSERT(stats,
+        net_client_connect_tls(client, "127.0.0.1", server.port));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, 5000));
+    const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
+    REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
+    pump(client, 800);
+    REVERSI_TEST_ASSERT(stats, events.messages >= 1);
+    net_client_destroy(client);
+    server_finish(&server, thread);
+}
+
+/* A TLS session must reconnect over TLS after the peer disappears; the
+ * second connection is served by the same listener. */
+static void test_session_reconnects_over_tls(TestStats *stats, const char *dir)
+{
+    char ca[512];
+    char cert[512];
+    char key[512];
+    REVERSI_TEST_ASSERT(stats, make_certificate(
+        dir, "reconnect", "DNS:localhost,IP:127.0.0.1", ca, sizeof(ca), cert,
+        sizeof(cert), key, sizeof(key)));
+    setenv("SSL_CERT_FILE", ca, 1);
+
+    TlsServer server = {.listen_fd = -1, .accepts = 2,
+                        .drop_after_welcome = true};
+    REVERSI_TEST_ASSERT(stats, server_start(&server, cert, key));
+    pthread_t thread;
+    REVERSI_TEST_ASSERT(stats,
+        pthread_create(&thread, NULL, server_thread, &server) == 0);
+
+    NetSession *session = net_session_create();
+    REVERSI_TEST_ASSERT(stats, session != NULL);
+    REVERSI_TEST_ASSERT(stats,
+        net_session_connect_tls(session, "localhost", server.port));
+    for (int elapsed = 0; elapsed < 5000 && session->phase != NET_SESSION_LOBBY;
+         elapsed += 5) {
+        net_session_update(session, 0.01f);
+        sleep_ms(5);
+    }
+    REVERSI_TEST_ASSERT(stats, session->phase == NET_SESSION_LOBBY);
+
+    /* The first connection is closed right after its welcome. */
+    for (int elapsed = 0; elapsed < 5000
+         && session->phase != NET_SESSION_DISCONNECTED; elapsed += 5) {
+        net_session_update(session, 0.01f);
+        sleep_ms(5);
+    }
+    REVERSI_TEST_ASSERT(stats, session->phase == NET_SESSION_DISCONNECTED);
+
+    /* The session retries every 2 s and must come back over TLS. */
+    for (int elapsed = 0; elapsed < 8000 && session->phase != NET_SESSION_LOBBY;
+         elapsed += 5) {
+        net_session_update(session, 2.1f);
+        sleep_ms(5);
+    }
+    REVERSI_TEST_ASSERT(stats, session->phase == NET_SESSION_LOBBY);
+    REVERSI_TEST_ASSERT(stats, session->use_tls);
+    REVERSI_TEST_ASSERT(stats, server.accepted == 2);
+
+    net_session_destroy(session);
+    server_finish(&server, thread);
 }
 
 static void test_dropped_after_handshake(TestStats *stats, const char *dir)
@@ -414,14 +539,13 @@ static void test_dropped_after_handshake(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "localhost", server.port));
-    REVERSI_TEST_ASSERT(stats, wait_connected(client, &server, 5000));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, 5000));
     const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
     REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
-    pump(client, &server, 2000);
+    pump(client, 2000);
     REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_DISCONNECTED);
     net_client_destroy(client);
-    pthread_join(thread, NULL);
-    server_stop(&server);
+    server_finish(&server, thread);
 }
 
 /* Opt-in: two TLS sessions play a full round against a real reversi_server
@@ -537,8 +661,14 @@ int main(void)
     test_untrusted_certificate(&stats, dir);
     printf("RUN  test_hostname_mismatch\n");
     test_hostname_mismatch(&stats, dir);
+    printf("RUN  test_ip_literal_host\n");
+    test_ip_literal_host(&stats, dir);
     printf("RUN  test_dropped_after_handshake\n");
     test_dropped_after_handshake(&stats, dir);
+    printf("RUN  test_session_reconnects_over_tls\n");
+    test_session_reconnects_over_tls(&stats, dir);
+    printf("RUN  test_tls_capability\n");
+    REVERSI_TEST_ASSERT(&stats, net_client_tls_selectable());
     printf("RUN  test_live_server\n");
     test_live_server(&stats);
     return reversi_test_summary(&stats, "net.tls");

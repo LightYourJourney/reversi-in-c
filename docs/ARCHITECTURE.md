@@ -10,8 +10,10 @@
   ISO C11 始终是可编译基线（见 §20）。
 - 游戏规则、AI、持久化均不得依赖 GUI 或图形上下文。
 - AI 不得直接修改 UI 状态或绕过规则校验。
-- 唯一第三方图形库为 raylib；其余能力使用 C 标准库。后台线程使用平台线程
-  API（POSIX pthread / Win32 CreateThread），不引入额外第三方依赖。
+- 第三方依赖只有两处，且都可选：raylib（图形）与 OpenSSL 3（桌面客户端的
+  `wss://` 传输，`REVERSI_ENABLE_TLS` 默认 ON；Windows 构建暂不启用，见
+  `NETWORK_SECURITY.md` §5）。其余能力使用 C 标准库；后台线程使用平台线程
+  API（POSIX pthread / Win32 CreateThread）。
 - 模块边界清晰，避免巨型源文件、全局可变状态和循环依赖。
 
 ## 2. 分层与依赖方向
@@ -63,7 +65,7 @@
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4/11/12 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、只读 MultiPV 分析、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
 | Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
-| Net | `src/net/`、`server/` | Phase 14 已实现 | 协议/WS、权威房间服务端、桌面线程客户端、WebSocket 适配、客户端会话 | core（只读/服务端权威）、平台 socket、Emscripten、C 标准库 |
+| Net | `src/net/`、`server/` | Phase 14 已实现；15.2 增加桌面 TLS | 协议/WS、权威房间服务端、桌面线程客户端、WebSocket 适配、客户端会话、TLS 传输 | core（只读/服务端权威）、平台 socket、Emscripten、C 标准库、OpenSSL 3（可选，桌面 `wss://`） |
 | Experiment | `src/experiment/` | Phase 13 已实现 | 版本化实验配置、配对对局、强度/性能统计、CSV/JSON/Markdown/HTML 报告 | AI、core、C 标准库、平台进程/文件 API |
 | Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Board、Game、History、Rules、C 标准库 |
 | UI | `src/ui/` | Phase 2/3/4/5/12/14 已实现 | 运行时主题、绘制基础、字体、菜单/新游戏/对局/暂停/历史/设置/结算/帮助/统计/存档/分析视图、动画、模态 | raylib、core 只读类型、settings/stats 的数据结构、Net 会话只读状态（Online 视图）；Lab 视图编译进 App |
@@ -597,7 +599,8 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
 1. **服务端权威**：`reversi_server` 链接 `core`，所有落子/Pass/终局/超时
    由服务端判定；客户端只发送意图，UI 不自行决定胜负。
 2. **内置最小 WebSocket**：RFC 6455 握手与帧编解码、SHA-1/base64、
-   掩码/长度/分片校验；无新增第三方依赖。TLS 由反向代理终止。
+   掩码/长度/分片校验；服务端无新增第三方依赖，TLS 由反向代理终止。
+   桌面客户端另有可选 OpenSSL 传输（Phase 15.2，见本节第 7 条）。
 3. **两套传输、一个会话**：桌面用 socket + worker 线程 + 消息队列；Web 用
    浏览器 WebSocket + JS 回调队列；二者实现同一个 `net_client` 接口，
    `net_session` 与 UI 完全共用。
@@ -607,3 +610,7 @@ CTest 默认注册无 GUI 测试；GUI 冒烟测试通过
    `room_not_found`。默认只绑定回环地址。
 6. **UI 边界**：大厅与网络 HUD 只读 `NetSession`；socket/协议不进入
    `app`/`ui` 之外的规则路径，本地双人/AI 路径不受影响。
+7. **桌面 TLS 是可选传输（Phase 15.2）**：OpenSSL 3 只在 `NetClient` 内部
+   使用，`net_session` 只多一个 `use_tls` 标志；没有 TLS 的构建（Windows）
+   保持明文并拒绝公网地址，绝不降级。证书链与主机名校验都在客户端完成，
+   不存在“跳过校验”的开关。

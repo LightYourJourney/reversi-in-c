@@ -91,7 +91,9 @@ static Rectangle net_view_tls_bounds(void)
     const float panel_width = fminf(560.0f, width - 40.0f);
     const float x = (width - panel_width) * 0.5f;
     const float top = fmaxf(80.0f, height * 0.16f);
-    return (Rectangle){x, top + 168.0f, 260.0f, 24.0f};
+    /* Sits in the empty band between the room buttons (top+286..324) and the
+     * Back/Copy row (top+372); the status/room/opponent lines end at +222. */
+    return (Rectangle){x, top + 330.0f, 260.0f, 24.0f};
 }
 
 NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
@@ -111,11 +113,11 @@ NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
                 break;
             }
         }
-        if (net_client_tls_supported()
+        if (net_session_tls_selectable()
             && CheckCollisionPointRec(input->mouse,
                                       net_view_tls_bounds())) {
             view->use_tls = !view->use_tls;
-            return NET_VIEW_TOGGLE_TLS;
+            return NET_VIEW_NONE;
         }
     }
     if (view->focus >= 0 && view->focus < 3) {
@@ -248,7 +250,7 @@ void net_view_draw(const NetView *view, const NetSession *session,
                          (Rectangle){x, top + 140.0f, panel_width, 20.0f},
                          REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT,
                          UI_ALIGN_LEFT);
-    {
+    if (net_session_tls_selectable()) {
         const Rectangle box = net_view_tls_bounds();
         ui_draw_panel((Rectangle){box.x, box.y + 4.0f, 16.0f, 16.0f},
                       REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_SURFACE_ALT,
@@ -259,15 +261,10 @@ void net_view_draw(const NetView *view, const NetSession *session,
                           REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_ACCENT,
                           REVERSI_UI_COLOR_ACCENT);
         }
-        const bool supported = net_client_tls_supported();
-        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR,
-                             supported ? "Use TLS (wss)"
-                                       : "TLS not available in this build",
+        ui_draw_text_clipped(fonts, UI_TEXT_REGULAR, "Use TLS (wss)",
                              (Rectangle){box.x + 26.0f, box.y,
                                          box.width - 26.0f, box.height},
-                             REVERSI_UI_FONT_SMALL,
-                             supported ? REVERSI_UI_COLOR_TEXT
-                                       : REVERSI_UI_COLOR_TEXT_MUTED,
+                             REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT,
                              UI_ALIGN_LEFT);
     }
     if (session->code[0] != '\0') {

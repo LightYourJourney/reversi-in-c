@@ -14,9 +14,9 @@
 #if defined(REVERSI_NET_TLS) && REVERSI_NET_TLS
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#define CLIENT_TLS 1
+#define REVERSI_NET_CLIENT_TLS 1
 #else
-#define CLIENT_TLS 0
+#define REVERSI_NET_CLIENT_TLS 0
 #endif
 
 #if defined(_WIN32)
@@ -87,6 +87,8 @@ struct NetClient {
     bool use_tls;
     void *tls;      /* SSL * */
     void *tls_ctx;  /* SSL_CTX * */
+    /* Length of the last SSL_write that returned WANT; OpenSSL requires the
+     * retry to repeat the exact same call. Zero when nothing is pending. */
     size_t tls_pending;
 #if defined(_WIN32)
     CRITICAL_SECTION mutex;
@@ -267,7 +269,7 @@ static void queue_message(NetClient *client, const char *text, size_t length)
  * TLS state cannot make progress yet. Both transports share the callers. */
 static int connection_read(NetClient *client, void *data, size_t length)
 {
-#if CLIENT_TLS
+#if REVERSI_NET_CLIENT_TLS
     if (client->tls != NULL) {
         SSL *ssl = (SSL *)client->tls;
         const int read = SSL_read(ssl, data, (int)length);
@@ -293,7 +295,7 @@ static int connection_read(NetClient *client, void *data, size_t length)
 
 static int connection_write(NetClient *client, const void *data, size_t length)
 {
-#if CLIENT_TLS
+#if REVERSI_NET_CLIENT_TLS
     if (client->tls != NULL) {
         SSL *ssl = (SSL *)client->tls;
         const int written = SSL_write(ssl, data, (int)length);
@@ -315,7 +317,7 @@ static int connection_write(NetClient *client, const void *data, size_t length)
     return socket_would_block() ? -2 : -1;
 }
 
-#if CLIENT_TLS
+#if REVERSI_NET_CLIENT_TLS
 static void tls_release(NetClient *client)
 {
     if (client->tls != NULL) {
@@ -354,10 +356,24 @@ static bool tls_handshake(NetClient *client, const char **reason)
     }
     client->tls = ssl;
     SSL_set_fd(ssl, (int)client->socket);
-    SSL_set_tlsext_host_name(ssl, client->host);
-    if (SSL_set1_host(ssl, client->host) != 1) {
-        *reason = "tls_certificate_invalid";
-        return false;
+    /* An IP literal must be checked against the certificate's IP SAN:
+     * SSL_set1_host() only understands DNS names and would reject a peer
+     * that dials 127.0.0.1 (the lobby default). */
+    struct in_addr literal4;
+    struct in6_addr literal6;
+    if (inet_pton(AF_INET, client->host, &literal4) == 1
+        || inet_pton(AF_INET6, client->host, &literal6) == 1) {
+        if (X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl),
+                                          client->host) != 1) {
+            *reason = "tls_certificate_invalid";
+            return false;
+        }
+    } else {
+        SSL_set_tlsext_host_name(ssl, client->host);
+        if (SSL_set1_host(ssl, client->host) != 1) {
+            *reason = "tls_certificate_invalid";
+            return false;
+        }
     }
     SSL_set_connect_state(ssl);
     const uint64_t deadline = now_ms() + REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS;
@@ -529,11 +545,12 @@ static bool client_handshake(NetClient *client)
     return net_ws_validate_handshake_response(response, used, key);
 }
 
-/* This client speaks plain ws://; there is no TLS in the build. Until a WSS
- * transport lands (docs/NETWORK_SECURITY.md §4), only loopback and private
- * ranges are allowed, so the protocol is never put on the wire in clear text
- * towards a public address. Refusing here — before any socket is opened —
- * keeps the rule enforceable without a dial-out to check reachability. */
+/* Plaintext (ws://) is only ever sent to loopback or private ranges, so the
+ * protocol is never put on the wire in clear text towards a public address.
+ * wss:// connections skip this check because the certificate is verified.
+ * Refusing here — before any socket is opened — keeps the rule enforceable
+ * without a dial-out to check reachability. IPv4 only: the client resolves
+ * AF_INET, so IPv6 literals never reach this point. */
 static bool address_is_local(const struct sockaddr *address)
 {
     if (address == NULL || address->sa_family != AF_INET) {
@@ -547,6 +564,34 @@ static bool address_is_local(const struct sockaddr *address)
         || (host >> 16) == 0xC0A8   /* 192.168/16 private */
         || (host >> 16) == 0xA9FE   /* 169.254/16 link-local */
         || (host >> 22) == 0x191;   /* 100.64/10 carrier NAT */
+}
+
+#if defined(_WIN32)
+#define CLIENT_THREAD_RETURN return 0
+#else
+#define CLIENT_THREAD_RETURN return NULL
+#endif
+
+/* Ends the worker after a failed connection: reports the reason (unless the
+ * caller already stopped the client), releases TLS, drops whatever was
+ * queued and marks the thread finished. */
+static void client_fail(NetClient *client, ClientSocket socket_fd,
+                        const char *reason)
+{
+    if (reason != NULL && !atomic_load(&client->stop)) {
+        set_status(client, NET_CLIENT_FAILED, reason);
+    }
+#if REVERSI_NET_CLIENT_TLS
+    tls_release(client);
+#endif
+    lock_client(client);
+    outbound_clear(client);
+    if (socket_fd != CLIENT_INVALID) {
+        socket_close(socket_fd);
+    }
+    client->socket = CLIENT_INVALID;
+    unlock_client(client);
+    atomic_store(&client->running, false);
 }
 
 #if defined(_WIN32)
@@ -585,13 +630,8 @@ static void *client_thread(void *argument)
     }
     if (!allowed) {
         freeaddrinfo(results);
-        set_status(client, NET_CLIENT_FAILED, "tls_required");
-        atomic_store(&client->running, false);
-#if defined(_WIN32)
-        return 0;
-#else
-        return NULL;
-#endif
+        client_fail(client, CLIENT_INVALID, "tls_required");
+        CLIENT_THREAD_RETURN;
     }
     ClientSocket socket_fd = CLIENT_INVALID;
     const uint64_t connect_deadline =
@@ -624,68 +664,29 @@ static void *client_thread(void *argument)
     }
     freeaddrinfo(results);
     if (socket_fd == CLIENT_INVALID) {
-        if (!atomic_load(&client->stop)) {
-            set_status(client, NET_CLIENT_FAILED, "connect_failed");
-        }
-        atomic_store(&client->running, false);
-#if defined(_WIN32)
-        return 0;
-#else
-        return NULL;
-#endif
+        client_fail(client, CLIENT_INVALID, "connect_failed");
+        CLIENT_THREAD_RETURN;
     }
     lock_client(client);
     client->socket = socket_fd;
     unlock_client(client);
-#if CLIENT_TLS
+#if REVERSI_NET_CLIENT_TLS
     if (client->use_tls) {
         const char *reason = "tls_handshake_failed";
         if (!tls_handshake(client, &reason)) {
-            if (!atomic_load(&client->stop)) {
-                set_status(client, NET_CLIENT_FAILED, reason);
-            }
-            tls_release(client);
-            socket_close(socket_fd);
-            lock_client(client);
-            client->socket = CLIENT_INVALID;
-            unlock_client(client);
-            atomic_store(&client->running, false);
-#if defined(_WIN32)
-            return 0;
-#else
-            return NULL;
-#endif
+            client_fail(client, socket_fd, reason);
+            CLIENT_THREAD_RETURN;
         }
     }
 #else
     if (client->use_tls) {
-        set_status(client, NET_CLIENT_FAILED, "tls_unavailable");
-        socket_close(socket_fd);
-        lock_client(client);
-        client->socket = CLIENT_INVALID;
-        unlock_client(client);
-        atomic_store(&client->running, false);
-#if defined(_WIN32)
-        return 0;
-#else
-        return NULL;
-#endif
+        client_fail(client, socket_fd, "tls_unavailable");
+        CLIENT_THREAD_RETURN;
     }
 #endif
     if (!client_handshake(client)) {
-        if (!atomic_load(&client->stop)) {
-            set_status(client, NET_CLIENT_FAILED, "handshake_failed");
-        }
-        socket_close(socket_fd);
-        lock_client(client);
-        client->socket = CLIENT_INVALID;
-        unlock_client(client);
-        atomic_store(&client->running, false);
-#if defined(_WIN32)
-        return 0;
-#else
-        return NULL;
-#endif
+        client_fail(client, socket_fd, "handshake_failed");
+        CLIENT_THREAD_RETURN;
     }
     set_status(client, NET_CLIENT_CONNECTED, NULL);
     NetWsParser parser;
@@ -773,7 +774,7 @@ static void *client_thread(void *argument)
             offset += consumed;
         }
     }
-#if CLIENT_TLS
+#if REVERSI_NET_CLIENT_TLS
     tls_release(client);
 #endif
     lock_client(client);
@@ -888,7 +889,7 @@ static bool client_connect(NetClient *client, const char *host, int port,
     }
     net_client_disconnect(client);
     /* Fail fast rather than silently downgrading to plaintext. */
-    if (use_tls && !CLIENT_TLS) {
+    if (use_tls && !REVERSI_NET_CLIENT_TLS) {
         set_status(client, NET_CLIENT_FAILED, "tls_unavailable");
         return false;
     }
@@ -920,9 +921,9 @@ bool net_client_connect_tls(NetClient *client, const char *host, int port)
     return client_connect(client, host, port, true);
 }
 
-bool net_client_tls_supported(void)
+bool net_client_tls_selectable(void)
 {
-    return CLIENT_TLS != 0;
+    return REVERSI_NET_CLIENT_TLS != 0;
 }
 
 void net_client_disconnect(NetClient *client)
@@ -949,17 +950,9 @@ void net_client_poll(NetClient *client)
     if (client == NULL) {
         return;
     }
-    const int status = atomic_load_explicit(&client->status,
-                                            memory_order_acquire);
-    const int reported = atomic_load(&client->reported_status);
-    if (status != reported && client->on_status != NULL) {
-        atomic_store(&client->reported_status, status);
-        char reason[64];
-        lock_client(client);
-        snprintf(reason, sizeof(reason), "%s", client->reason);
-        unlock_client(client);
-        client->on_status(client->context, (NetClientStatus)status, reason);
-    }
+    /* Drain queued messages before reporting a status change: a peer that
+     * sends a final state and then closes would otherwise be seen as
+     * "disconnected" before the state it just sent. */
     for (;;) {
         char text[REVERSI_NET_MAX_MESSAGE + 1];
         lock_client(client);
@@ -976,6 +969,17 @@ void net_client_poll(NetClient *client)
                                 &message) && client->on_message != NULL) {
             client->on_message(client->context, &message);
         }
+    }
+    const int status = atomic_load_explicit(&client->status,
+                                            memory_order_acquire);
+    const int reported = atomic_load(&client->reported_status);
+    if (status != reported && client->on_status != NULL) {
+        atomic_store(&client->reported_status, status);
+        char reason[64];
+        lock_client(client);
+        snprintf(reason, sizeof(reason), "%s", client->reason);
+        unlock_client(client);
+        client->on_status(client->context, (NetClientStatus)status, reason);
     }
 }
 

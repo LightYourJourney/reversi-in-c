@@ -17,8 +17,7 @@ typedef enum NetViewAction {
     NET_VIEW_JOIN,
     NET_VIEW_READY,
     NET_VIEW_LEAVE,
-    NET_VIEW_COPY_CODE,
-    NET_VIEW_TOGGLE_TLS
+    NET_VIEW_COPY_CODE
 } NetViewAction;
 
 typedef enum NetViewButton {

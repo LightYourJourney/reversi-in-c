@@ -50,9 +50,9 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.protocol | reversi_net_protocol_tests | 33 | 协议字段/版本/方向/棋盘/错误/终局快照 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
 | net.server | reversi_net_server_tests | 5,758（macOS）/ 5,765（Linux/Windows） | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭、重连到期与旧令牌、满房、终局重连、模糊、Hello 顺序、握手/空闲/房间 TTL、加入失败限速、连接/房间上限、等待房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、8 局连续 soak、发送队列饱和（非 macOS） | PASS |
-| net.tls | reversi_net_tls_tests | 33 | TLS 1.2+ 握手、证书链与主机名校验、错误 CA、握手中断；可选整局（`REVERSI_TLS_E2E`） | PASS |
+| net.tls | reversi_net_tls_tests | 52 | TLS 1.2+ 握手、证书链与主机名（含 IP 字面量）校验、错误 CA、握手后断开、断线自动重连；可选整局（`REVERSI_TLS_E2E`） | PASS |
 | net.client | reversi_net_client_tests | 63 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出、服务器不读时的队列饱和与主线程零等待、连接取消与 5 s 超时、公网地址拒绝 | PASS |
-| net.session | reversi_net_session_tests | 96 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、重连预算耗尽 FAILED、落子记录 | PASS |
+| net.session | reversi_net_session_tests | 101 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、重连预算耗尽 FAILED、落子记录 | PASS |
 | experiment.regression | reversi_experiment_tests | 87 | 配置拒绝、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 102 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture | PASS |
@@ -70,6 +70,8 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   （含 20 ms 延迟代理与 8 局连续 soak）；`REVERSI_SOAK_MS=600000` 的
   10 分钟 ASan soak 见 `PHASE_15_REPORT.md`。本机 GUI **30/30 PASS**
   （2026-10-29 GUI 会话；含 `app.smoke/app.net/app.lab/app.autoplay`）。
+- Phase 15.2 + 桌面 WSS（2026-10-31）：Debug/Release/ASan 各 **27/27**，
+  合计 **1,211,054** 断言；`net.tls` 52。
 - GitHub Actions 运行 `40818759364`（2026-10-29，`21c8d20`）**9/9
   success**：Linux/Windows/macOS Debug 各 26/26、Linux ASan+UBSan
   26/26、Linux Xvfb GUI 4/4、三平台打包与 Linux 包验收。首跑
@@ -394,6 +396,9 @@ NODE_PATH=~/rv-e2e/pw/node_modules \
   --port 8444 --insecure
 
 # 浏览器渲染/缩放/触摸/存档/Worker（Release 8080 + Debug 8081）
+# 注意：2026-10-31 起，本机 Chrome 在 `--use-angle=swiftshader` 下连 page.goto
+# 都会超时（应用未加载），同一产物的默认 GL 组合 9/9 通过。属环境问题，
+# 排查时先把 tests/web/lib.js 的 CHROME_ARGS 置空验证。
 REVERSI_WEB_URL=http://127.0.0.1:8080 \
 REVERSI_WEB_DEBUG_URL=http://127.0.0.1:8081 \
   node tests/web/run-tests.js

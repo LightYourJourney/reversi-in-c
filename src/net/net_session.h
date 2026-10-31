@@ -67,6 +67,9 @@ bool net_session_connect(NetSession *session, const char *host, int port);
  * without OpenSSL reports NET_SESSION_FAILED with "tls_unavailable". */
 bool net_session_connect_tls(NetSession *session, const char *host,
                              int port);
+
+/* Whether the lobby should offer the "Use TLS (wss)" toggle at all. */
+bool net_session_tls_selectable(void);
 void net_session_disconnect(NetSession *session);
 void net_session_update(NetSession *session, float dt);
 

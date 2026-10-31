@@ -433,8 +433,9 @@ Zobrist/TT 未合并；Web 浏览器套件在 1.2.0 上 **NOT TESTED**。详见
   staging 演练；回滚演练脚本可重复执行。
 - 桌面发送改为 16 KiB 有界异步队列，主线程不再等待网络可写（卡死服务器下
   单次调用最慢 6 ms）。
-- 桌面端确认没有 TLS：公网地址在开套接字前以 `tls_required` 拒绝；
-  桌面公网联机 NOT SUPPORTED，WSS 设计见 `NETWORK_SECURITY.md` §5。
+- 桌面端新增 `wss://`（OpenSSL 3，证书链 + 主机名校验，大厅 “Use TLS” 复选）；
+  明文仍只允许回环/私网。Windows 构建暂不启用 TLS。
+  见 `NETWORK_SECURITY.md` §5。
 - 详情见 `docs/PHASE_15_2_REPORT.md`。
 
 结论：**Release Candidate**，不发布正式 v2.0.0。

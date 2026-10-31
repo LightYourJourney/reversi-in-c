@@ -13,7 +13,7 @@
 | 问题 | 结论 | 依据 |
 |---|---|---|
 | 是否具备 Public Beta 条件 | **PARTIAL ✅ 可以，但限“自托管、邀请式”** | 核心在线对战、四个浏览器（Chrome/Firefox/WebKit/Safari）、TLS/代理、优雅关闭、CI 9/9 与安装包均有证据；公网证书与真实网络未测 |
-| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：桌面端无 TLS（公网联机 NOT SUPPORTED）、iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
+| 是否具备正式 Release 条件 | **FAIL（接近，暂不具备）** | 见 §6：Windows 构建无 TLS、iOS/Android 未验证、可信证书与公网未测、Windows 物理桌面未验证 |
 
 “可以进入 Public Beta”的含义是：源可用、可由用户自行 `ws://127.0.0.1`
 或本地 TLS 代理运行；**不得**宣称“公网/生产就绪”。正式发布前必须补齐
@@ -83,13 +83,13 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 | 项 | 结果 | 证据 |
 |---|---|---|
-| Debug 无窗口 | PASS 26/26 | 本机 `ctest`；CI `40818759364` Linux/Windows/macOS 各 26/26 |
-| Release 无窗口 | PASS 26/26 | `ctest --test-dir build-release` |
-| ASan+UBSan 无窗口 | PASS 26/26（无报告） | `ctest --test-dir build-sanitize -E "app.*"` |
+| Debug 无窗口 | PASS 27/27 | 本机 `ctest`；CI 三平台 Debug 同步通过（见末行 CI） |
+| Release 无窗口 | PASS 27/27 | `ctest --test-dir build-release` |
+| ASan+UBSan 无窗口 | PASS 27/27（无报告） | `ctest --test-dir build-sanitize -E "app.*"` |
 | Debug GUI | PASS（macOS）/ NOT TESTED（Windows） | macOS 本机 30/30（2026-10-29）；CI Linux Xvfb 4/4；Windows 物理桌面未验证 |
 | TSan `net.session` / `net.client` | PASS | Homebrew clang 23，无竞争报告 |
 | 网络边界 | PASS | `net.server` 5,758（macOS）/5,765（Linux）断言：握手/空闲/房间 TTL、连接（HTTP 503）/房间上限、失败限速、重连接管、优雅关闭、延迟代理整局、日志脱敏、soak 8 局、发送队列饱和 |
-| 客户端队列溢出 | PASS | `net.client` 57 断言（`queue_overflow`、服务器不读、连接取消/超时） |
+| 客户端队列溢出 | PASS | `net.client` 63 断言（`queue_overflow`、服务器不读、连接取消/超时） |
 | 会话重启 | PASS | `net.session` 100 断言（重启后重连回大厅、预算耗尽 FAILED、落子记录） |
 | 桌面↔Web 联机 | PASS | 房间 `D7AKVC`（2026-10-29）：桌面黑方 d3、浏览器白方投降、双方 BLACK_WIN、对手关闭后桌面保留结果 |
 | 在线终局 → Lab 复盘 | PASS | 房间 `HQ7EUE`：Review 打开 Lab 终局，First 回到开局 |
@@ -103,7 +103,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Web 自动化套件 | PASS 9/9 | `tests/web/run-tests.js`：smoke/gameplay/persistence/responsive/移动触摸/pagehide/cancel/autoplay |
 | 物理桌面 GUI（macOS） | PASS | `ctest --test-dir build-gui` 30/30（2026-10-29） |
 | 桌面发送队列（无主线程等待） | PASS | 16 KiB 有界队列；卡死服务器下 1,639 帧入队后以 `send_queue_full` 断开，单次调用最慢 6 ms |
-| 桌面 WSS（macOS/Linux） | PASS | `tests/test_net_tls.c`：自建 CA 建连与往返、错误 CA、主机名不匹配、握手中断；真 nginx WSS + 服务端整局（`REVERSI_TLS_E2E`，52 断言） |
+| 桌面 WSS（macOS/Linux） | PASS | `tests/test_net_tls.c`（52 断言）：自建 CA 建连与往返、IP 字面量主机、错误 CA、主机名不匹配、握手后断开、TLS 断线自动重连；另可 `REVERSI_TLS_E2E` 对真 nginx + 服务端跑整局 |
 | 桌面公网明文拒绝 | PASS | 无 TLS 的构建里仍拒绝非回环/私网地址（`test_public_address_refused`）；有 TLS 时走 wss，不降级 |
 | 无损健康检查 | PASS | `scripts/check-server-health.mjs`：`pong`、166 ms、未建房 |
 | 发布目录切换与回滚 | PASS（演练） | `scripts/rehearse-rollback.sh`：坏发布被拒 → 切回恢复 → 健康检查未建房 |
@@ -123,9 +123,9 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | CI（最新提交） | PASS 9/9 | `41042295389`（`342cb9a`）：三平台 Debug（Linux 含 `net.tls`）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,211,001**）：
+断言数（本机 Debug，全部无窗口测试合计 **1,211,054**）：
 `net.protocol` 33、`net.ws` 20,026、`net.server` 5,758、`net.client` 63、
-`net.session` 100、`analysis.session` 112、`storage.save` 102、
+`net.session` 101、`net.tls` 52、`analysis.session` 112、`storage.save` 102、
 `storage.settings` 68；其余见 `TESTING.md` §2。Linux/Windows 的饱和
 用例另加 7 条。
 
@@ -149,8 +149,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 - 若以 **Public Beta** 名义发布：只发布源码 + 强调自托管与“未做公网
   安全评估”；在 Release Notes 中列出 §6 的第 1–3 项，其中第 1 项
-  （桌面无 TLS）必须写成限制而不是缺陷修复承诺之外的事。
-- 正式 v2.0.0：§6 第 1–2 项是外部环境验证（Safari/移动端、公网 TLS），
-  第 3 项（Windows 物理桌面）建议发布前补；第 4 项（systemd/logrotate
-  模板）作为已知限制披露。CI、打包、ASan/UBSan、macOS GUI、桌面↔Web、
+  （Windows 无 TLS）必须写成限制而不是缺陷修复承诺之外的事。
+- 正式 v2.0.0：§6 第 2–3 项是外部环境验证（移动端、公网 TLS），第 1 项
+  （Windows TLS）需要把 OpenSSL 运行时打进包，第 4 项（Windows 物理桌面）
+  建议发布前补；第 5 项（systemd/logrotate 模板）作为已知限制披露。CI、打包、ASan/UBSan、macOS GUI、桌面↔Web、
   发送队列饱和（Linux/Windows）与 limit_conn 已是绿灯。

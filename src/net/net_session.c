@@ -74,11 +74,13 @@ static void on_status(void *context, NetClientStatus status,
         if (session->phase == NET_SESSION_FINISHED) {
             break;
         }
-        /* The native client has no TLS and refuses public addresses before
-         * connecting; say so instead of a bare "Connection failed". */
+        /* Plaintext is refused for public hosts; point at the toggle rather
+         * than showing a bare "Connection failed". */
         if (reason != NULL && strcmp(reason, "tls_required") == 0) {
             snprintf(session->error, sizeof(session->error),
-                     "No TLS in this build: use a local or LAN server");
+                     net_session_tls_selectable()
+                         ? "Public servers need TLS: tick Use TLS (wss)"
+                         : "This build has no TLS: use a local or LAN server");
         } else if (reason != NULL
                    && strcmp(reason, "tls_unavailable") == 0) {
             snprintf(session->error, sizeof(session->error),
@@ -276,6 +278,11 @@ bool net_session_connect(NetSession *session, const char *host, int port)
 bool net_session_connect_tls(NetSession *session, const char *host, int port)
 {
     return session_connect(session, host, port, true);
+}
+
+bool net_session_tls_selectable(void)
+{
+    return net_client_tls_selectable();
 }
 
 void net_session_disconnect(NetSession *session)
