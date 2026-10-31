@@ -324,10 +324,17 @@ static void *server_thread(void *argument)
     return NULL;
 }
 
-static bool wait_connected(NetClient *client, int ms)
+static bool wait_connected(NetClient *client, const Events *events, int ms)
 {
     pump(client, ms);
-    return net_client_status(client) == NET_CLIENT_CONNECTED;
+    const bool connected = net_client_status(client) == NET_CLIENT_CONNECTED;
+    if (!connected) {
+        /* The reason is the only clue when a trust chain behaves differently
+         * across distros. */
+        fprintf(stderr, "[tls] connect failed: status=%d reason=%s\n",
+                (int)events->status, events->reason);
+    }
+    return connected;
 }
 
 static void test_valid_certificate(TestStats *stats, const char *dir)
@@ -351,7 +358,7 @@ static void test_valid_certificate(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "localhost", server.port));
-    REVERSI_TEST_ASSERT(stats, wait_connected(client, 5000));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, &events, 5000));
     /* The server answers the first text frame with a welcome. */
     const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
     REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
@@ -457,7 +464,7 @@ static void test_ip_literal_host(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "127.0.0.1", server.port));
-    REVERSI_TEST_ASSERT(stats, wait_connected(client, 5000));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, &events, 5000));
     const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
     REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
     pump(client, 800);
@@ -539,7 +546,7 @@ static void test_dropped_after_handshake(TestStats *stats, const char *dir)
     REVERSI_TEST_ASSERT(stats, client != NULL);
     REVERSI_TEST_ASSERT(stats,
         net_client_connect_tls(client, "localhost", server.port));
-    REVERSI_TEST_ASSERT(stats, wait_connected(client, 5000));
+    REVERSI_TEST_ASSERT(stats, wait_connected(client, &events, 5000));
     const NetMessage hello = {.type = NET_MSG_HELLO, .version = 1};
     REVERSI_TEST_ASSERT(stats, net_client_send(client, &hello));
     pump(client, 2000);
