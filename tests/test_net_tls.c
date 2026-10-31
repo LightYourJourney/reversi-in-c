@@ -694,6 +694,62 @@ static void test_live_server(TestStats *stats)
     net_session_destroy(b);
 }
 
+/* Opt-in: validate the real trust store against public endpoints, without
+ * deploying anything. A valid chain reaches the WebSocket upgrade, which the
+ * web server refuses — that is "handshake_failed", never a certificate error.
+ * REVERSI_TLS_PUBLIC=1 turns this on; it needs outbound network access. */
+static void test_public_certificates(TestStats *stats)
+{
+    const char *enabled = getenv("REVERSI_TLS_PUBLIC");
+    if (enabled == NULL || enabled[0] == '\0' || strcmp(enabled, "0") == 0) {
+        printf("  (set REVERSI_TLS_PUBLIC=1 to check public CAs)\n");
+        return;
+    }
+    /* The system store, not a test CA. */
+    unsetenv("SSL_CERT_FILE");
+    struct {
+        const char *host;
+        const char *reason;   /* NULL means "chain must verify" */
+    } cases[] = {
+        {"example.com", NULL},
+        {"expired.badssl.com", "tls_certificate_invalid"},
+        {"self-signed.badssl.com", "tls_certificate_invalid"},
+        {"wrong.host.badssl.com", "tls_certificate_invalid"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        Events events = {0};
+        NetClient *client = net_client_create(on_message, on_status, &events);
+        REVERSI_TEST_ASSERT(stats, client != NULL);
+        REVERSI_TEST_ASSERT(stats,
+            net_client_connect_tls(client, cases[i].host, 443));
+        for (int elapsed = 0; elapsed < 10000
+             && events.status != NET_CLIENT_FAILED; elapsed += 10) {
+            net_client_poll(client);
+            sleep_ms(10);
+        }
+        if (cases[i].reason == NULL) {
+            /* Reachability failures are the environment's problem, not the
+             * client's: skip the assertion instead of inventing a pass. */
+            if (events.status == NET_CLIENT_FAILED
+                && strcmp(events.reason, "connect_failed") == 0) {
+                printf("  (skipped %s: no network)\n", cases[i].host);
+                net_client_destroy(client);
+                continue;
+            }
+            REVERSI_TEST_ASSERT(stats,
+                events.status == NET_CLIENT_FAILED);
+            REVERSI_TEST_ASSERT(stats,
+                strcmp(events.reason, "handshake_failed") == 0);
+        } else {
+            REVERSI_TEST_ASSERT(stats,
+                events.status == NET_CLIENT_FAILED);
+            REVERSI_TEST_ASSERT(stats,
+                strcmp(events.reason, cases[i].reason) == 0);
+        }
+        net_client_destroy(client);
+    }
+}
+
 int main(void)
 {
 #if !defined(_WIN32)
@@ -728,5 +784,7 @@ int main(void)
     REVERSI_TEST_ASSERT(&stats, net_client_tls_selectable());
     printf("RUN  test_live_server\n");
     test_live_server(&stats);
+    printf("RUN  test_public_certificates\n");
+    test_public_certificates(&stats);
     return reversi_test_summary(&stats, "net.tls");
 }

@@ -115,6 +115,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | Safari 整局（本轮） | NOT TESTED | 会话不可见（`visibilityState=hidden`、帧计数 0），本轮无法驱动；上一轮 `CD8GDJ`/`VFDHTZ` 仍有效，产物仅差只读钩子 |
 | iOS Safari / Android Chrome | NOT TESTED | 无真机/模拟器 |
 | 真实跨网络（延迟/丢包） | NOT TESTED | 只有回环 + 进程内延迟代理（单向 20 ms） |
+| 真实公共 CA 链 | PASS | `REVERSI_TLS_PUBLIC=1`：`example.com` 通过，`expired`/`self-signed`/`wrong.host.badssl.com` 被拒 |
 | 可信证书链 / 公网 HSTS | NOT TESTED | 自签证书本地验证，未申请证书/未改 DNS |
 | 代理层限速 | PASS（本地） | 20 次连续升级：前 11 次转发（上游 502），之后 503 |
 | 代理层连接上限 | NOT TESTED | `limit_conn` 已配置、语法通过，未压测 |
@@ -138,8 +139,8 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
    `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/
    WebKit 亦通过；本轮未重跑（会话不可见）。
-3. **真实公网**：可信证书链、HSTS 实际生效、DNS、NAT/防火墙、跨地域
-   延迟与丢包均未测（本地自签与隔离代理已验证，不构成生产 PASS）。
+3. **真实公网部署**：可信证书链已用公共端点验证（见上表），但 HSTS
+   实际生效、DNS、NAT/防火墙、跨地域延迟与丢包仍未测——这些需要真实部署。
 4. **Windows 物理桌面**未验证（CI 为托管 VM；macOS 本机 30/30 与
    桌面↔Web 已通过）。
 5. **systemd/logrotate 模板**未在真实 systemd 执行（容器内无法安装；

@@ -95,6 +95,7 @@
 | 证书只含 `DNS:localhost`，客户端拨 `127.0.0.1` | 拒绝，主机名不匹配 |
 | 握手成功后服务端断开 | 客户端进入 DISCONNECTED |
 | `REVERSI_TLS_E2E=host:port` + 真 nginx WSS + `reversi_server` | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1（本机实测，52 条断言） |
+| `REVERSI_TLS_PUBLIC=1`：真实公共 CA | `example.com` 链与主机名通过、止步于 WS 升级；`expired` / `self-signed` / `wrong.host.badssl.com` 均被拒绝（68 条断言，2026-10-31） |
 
 **平台**：macOS、Linux、Windows 三个构建都带 TLS（Linux CI 安装
 `libssl-dev`；Windows 使用 runner 自带的 OpenSSL）。Windows 的可执行文件
