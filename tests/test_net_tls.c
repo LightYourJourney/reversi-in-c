@@ -24,6 +24,7 @@
 #include <openssl/ssl.h>
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <pthread.h>
@@ -235,6 +236,8 @@ static int server_read(SSL *ssl, void *buffer, int length)
             return 0;
         }
         if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
+            fprintf(stderr, "[srv] read end: read=%d error=%d errno=%d\n",
+                    read, error, errno);
             return read == 0 ? 0 : -1;
         }
         if (test_now_ms() >= deadline) {
