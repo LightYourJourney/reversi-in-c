@@ -269,11 +269,23 @@ if(NOT EMSCRIPTEN)
                 endif()
                 get_filename_component(REVERSI_SSL_DIR
                                        "${REVERSI_SSL_LOCATION}" DIRECTORY)
-                file(GLOB REVERSI_OPENSSL_DLLS
-                     "${REVERSI_SSL_DIR}/libssl*.dll"
-                     "${REVERSI_SSL_DIR}/libcrypto*.dll"
-                     "${REVERSI_SSL_DIR}/../bin/libssl*.dll"
-                     "${REVERSI_SSL_DIR}/../bin/libcrypto*.dll")
+                # The import library and the DLLs never sit side by side on
+                # Windows: OpenSSL keeps libssl.lib under lib/VC/<arch>/<crt>
+                # and the runtime in <root>/bin. Try the layouts we know of.
+                set(REVERSI_OPENSSL_DLLS "")
+                foreach(candidate
+                        "${REVERSI_SSL_DIR}"
+                        "${REVERSI_SSL_DIR}/../bin"
+                        "${REVERSI_SSL_DIR}/../../bin"
+                        "${REVERSI_SSL_DIR}/../../../bin"
+                        "${REVERSI_SSL_DIR}/../../../../bin"
+                        "${OPENSSL_INCLUDE_DIR}/../bin")
+                    file(GLOB found
+                         "${candidate}/libssl*.dll"
+                         "${candidate}/libcrypto*.dll")
+                    list(APPEND REVERSI_OPENSSL_DLLS ${found})
+                endforeach()
+                list(REMOVE_DUPLICATES REVERSI_OPENSSL_DLLS)
                 if(REVERSI_OPENSSL_DLLS)
                     message(STATUS "Reversi: bundling OpenSSL runtime: "
                                    "${REVERSI_OPENSSL_DLLS}")
