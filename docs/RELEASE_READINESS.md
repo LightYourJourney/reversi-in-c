@@ -120,7 +120,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | 代理层连接上限 | NOT TESTED | `limit_conn` 已配置、语法通过，未压测 |
 | 10 分钟 ASan soak | PASS | `PASS net.server (865909 checks)`，退出码 0，无报告 |
 | 安装包验收 | PASS（CI） | 三平台归档 + SHA256；Linux 包 Xvfb 验收、Windows `--version`；macOS 包未启动 |
-| CI（最新提交） | PASS 9/9 | `41042295389`（`342cb9a`）：三平台 Debug（Linux 含 `net.tls`）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
+| CI（最新提交） | PASS 9/9 | `41182743291`（`39fa43f`）：三平台 Debug（含 `net.tls`）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
 断言数（本机 Debug，全部无窗口测试合计 **1,211,054**）：
