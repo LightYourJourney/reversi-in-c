@@ -38,6 +38,47 @@ static void test_config_parse(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, !experiment_config_parse(
         &config, "version 1\nbogus 1\nengine-a kind=random\n"
                  "engine-b kind=greedy\n", error, sizeof(error)));
+
+    /* Seeds are strict decimal unsigned values that fit in 32 bits. */
+    static const char *const bad_seeds[] = {
+        "seed -1\n", "seed 12abc\n", "seed 99999999999\n",
+        "engine-a kind=random seed=-1\n",
+        "engine-a kind=random seed=4294967296\n"
+    };
+    for (size_t i = 0; i < sizeof(bad_seeds) / sizeof(bad_seeds[0]); ++i) {
+        char text[256];
+        snprintf(text, sizeof(text), "version 1\ngames 2\n%s"
+                 "engine-a kind=random\nengine-b kind=greedy\n", bad_seeds[i]);
+        REVERSI_TEST_ASSERT(stats, !experiment_config_parse(
+            &config, text, error, sizeof(error)));
+    }
+    REVERSI_TEST_ASSERT(stats, experiment_config_parse(
+        &config, "version 1\nseed 4294967295\ngames 2\nengine-a kind=random\n"
+                 "engine-b kind=greedy\n", error, sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, config.seed == 4294967295u);
+}
+
+static void test_config_load_rejects_oversized(TestStats *stats)
+{
+    /* A config longer than the reader's buffer must be refused, not cut. */
+    static const char *const path = "test_experiment_oversized.cfg";
+    FILE *file = fopen(path, "wb");
+    REVERSI_TEST_ASSERT(stats, file != NULL);
+    if (file == NULL) {
+        return;
+    }
+    fputs(REGRESSION_CONFIG, file);
+    for (int i = 0; i < 2000; ++i) {
+        fputs("# padding line\n", file);
+    }
+    fclose(file);
+
+    ExperimentConfig config;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, !experiment_config_load(&config, path, error,
+                                                       sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, strstr(error, "too large") != NULL);
+    remove(path);
 }
 
 static void test_run_and_reports(TestStats *stats)
@@ -307,6 +348,7 @@ int main(void)
 {
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_config_parse);
+    REVERSI_RUN_TEST(&stats, test_config_load_rejects_oversized);
     REVERSI_RUN_TEST(&stats, test_run_and_reports);
     REVERSI_RUN_TEST(&stats, test_seed_controls_random);
     REVERSI_RUN_TEST(&stats, test_aborted_classification);

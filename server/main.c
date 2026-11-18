@@ -1,5 +1,6 @@
 #include "net/net_server.h"
 
+#include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,7 +32,16 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "--bind") == 0 && i + 1 < argc) {
             bind_address = argv[++i];
         } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
-            port = atoi(argv[++i]);
+            const char *text = argv[++i];
+            char *end = NULL;
+            const long value = strtol(text, &end, 10);
+            /* atoi would turn a typo into port 0, an ephemeral port. */
+            if (!isdigit((unsigned char)text[0]) || *end != '\0'
+                || value < 0 || value > 65535) {
+                fprintf(stderr, "invalid --port value: %s\n", text);
+                return 2;
+            }
+            port = (int)value;
         } else if (strcmp(argv[i], "--quiet") == 0) {
             quiet = true;
         } else if (strcmp(argv[i], "--help") == 0

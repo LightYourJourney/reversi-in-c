@@ -12,6 +12,7 @@
 
 #include <ctype.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -184,12 +185,12 @@ static bool parse_engine(ExperimentEngine *engine, char *tokens,
         } else if (strcmp(key, "label") == 0) {
             snprintf(engine->name, sizeof(engine->name), "%s", value);
         } else if (strcmp(key, "seed") == 0) {
-            unsigned seed = 0;
-            if (sscanf(value, "%u", &seed) != 1) {
+            uint64_t seed = 0;
+            if (!parse_u64(value, UINT_MAX, &seed)) {
                 set_error(error, error_size, "invalid engine seed");
                 return false;
             }
-            engine->seed = seed;
+            engine->seed = (unsigned)seed;
         } else {
             set_error(error, error_size, "unknown engine option");
             return false;
@@ -266,12 +267,12 @@ bool experiment_config_parse(ExperimentConfig *config, const char *text,
             }
             snprintf(config->name, sizeof(config->name), "%s", value);
         } else if (strcmp(key, "seed") == 0) {
-            unsigned seed = 0;
-            if (sscanf(value, "%u", &seed) != 1) {
+            uint64_t seed = 0;
+            if (!parse_u64(value, UINT_MAX, &seed)) {
                 set_error(error, error_size, "invalid seed");
                 return false;
             }
-            config->seed = seed;
+            config->seed = (unsigned)seed;
         } else if (strcmp(key, "games") == 0) {
             if (!parse_int(value, 2, REVERSI_EXPERIMENT_MAX_GAMES,
                            &config->games)
@@ -337,8 +338,17 @@ bool experiment_config_load(ExperimentConfig *config, const char *path,
         return false;
     }
     char text[REVERSI_EXPERIMENT_CONFIG_MAX_BYTES];
-    const size_t read = fread(text, 1, sizeof(text) - 1, file);
+    const size_t read = fread(text, 1, sizeof(text), file);
+    const bool failed = ferror(file) != 0;
     fclose(file);
+    if (failed) {
+        set_error(error, error_size, "cannot read config");
+        return false;
+    }
+    if (read == sizeof(text)) {
+        set_error(error, error_size, "config is too large");
+        return false;
+    }
     text[read] = '\0';
     return experiment_config_parse(config, text, error, error_size);
 }

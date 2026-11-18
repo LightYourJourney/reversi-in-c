@@ -261,9 +261,10 @@ static bool parse_queued(TestClient *client, NetMessage *message)
             client->input_length -= consumed;
             return net_protocol_decode(text, NET_DIRECTION_SERVER_TO_CLIENT,
                                        message);
-        } else {
+        } else if (result != NET_WS_PING && result != NET_WS_PONG) {
             return false;
         }
+        /* Control frames carry no protocol message; skip them. */
         memmove(client->input, client->input + consumed,
                 client->input_length - consumed);
         client->input_length -= consumed;
@@ -866,6 +867,103 @@ static void test_rate_limit(TestStats *stats)
                                              &message, 2000));
     REVERSI_TEST_ASSERT(stats, strcmp(message.error, "rate_limited") == 0);
     REVERSI_TEST_ASSERT(stats, test_wait_closed(server, &a, 2000));
+    test_close(&a);
+    net_server_destroy(server);
+}
+
+static bool test_send_raw(TestClient *client, const uint8_t *data,
+                          size_t length)
+{
+    size_t sent = 0;
+    while (sent < length) {
+        const int written = (int)send(client->socket, (const char *)data + sent,
+                                      (int)(length - sent), 0);
+        if (written <= 0) {
+            return false;
+        }
+        sent += (size_t)written;
+    }
+    return true;
+}
+
+static void test_control_frame_rate_limit(TestStats *stats)
+{
+    /* Ping frames cost the server a pong each; they spend tokens too. */
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    TestClient a;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a,
+                                            net_server_port(server)));
+    test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    uint8_t burst[60 * 8];
+    size_t used = 0;
+    for (int i = 0; i < 60; ++i) {
+        used += net_ws_encode(0x9, NULL, 0, true, &a.rng, burst + used,
+                              sizeof(burst) - used);
+    }
+    REVERSI_TEST_ASSERT(stats, test_send_raw(&a, burst, used));
+    NetMessage message;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ERROR,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.error, "rate_limited") == 0);
+    REVERSI_TEST_ASSERT(stats, test_wait_closed(server, &a, 2000));
+    test_close(&a);
+    net_server_destroy(server);
+}
+
+static void test_partial_frame_then_burst(TestStats *stats)
+{
+    /* Half a frame already buffered plus a full-size read must not be
+     * mistaken for an oversized input. */
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    TestClient a;
+    REVERSI_TEST_ASSERT(stats, test_connect(server, &a,
+                                            net_server_port(server)));
+    test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
+    test_send(&a, &(NetMessage){.type = NET_MSG_PING});
+    NetMessage message;
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_PONG,
+                                             &message, 2000));
+
+    char garbage[2000];
+    memset(garbage, 'x', sizeof(garbage));
+    static uint8_t frames[5][sizeof(garbage) + 16];
+    size_t lengths[5];
+    for (int i = 0; i < 5; ++i) {
+        lengths[i] = net_ws_encode(0x1, (const uint8_t *)garbage,
+                                   sizeof(garbage), true, &a.rng, frames[i],
+                                   sizeof(frames[i]));
+        REVERSI_TEST_ASSERT(stats, lengths[i] > 0);
+    }
+    const size_t half = lengths[0] / 2;
+    REVERSI_TEST_ASSERT(stats, test_send_raw(&a, frames[0], half));
+    for (int i = 0; i < 50; ++i) {
+        net_server_poll(server, 1);
+    }
+    static uint8_t rest[5 * (sizeof(garbage) + 16)];
+    size_t used = lengths[0] - half;
+    memcpy(rest, frames[0] + half, used);
+    for (int i = 1; i < 5; ++i) {
+        memcpy(rest + used, frames[i], lengths[i]);
+        used += lengths[i];
+    }
+    REVERSI_TEST_ASSERT(stats, test_send_raw(&a, rest, used));
+    int bad = 0;
+    while (bad < 5 && client_expect(server, &a, NET_MSG_ERROR, &message,
+                                    2000)) {
+        if (strcmp(message.error, "bad_message") == 0) {
+            ++bad;
+        }
+    }
+    REVERSI_TEST_ASSERT(stats, bad == 5);
+    REVERSI_TEST_ASSERT(stats, !a.closed);
     test_close(&a);
     net_server_destroy(server);
 }
@@ -2104,6 +2202,8 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_server_restart);
     REVERSI_RUN_TEST(&stats, test_move_timeout);
     REVERSI_RUN_TEST(&stats, test_rate_limit);
+    REVERSI_RUN_TEST(&stats, test_control_frame_rate_limit);
+    REVERSI_RUN_TEST(&stats, test_partial_frame_then_burst);
     REVERSI_RUN_TEST(&stats, test_rejoin_timeout);
     REVERSI_RUN_TEST(&stats, test_room_full);
     REVERSI_RUN_TEST(&stats, test_rejoin_finished);

@@ -375,11 +375,13 @@ static void lab_handle_actions(LabView *view, AiWorker *worker,
                              REVERSI_ANALYSIS_MAX_RECORD_BYTES)) {
             lab_notice(view, "No saved record");
         } else {
-            AnalysisSession loaded;
             char error[128] = {0};
-            if (analysis_record_read(&loaded, text, error,
+            /* Parse into the live session: the reader validates in a heap
+               copy and only commits on success, so a bad record leaves the
+               session untouched, and nothing this large lands on the
+               64 KiB WebAssembly stack. */
+            if (analysis_record_read(&view->session, text, error,
                                      sizeof(error))) {
-                view->session = loaded;
                 moved = true;
                 lab_notice(view, "Record loaded");
             } else {

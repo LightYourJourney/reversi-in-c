@@ -86,6 +86,12 @@ EM_JS(int, reversi_web_net_send, (const char *text), {
 EM_JS(void, reversi_web_net_close, (void), {
     var socket = globalThis.__reversiNetSocket;
     if (socket) {
+        /* Detach every handler: closing a socket that is still connecting
+           fires onerror, which would report a failure for a connection
+           the player already abandoned. */
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
         socket.onclose = null;
         socket.close();
         globalThis.__reversiNetSocket = null;

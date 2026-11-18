@@ -63,10 +63,17 @@ static void on_status(void *context, NetClientStatus status,
         session->phase = NET_SESSION_CONNECTING;
         break;
     case NET_CLIENT_DISCONNECTED:
-        /* A finished game stays on screen even if the socket drops later. */
-        if (session->phase != NET_SESSION_FINISHED) {
-            session->phase = session->active ? NET_SESSION_DISCONNECTED
-                                             : NET_SESSION_LOBBY;
+        /* A finished game stays on screen even if the socket drops later.
+         * Outside a room there is nothing to rejoin: the lobby is gone, and
+         * a failure reported just before the close (browsers fire onerror
+         * then onclose) must stay visible. */
+        if (session->active) {
+            if (session->phase != NET_SESSION_FINISHED) {
+                session->phase = NET_SESSION_DISCONNECTED;
+            }
+        } else if (session->phase != NET_SESSION_FINISHED
+                   && session->phase != NET_SESSION_FAILED) {
+            session->phase = NET_SESSION_IDLE;
         }
         session->reconnect_timer = 0.0f;
         break;
@@ -400,8 +407,13 @@ void net_session_leave(NetSession *session)
     session->token[0] = '\0';
     session->moves_count = 0;
     session->moves_complete = true;
-    session->phase = session->phase == NET_SESSION_FAILED
-        ? NET_SESSION_FAILED : NET_SESSION_LOBBY;
+    /* Only a live connection returns to the lobby. */
+    if (session->phase == NET_SESSION_DISCONNECTED) {
+        session->phase = NET_SESSION_IDLE;
+    } else if (session->phase != NET_SESSION_FAILED
+               && session->phase != NET_SESSION_IDLE) {
+        session->phase = NET_SESSION_LOBBY;
+    }
 }
 
 const char *net_session_status_text(const NetSession *session)

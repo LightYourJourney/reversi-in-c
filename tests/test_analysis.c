@@ -289,6 +289,18 @@ static void test_history_import(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, game_state_equal(
         &analysis_current(&session)->state,
         &history.entries[history.count - 1].state));
+
+    /* After undo the Lab opens where the player is, with the undone moves
+     * kept as the main line's continuation. */
+    REVERSI_TEST_ASSERT(stats, history.count > 3);
+    REVERSI_TEST_ASSERT(stats, history_undo(&history));
+    REVERSI_TEST_ASSERT(stats, history_undo(&history));
+    REVERSI_TEST_ASSERT(stats, analysis_import_history(&session, &history));
+    REVERSI_TEST_ASSERT(stats, game_state_equal(
+        &analysis_current(&session)->state,
+        &history_current(&history)->state));
+    REVERSI_TEST_ASSERT(stats, analysis_main_length(&session)
+                        == history.count - 1);
 }
 
 static void test_record_roundtrip(TestStats *stats)
@@ -335,6 +347,35 @@ static void test_record_roundtrip(TestStats *stats)
                                                    sizeof(again));
     REVERSI_TEST_ASSERT(stats, rewritten == written);
     REVERSI_TEST_ASSERT(stats, strcmp(buffer, again) == 0);
+}
+
+static void test_record_finished_game(TestStats *stats)
+{
+    /* The result line must describe the end of the main line, not the root,
+       or a finished game exports "result -" and then fails its own check. */
+    AnalysisSession session;
+    analysis_init(&session);
+    uint64_t rng = 0x5EEDULL;
+    play_random_plies(&session, 200, &rng);
+    REVERSI_TEST_ASSERT(stats,
+                        game_is_over(&analysis_current(&session)->state));
+
+    char buffer[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
+    const size_t written = analysis_record_write(&session, buffer,
+                                                 sizeof(buffer));
+    REVERSI_TEST_ASSERT(stats, written > 0);
+    if (written == 0) {
+        return;
+    }
+    REVERSI_TEST_ASSERT(stats, strstr(buffer, "result -") == NULL);
+
+    AnalysisSession loaded;
+    char error[128] = {0};
+    REVERSI_TEST_ASSERT(stats, analysis_record_read(&loaded, buffer, error,
+                                                    sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, game_state_equal(
+        &analysis_current(&loaded)->state,
+        &analysis_current(&session)->state));
 }
 
 static void test_record_rejects_bad_input(TestStats *stats)
@@ -398,6 +439,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_variation_navigation);
     REVERSI_RUN_TEST(&stats, test_history_import);
     REVERSI_RUN_TEST(&stats, test_record_roundtrip);
+    REVERSI_RUN_TEST(&stats, test_record_finished_game);
     REVERSI_RUN_TEST(&stats, test_record_rejects_bad_input);
     REVERSI_RUN_TEST(&stats, test_record_v140_fixture);
     return reversi_test_summary(&stats, "analysis.session");

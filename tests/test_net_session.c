@@ -223,6 +223,40 @@ static void test_session_server_restart(TestStats *stats)
     net_session_destroy(b);
 }
 
+static void test_session_lobby_server_loss(TestStats *stats)
+{
+    /* Losing the server while in the lobby (no room) must not leave the
+     * screen offering Create/Join on a dead connection. */
+    NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
+                              .quiet = true};
+    NetServer *server = net_server_create(&config);
+    char error[128];
+    REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
+    const int port = net_server_port(server);
+    NetSession *a = net_session_create();
+    REVERSI_TEST_ASSERT(stats, a != NULL);
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1", port));
+    REVERSI_TEST_ASSERT(stats, wait_phase(server, a, NULL,
+                                          NET_SESSION_LOBBY, 3000));
+    REVERSI_TEST_ASSERT(stats, !a->active);
+
+    net_server_destroy(server);
+    /* The status flips on the I/O thread; the session hears it on poll. */
+    for (int elapsed = 0; elapsed < 2000 && a->phase == NET_SESSION_LOBBY;
+         ++elapsed) {
+        net_session_update(a, 0.002f);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats,
+        net_client_status(a->client) == NET_CLIENT_DISCONNECTED);
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_IDLE);
+
+    /* Leaving from there must not pretend the lobby came back. */
+    net_session_leave(a);
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_IDLE);
+    net_session_destroy(a);
+}
+
 static void test_session_reconnect_budget(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
@@ -351,6 +385,7 @@ int main(void)
     TestStats stats = {0};
     REVERSI_RUN_TEST(&stats, test_session_flow);
     REVERSI_RUN_TEST(&stats, test_session_server_restart);
+    REVERSI_RUN_TEST(&stats, test_session_lobby_server_loss);
     REVERSI_RUN_TEST(&stats, test_session_reconnect_budget);
     REVERSI_RUN_TEST(&stats, test_session_plaintext_refused);
     REVERSI_RUN_TEST(&stats, test_session_move_log);

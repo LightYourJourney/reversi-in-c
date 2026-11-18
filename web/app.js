@@ -113,14 +113,13 @@
     }
   });
 
-  ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Enter', 'Escape']
-    .forEach(function (key) {
-      canvas.addEventListener('keydown', function (event) {
-        if (event.key === ' ' || event.key.indexOf('Arrow') === 0) {
-          event.preventDefault();
-        }
-      });
-    });
+  // Keep Space and the arrows from scrolling the page while the game has
+  // focus. One listener is enough.
+  canvas.addEventListener('keydown', function (event) {
+    if (event.key === ' ' || event.key.indexOf('Arrow') === 0) {
+      event.preventDefault();
+    }
+  });
 
   function exportSaves() {
     var data = {};

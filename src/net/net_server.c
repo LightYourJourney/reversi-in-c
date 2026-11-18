@@ -26,7 +26,7 @@
 #include <bcrypt.h>
 typedef SOCKET NetSocket;
 typedef int NetSockLen;
-#define NET_INVALID INVALID_SOCKET
+#define REVERSI_NET_SERVER_INVALID INVALID_SOCKET
 #else
 #include <arpa/inet.h>
 #include <errno.h>
@@ -37,7 +37,7 @@ typedef int NetSockLen;
 #include <unistd.h>
 typedef int NetSocket;
 typedef socklen_t NetSockLen;
-#define NET_INVALID (-1)
+#define REVERSI_NET_SERVER_INVALID (-1)
 #endif
 
 #define REVERSI_NET_SERVER_MAX_CONNECTIONS 48
@@ -242,9 +242,9 @@ static void connection_close_now(NetServer *server, int index)
         connection->seat = -1;
     }
 
-    if (connection->socket != NET_INVALID) {
+    if (connection->socket != REVERSI_NET_SERVER_INVALID) {
         socket_close(connection->socket);
-        connection->socket = NET_INVALID;
+        connection->socket = REVERSI_NET_SERVER_INVALID;
     }
     connection->state = CONNECTION_FREE;
     connection->input_length = 0;
@@ -930,7 +930,10 @@ static void process_frames(NetServer *server, int index)
             connection_schedule_close(server, index);
             return;
         }
-        if (result == NET_WS_TEXT) {
+        if (result == NET_WS_TEXT || result == NET_WS_PING
+            || result == NET_WS_PONG) {
+            /* Every frame the server has to answer or account for spends a
+             * token; a control-frame flood is as costly as a text flood. */
             connection->tokens += (int)((now_ms() - connection->tokens_ms)
                                         * REVERSI_NET_SERVER_TOKEN_RATE / 1000);
             connection->tokens_ms = now_ms();
@@ -943,6 +946,8 @@ static void process_frames(NetServer *server, int index)
                 return;
             }
             --connection->tokens;
+        }
+        if (result == NET_WS_TEXT) {
             char text[REVERSI_NET_MAX_MESSAGE + 1];
             if (frame.length > REVERSI_NET_MAX_MESSAGE) {
                 /* Unreachable while the WebSocket payload cap equals the
@@ -967,8 +972,9 @@ static void process_frames(NetServer *server, int index)
             const size_t length = net_ws_encode(
                 0xA, frame.payload, frame.length, false, NULL, pong,
                 sizeof(pong));
-            if (length > 0) {
-                connection_queue(server, index, pong, length);
+            if (length == 0 || !connection_queue(server, index, pong, length)) {
+                connection_schedule_close(server, index);
+                return;
             }
         } else if (result == NET_WS_PONG) {
             connection->last_active = now_ms();
@@ -1029,8 +1035,13 @@ static void read_connection(NetServer *server, int index)
     ServerConnection *connection = &server->connections[index];
     uint8_t buffer[REVERSI_NET_SERVER_READ_CAP];
     for (;;) {
+        /* Read only what fits: a buffered partial frame must not turn the
+         * next full-size read into a spurious overflow. */
+        const size_t space = sizeof(connection->input)
+                             - connection->input_length;
         const int read = socket_read(connection->socket, buffer,
-                                     sizeof(buffer));
+                                     space < sizeof(buffer) ? space
+                                                            : sizeof(buffer));
         if (read == 0) {
             const int room = connection->room;
             const int seat = connection->seat;
@@ -1074,7 +1085,7 @@ static void accept_connections(NetServer *server)
         NetSockLen length = (NetSockLen)sizeof(address);
         const NetSocket socket = accept(
             server->listener, (struct sockaddr *)&address, &length);
-        if (socket == NET_INVALID) {
+        if (socket == REVERSI_NET_SERVER_INVALID) {
             return;
         }
         int index = -1;
@@ -1171,10 +1182,10 @@ NetServer *net_server_create(const NetServerConfig *config)
         || server->config.send_queue_bytes > REVERSI_NET_SERVER_SEND_CAP) {
         server->config.send_queue_bytes = REVERSI_NET_SERVER_SEND_CAP;
     }
-    server->listener = NET_INVALID;
+    server->listener = REVERSI_NET_SERVER_INVALID;
     server->port = 0;
     for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
-        server->connections[i].socket = NET_INVALID;
+        server->connections[i].socket = REVERSI_NET_SERVER_INVALID;
         server->connections[i].room = -1;
         server->connections[i].seat = -1;
     }
@@ -1199,7 +1210,7 @@ bool net_server_start(NetServer *server, char *error, size_t error_size)
         return false;
     }
     server->listener = socket(AF_INET, SOCK_STREAM, 0);
-    if (server->listener == NET_INVALID) {
+    if (server->listener == REVERSI_NET_SERVER_INVALID) {
         snprintf(error, error_size, "cannot create socket");
         return false;
     }
@@ -1214,21 +1225,21 @@ bool net_server_start(NetServer *server, char *error, size_t error_size)
                   &address.sin_addr) != 1) {
         snprintf(error, error_size, "invalid bind address");
         socket_close(server->listener);
-        server->listener = NET_INVALID;
+        server->listener = REVERSI_NET_SERVER_INVALID;
         return false;
     }
     if (bind(server->listener, (struct sockaddr *)&address,
              sizeof(address)) != 0) {
         snprintf(error, error_size, "cannot bind");
         socket_close(server->listener);
-        server->listener = NET_INVALID;
+        server->listener = REVERSI_NET_SERVER_INVALID;
         return false;
     }
     if (listen(server->listener, 16) != 0
         || !socket_nonblocking(server->listener)) {
         snprintf(error, error_size, "cannot listen");
         socket_close(server->listener);
-        server->listener = NET_INVALID;
+        server->listener = REVERSI_NET_SERVER_INVALID;
         return false;
     }
     NetSockLen length = (NetSockLen)sizeof(address);
@@ -1395,11 +1406,11 @@ void net_server_destroy(NetServer *server)
     if (server == NULL) {
         return;
     }
-    if (server->listener != NET_INVALID) {
+    if (server->listener != REVERSI_NET_SERVER_INVALID) {
         socket_close(server->listener);
     }
     for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
-        if (server->connections[i].socket != NET_INVALID) {
+        if (server->connections[i].socket != REVERSI_NET_SERVER_INVALID) {
             socket_close(server->connections[i].socket);
         }
     }

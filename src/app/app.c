@@ -177,17 +177,25 @@ static void app_review_online(App *app)
     if (net == NULL || net->moves_count <= 0 || !net->moves_complete) {
         return;
     }
-    AnalysisSession session;
-    analysis_init(&session);
+    /* Too large for the 64 KiB WebAssembly stack. */
+    AnalysisSession *session = malloc(sizeof(*session));
+    if (session == NULL) {
+        app_notice(app, "Could not replay the online game");
+        return;
+    }
+    analysis_init(session);
     for (int i = 0; i < net->moves_count; ++i) {
-        if (!analysis_play_move(&session, net->moves[i])) {
+        if (!analysis_play_move(session, net->moves[i])) {
             app_notice(app, "Could not replay the online game");
+            free(session);
             return;
         }
     }
     net_session_leave(net);
     app->net_mode = false;
-    if (!lab_view_enter_session(&app->lab, &session)) {
+    const bool entered = lab_view_enter_session(&app->lab, session);
+    free(session);
+    if (!entered) {
         app_notice(app, "Could not open the analysis lab");
         app_request_screen(app, APP_SCREEN_NET);
         return;
@@ -592,6 +600,11 @@ static void app_refresh_slots(App *app)
 
 static void app_autosave(App *app)
 {
+    /* An online match mirrors the server, often from a mid-game root; it
+       must neither overwrite nor delete the local game's autosave. */
+    if (app->net_mode) {
+        return;
+    }
     char path[1024];
     if (!storage_make_user_dir()
         || !app_save_path(0, path, sizeof(path))) {

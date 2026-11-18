@@ -151,6 +151,11 @@ static bool parse_result(const char *text, GameResult *out)
 
 static bool parse_seq(const char *text, int *out)
 {
+    /* Plain decimal digits only: strtol would also take a sign or leading
+     * whitespace. */
+    if (!isdigit((unsigned char)text[0])) {
+        return false;
+    }
     char *end = NULL;
     const long value = strtol(text, &end, 10);
     if (end == text || *end != '\0' || value < 0 || value > 1000000) {
@@ -278,7 +283,7 @@ bool net_protocol_decode(const char *text, NetDirection direction,
 
         if (strcmp(key, "v") == 0) {
             int version = 0;
-            if (seen.version || sscanf(value, "%d", &version) != 1
+            if (seen.version || !parse_seq(value, &version)
                 || version != REVERSI_NET_VERSION) {
                 return false;
             }

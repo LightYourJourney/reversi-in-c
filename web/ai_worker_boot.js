@@ -6,23 +6,29 @@
 importScripts('ai_worker.js');
 
 var moduleReady = null;
+var moduleFailed = false;
 var queue = [];
 
 function handle(data) {
   var request = String(data.request || '');
   var kind = request.charAt(0) === 'A' ? 'analysis' : 'move';
   var reply = 'err';
-  try {
-    reply = moduleReady.ccall('reversi_ai_worker_request', 'string',
-                              ['string'], [request]);
-  } catch (error) {
-    reply = 'err';
+  if (moduleReady) {
+    try {
+      reply = moduleReady.ccall('reversi_ai_worker_request', 'string',
+                                ['string'], [request]);
+    } catch (error) {
+      reply = 'err';
+    }
   }
+  // Every reply carries its request's generation: the page drops replies
+  // for any other generation, so a reply without one would leave the
+  // request waiting forever.
   self.postMessage({ generation: data.generation, raw: reply, kind: kind });
 }
 
 self.onmessage = function (event) {
-  if (moduleReady) {
+  if (moduleReady || moduleFailed) {
     handle(event.data || {});
   } else {
     queue.push(event.data || {});
@@ -35,6 +41,9 @@ createAiWorker().then(function (instance) {
     handle(queue.shift());
   }
 }).catch(function () {
-  moduleReady = null;
-  self.postMessage({ generation: 0, raw: 'err', kind: 'move' });
+  // Fail each pending and future request instead of leaving it unanswered.
+  moduleFailed = true;
+  while (queue.length > 0) {
+    handle(queue.shift());
+  }
 });

@@ -64,6 +64,11 @@ static void edit_field(NetView *view, NetField *field)
         }
     }
     for (int c = GetCharPressed(); c > 0; c = GetCharPressed()) {
+        /* GetCharPressed returns Unicode code points; <ctype.h> is only
+           defined for unsigned char values. Every accepted key is ASCII. */
+        if (c > 0x7F) {
+            continue;
+        }
         if (field->numeric && !isdigit(c)) {
             continue;
         }

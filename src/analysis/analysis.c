@@ -176,6 +176,9 @@ bool analysis_import_history(AnalysisSession *session, const History *history)
         return false;
     }
 
+    /* Every recorded move is imported, redo moves included, but the session
+     * opens on the position the player was actually looking at. */
+    int current_node = tmp->current;
     for (int i = 1; i < history->count; ++i) {
         const HistoryEntry *entry = &history->entries[i];
         if (!entry->has_move) {
@@ -186,6 +189,13 @@ bool analysis_import_history(AnalysisSession *session, const History *history)
             free(tmp);
             return false;
         }
+        if (i == history->current) {
+            current_node = tmp->current;
+        }
+    }
+    if (!analysis_goto(tmp, current_node)) {
+        free(tmp);
+        return false;
     }
 
     *session = *tmp;

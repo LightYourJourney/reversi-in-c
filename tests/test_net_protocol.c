@@ -67,6 +67,19 @@ static void test_rejects_bad_input(TestStats *stats)
         "move cell=z9 seq=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
         "move cell=e5 seq=-1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
+    /* Numbers are plain decimal digits: no sign, whitespace, suffix or
+     * overflow that wraps onto the real version. */
+    static const char *const bad_numbers[] = {
+        "hello v=1abc", "hello v=+1", "hello v=4294967297", "hello v= 1",
+        "move cell=e5 seq=+0", "move cell=e5 seq=\t0", "move cell=e5 seq=1x"
+    };
+    for (size_t i = 0; i < sizeof(bad_numbers) / sizeof(bad_numbers[0]);
+         ++i) {
+        REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
+            bad_numbers[i], NET_DIRECTION_CLIENT_TO_SERVER, &out));
+    }
+    REVERSI_TEST_ASSERT(stats, net_protocol_decode(
+        "hello v=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
         "create color=X", NET_DIRECTION_CLIENT_TO_SERVER, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(

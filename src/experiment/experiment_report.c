@@ -294,8 +294,9 @@ static bool write_text_file(const char *dir, const char *name,
         }
         return false;
     }
-    const bool ok = length == 0 || fwrite(data, 1, length, file) == length;
-    fclose(file);
+    const bool written_all = length == 0
+                             || fwrite(data, 1, length, file) == length;
+    const bool ok = fclose(file) == 0 && written_all;
     if (!ok) {
         if (error != NULL && error_size > 0) {
             snprintf(error, error_size, "cannot write %s", path);

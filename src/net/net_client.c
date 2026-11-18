@@ -25,7 +25,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 typedef SOCKET ClientSocket;
-#define CLIENT_INVALID INVALID_SOCKET
+#define REVERSI_NET_CLIENT_INVALID INVALID_SOCKET
 #else
 #include <arpa/inet.h>
 #include <errno.h>
@@ -37,7 +37,7 @@ typedef SOCKET ClientSocket;
 #include <time.h>
 #include <unistd.h>
 typedef int ClientSocket;
-#define CLIENT_INVALID (-1)
+#define REVERSI_NET_CLIENT_INVALID (-1)
 #endif
 
 #if defined(_WIN32)
@@ -239,12 +239,14 @@ static bool socket_wait_connected(NetClient *client, ClientSocket socket_fd,
 static void set_status(NetClient *client, NetClientStatus status,
                        const char *reason)
 {
-    atomic_store_explicit(&client->status, (int)status, memory_order_release);
+    /* Write the reason before publishing the status, so a poll that sees
+     * the new status also sees why. */
     if (reason != NULL) {
         lock_client(client);
         snprintf(client->reason, sizeof(client->reason), "%s", reason);
         unlock_client(client);
     }
+    atomic_store_explicit(&client->status, (int)status, memory_order_release);
 }
 
 static void queue_message(NetClient *client, const char *text, size_t length)
@@ -263,6 +265,18 @@ static void queue_message(NetClient *client, const char *text, size_t length)
     client->queue[index].text[length] = '\0';
     ++client->queue_count;
     unlock_client(client);
+}
+
+/* True when TLS already holds decrypted bytes: a record larger than one
+ * read leaves its tail inside OpenSSL, where select() cannot see it. */
+static bool connection_has_buffered(NetClient *client)
+{
+#if REVERSI_NET_CLIENT_TLS
+    return client->tls != NULL && SSL_pending((SSL *)client->tls) > 0;
+#else
+    (void)client;
+    return false;
+#endif
 }
 
 /* Connection I/O: >0 bytes, 0 on EOF, -1 on error, -2 when the socket or the
@@ -347,6 +361,13 @@ static bool tls_handshake(NetClient *client, const char **reason)
         SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
         SSL_CTX_set_options(ctx, SSL_OP_NO_RENEGOTIATION);
         (void)SSL_CTX_set_default_verify_paths(ctx);
+#if defined(__APPLE__)
+        /* OpenSSL's default store points into the build machine's OpenSSL
+         * prefix (Homebrew), which a player's Mac usually lacks. macOS ships
+         * its root set as /etc/ssl/cert.pem; add it so a statically linked
+         * client still verifies public servers. */
+        (void)SSL_CTX_load_verify_locations(ctx, "/etc/ssl/cert.pem", NULL);
+#endif
         client->tls_ctx = ctx;
     }
     SSL *ssl = SSL_new((SSL_CTX *)client->tls_ctx);
@@ -469,7 +490,7 @@ static bool outbound_flush(NetClient *client)
 {
     const size_t capacity = sizeof(client->outbound);
     while (client->outbound_count > 0
-           && client->socket != CLIENT_INVALID) {
+           && client->socket != REVERSI_NET_CLIENT_INVALID) {
         /* TLS requires the retry to repeat the exact same call, so a
          * would-block write keeps its length until it succeeds. */
         size_t length = client->tls_pending;
@@ -567,9 +588,9 @@ static bool address_is_local(const struct sockaddr *address)
 }
 
 #if defined(_WIN32)
-#define CLIENT_THREAD_RETURN return 0
+#define REVERSI_NET_CLIENT_THREAD_RETURN return 0
 #else
-#define CLIENT_THREAD_RETURN return NULL
+#define REVERSI_NET_CLIENT_THREAD_RETURN return NULL
 #endif
 
 /* Ends the worker after a failed connection: reports the reason (unless the
@@ -586,10 +607,10 @@ static void client_fail(NetClient *client, ClientSocket socket_fd,
 #endif
     lock_client(client);
     outbound_clear(client);
-    if (socket_fd != CLIENT_INVALID) {
+    if (socket_fd != REVERSI_NET_CLIENT_INVALID) {
         socket_close(socket_fd);
     }
-    client->socket = CLIENT_INVALID;
+    client->socket = REVERSI_NET_CLIENT_INVALID;
     unlock_client(client);
     atomic_store(&client->running, false);
 }
@@ -630,10 +651,10 @@ static void *client_thread(void *argument)
     }
     if (!allowed) {
         freeaddrinfo(results);
-        client_fail(client, CLIENT_INVALID, "tls_required");
-        CLIENT_THREAD_RETURN;
+        client_fail(client, REVERSI_NET_CLIENT_INVALID, "tls_required");
+        REVERSI_NET_CLIENT_THREAD_RETURN;
     }
-    ClientSocket socket_fd = CLIENT_INVALID;
+    ClientSocket socket_fd = REVERSI_NET_CLIENT_INVALID;
     const uint64_t connect_deadline =
         now_ms() + REVERSI_NET_CLIENT_CONNECT_TIMEOUT_MS;
     for (struct addrinfo *it = results; it != NULL; it = it->ai_next) {
@@ -641,12 +662,12 @@ static void *client_thread(void *argument)
             continue;
         }
         socket_fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-        if (socket_fd == CLIENT_INVALID) {
+        if (socket_fd == REVERSI_NET_CLIENT_INVALID) {
             continue;
         }
         if (!socket_nonblocking(socket_fd)) {
             socket_close(socket_fd);
-            socket_fd = CLIENT_INVALID;
+            socket_fd = REVERSI_NET_CLIENT_INVALID;
             continue;
         }
         if (connect(socket_fd, it->ai_addr, (int)it->ai_addrlen) == 0) {
@@ -657,15 +678,15 @@ static void *client_thread(void *argument)
             break;
         }
         socket_close(socket_fd);
-        socket_fd = CLIENT_INVALID;
+        socket_fd = REVERSI_NET_CLIENT_INVALID;
         if (atomic_load(&client->stop)) {
             break;
         }
     }
     freeaddrinfo(results);
-    if (socket_fd == CLIENT_INVALID) {
-        client_fail(client, CLIENT_INVALID, "connect_failed");
-        CLIENT_THREAD_RETURN;
+    if (socket_fd == REVERSI_NET_CLIENT_INVALID) {
+        client_fail(client, REVERSI_NET_CLIENT_INVALID, "connect_failed");
+        REVERSI_NET_CLIENT_THREAD_RETURN;
     }
     lock_client(client);
     client->socket = socket_fd;
@@ -675,18 +696,18 @@ static void *client_thread(void *argument)
         const char *reason = "tls_handshake_failed";
         if (!tls_handshake(client, &reason)) {
             client_fail(client, socket_fd, reason);
-            CLIENT_THREAD_RETURN;
+            REVERSI_NET_CLIENT_THREAD_RETURN;
         }
     }
 #else
     if (client->use_tls) {
         client_fail(client, socket_fd, "tls_unavailable");
-        CLIENT_THREAD_RETURN;
+        REVERSI_NET_CLIENT_THREAD_RETURN;
     }
 #endif
     if (!client_handshake(client)) {
         client_fail(client, socket_fd, "handshake_failed");
-        CLIENT_THREAD_RETURN;
+        REVERSI_NET_CLIENT_THREAD_RETURN;
     }
     set_status(client, NET_CLIENT_CONNECTED, NULL);
     NetWsParser parser;
@@ -704,7 +725,8 @@ static void *client_thread(void *argument)
         }
         /* Selecting keeps teardown join bounded: a blocked recv is not
          * reliably interrupted by shutdown() from another thread on Windows. */
-        const int ready = socket_wait_readable(socket_fd, 20);
+        const int ready = connection_has_buffered(client)
+            ? 1 : socket_wait_readable(socket_fd, 20);
         if (ready == 0) {
             continue;
         }
@@ -779,9 +801,9 @@ static void *client_thread(void *argument)
 #endif
     lock_client(client);
     outbound_clear(client);
-    if (client->socket != CLIENT_INVALID) {
+    if (client->socket != REVERSI_NET_CLIENT_INVALID) {
         socket_close(client->socket);
-        client->socket = CLIENT_INVALID;
+        client->socket = REVERSI_NET_CLIENT_INVALID;
     }
     unlock_client(client);
     atomic_store(&client->running, false);
@@ -835,7 +857,7 @@ NetClient *net_client_create(NetClientMessageFn on_message,
     atomic_init(&client->thread_started, false);
     atomic_init(&client->status, NET_CLIENT_IDLE);
     atomic_init(&client->reported_status, -1);
-    client->socket = CLIENT_INVALID;
+    client->socket = REVERSI_NET_CLIENT_INVALID;
     client->on_message = on_message;
     client->on_status = on_status;
     client->context = context;
@@ -859,7 +881,7 @@ void net_client_destroy(NetClient *client)
     }
     atomic_store(&client->stop, true);
     lock_client(client);
-    if (client->socket != CLIENT_INVALID) {
+    if (client->socket != REVERSI_NET_CLIENT_INVALID) {
 #if defined(_WIN32)
         shutdown(client->socket, SD_BOTH);
 #else
@@ -933,7 +955,7 @@ void net_client_disconnect(NetClient *client)
     }
     atomic_store(&client->stop, true);
     lock_client(client);
-    if (client->socket != CLIENT_INVALID) {
+    if (client->socket != REVERSI_NET_CLIENT_INVALID) {
 #if defined(_WIN32)
         shutdown(client->socket, SD_BOTH);
 #else
@@ -1000,12 +1022,12 @@ bool net_client_send(NetClient *client, const NetMessage *message)
     bool queued = false;
     bool overflow = false;
     ClientSocket socket = client->socket;
-    if (length > 0 && socket != CLIENT_INVALID
+    if (length > 0 && socket != REVERSI_NET_CLIENT_INVALID
         && atomic_load(&client->status) == NET_CLIENT_CONNECTED) {
         queued = outbound_push(client, frame, length);
         overflow = !queued;
     }
-    if (overflow && socket != CLIENT_INVALID) {
+    if (overflow && socket != REVERSI_NET_CLIENT_INVALID) {
         /* Shut the socket down while the mutex still pins it: the descriptor
          * could otherwise be closed and reused by the worker before this
          * call reaches shutdown(). */

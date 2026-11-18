@@ -347,7 +347,6 @@ size_t analysis_record_write(const AnalysisSession *session, char *buffer,
     }
 
     const int main_length = analysis_main_length(session);
-    int node = session->root;
     if (main_length > REVERSI_ANALYSIS_MAX_PLIES) {
         return 0;
     }
@@ -361,7 +360,11 @@ size_t analysis_record_write(const AnalysisSession *session, char *buffer,
 
     write_text(&writer, REVERSI_RECORD_HEADER "\n");
 
-    const GameState *end = &session->positions[node].state;
+    const int end_node = analysis_main_node_at_ply(session, main_length);
+    if (end_node < 0) {
+        return 0;
+    }
+    const GameState *end = &session->positions[end_node].state;
     char result[32];
     if (end->result == GAME_RESULT_ONGOING) {
         snprintf(result, sizeof(result), "-");
@@ -379,7 +382,7 @@ size_t analysis_record_write(const AnalysisSession *session, char *buffer,
     write_text(&writer, "\n");
 
     write_text(&writer, "moves");
-    node = session->root;
+    int node = session->root;
     for (int i = 0; i < main_length; ++i) {
         node = session->positions[node].first_child;
         write_via(&writer, &session->positions[node]);

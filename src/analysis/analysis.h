@@ -98,9 +98,11 @@ bool analysis_load_state(AnalysisSession *session, const GameState *state,
                          AnalysisPositionKind kind);
 
 /*
- * Imports the recorded moves of a history into a fresh tree. Requires entry
- * 0 to be the standard opening. Explicit pass events are replayed as passes.
- * On failure the destination is unchanged.
+ * Imports the recorded moves of a history into a fresh tree, redo moves
+ * included, and selects the node for history->current. Requires entry 0 to
+ * be the standard opening. A pass recorded with a move becomes that move
+ * node's opponent_passed flag, as with analysis_play_move(). On failure the
+ * destination is unchanged.
  */
 bool analysis_import_history(AnalysisSession *session, const History *history);
 

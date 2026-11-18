@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+#define REVERSI_NET_WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 static bool prefix_nocase(const char *text, const char *prefix, size_t length)
 {
@@ -169,7 +169,8 @@ bool net_ws_accept_key(const char *key, char out[29])
     Sha1 sha;
     sha1_init(&sha);
     sha1_update(&sha, (const uint8_t *)key, strlen(key));
-    sha1_update(&sha, (const uint8_t *)WS_GUID, strlen(WS_GUID));
+    sha1_update(&sha, (const uint8_t *)REVERSI_NET_WS_GUID,
+                strlen(REVERSI_NET_WS_GUID));
     uint8_t digest[20];
     sha1_final(&sha, digest);
     return base64_encode(digest, sizeof(digest), out, 29) == 28;
