@@ -12,14 +12,19 @@ echo "Packaging Reversi ${version}"
 # Web client first when the toolchain is present. Without emsdk the archive
 # simply has no web/ directory (verify-package.sh reports that).
 emsdk_dir="${EMSDK_DIR:-$HOME/emsdk}"
+package_web=ON
 if [ -f "${emsdk_dir}/emsdk_env.sh" ]; then
     "${root}/scripts/build-web.sh"
 else
+    # A web/dist left over from an earlier build may not match this source,
+    # so it is not packaged either.
     echo "Emscripten not found at ${emsdk_dir}: packaging without web/" >&2
+    package_web=OFF
 fi
 
 cmake -S "${root}" -B "${build_dir}" \
     -DCMAKE_BUILD_TYPE=Release \
+    -DREVERSI_PACKAGE_WEB="${package_web}" \
     -DREVERSI_ENABLE_GUI_TESTS=OFF \
     -DREVERSI_FORCE_FETCH_RAYLIB=ON
 cmake --build "${build_dir}" --config Release --parallel

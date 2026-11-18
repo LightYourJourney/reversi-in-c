@@ -232,6 +232,12 @@ if(NOT EMSCRIPTEN)
     option(REVERSI_ENABLE_TLS "Build the native client with OpenSSL (wss://)"
            ON)
     if(REVERSI_ENABLE_TLS)
+        if(APPLE)
+            # macOS has no system OpenSSL: a dylib from Homebrew would be a
+            # load-time dependency the player's Mac does not have, and the
+            # app would fail to start. Link the static libraries instead.
+            set(OPENSSL_USE_STATIC_LIBS TRUE)
+        endif()
         find_package(OpenSSL 3.0 QUIET)
         if(NOT OpenSSL_FOUND AND APPLE)
             # Homebrew's openssl is keg-only: CMake does not search its prefix.
@@ -576,8 +582,11 @@ endif()
 
 # Web client, when the Web build has been produced (scripts/build-web.sh).
 # Packaged under web/ so a release directory is self-contained and the
-# reverse proxy can point straight at it.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/web/dist/index.html")
+# reverse proxy can point straight at it. scripts/package.sh turns this off
+# when it could not rebuild web/dist, so a stale client is never shipped.
+option(REVERSI_PACKAGE_WEB "Install web/dist into the package when present" ON)
+if(REVERSI_PACKAGE_WEB
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/web/dist/index.html")
     install(DIRECTORY web/dist/ DESTINATION web COMPONENT Reversi)
 endif()
 

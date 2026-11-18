@@ -9,10 +9,14 @@ CORPUS=${CORPUS:-build-release/bin/reversi_ai_corpus}
 ENDGAME=${ENDGAME:-build-release/reversi_endgame_tests}
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-if [ ! -x "$BIN" ]; then
-    echo "missing $BIN; configure and build the Release tree first" >&2
-    exit 1
-fi
+# Check every tool before any output is rewritten: the redirections below
+# truncate committed reports before the command runs.
+for tool in "$BIN" "$CORPUS" "$ENDGAME"; do
+    if [ ! -x "$tool" ]; then
+        echo "missing $tool; configure and build the Release tree first" >&2
+        exit 1
+    fi
+done
 
 mkdir -p docs/experiments/rules-throughput docs/experiments/endgame-verify
 for config in experiments/*.exp; do
