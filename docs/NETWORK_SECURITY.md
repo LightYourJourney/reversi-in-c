@@ -18,7 +18,7 @@
 | 重复/重放 | 每步 `seq`；令牌仅用于座位恢复，重连后轮换 |
 | 消息畸形/过大 | WS 帧长度 ≤2048；严格字段、板面 64 字符与坐标校验 |
 | 帧层攻击 | 校验 RSV、opcode、掩码方向、扩展长度、控制帧长度；分片重组上限 |
-| 频率滥用 | 每连接令牌桶：20 msg/s，burst 40；超限关闭 |
+| 频率滥用 | 每连接令牌桶：20 帧/s，burst 40（文本、ping、pong 帧都计入）；超限关闭 |
 | 房间代码枚举 | 同一连接累计 8 次 `join`/`rejoin` 失败 → `rate_limited` 并断开；生产另加代理层 `limit_req` |
 | 资源耗尽 | 48 连接（超限回 HTTP 503）/ 32 房间上限；握手 5 s、空闲 120 s、等待房间 10 min（加入/重连刷新）；发送队列 16 KB |
 | 协议顺序 | 会话首条消息必须是 `hello`；其余顺序错误不改变任何状态 |
@@ -40,7 +40,8 @@
   `openssl s_client` 手工升级与两个 HeadlessChrome 客户端均收到
   `101 Switching Protocols`，并完成一局。见 `WEB_ONLINE_TESTING.md`。
 - 生产证书链、HSTS、代理超时、公网握手仍 **NOT TESTED**。
-- 不提供公网部署脚本；`reversi_server` 默认只绑定回环地址。
+- `deploy/` 只提供模板（nginx/systemd/logrotate），不自动部署；`reversi_server`
+  默认只绑定回环地址。
 
 ## 4. 已知限制与 NOT TESTED
 
@@ -61,8 +62,10 @@
 8. **桌面端发送**：2026-10-30 起改为 16 KiB 有界异步队列 + 断开重连，
    主线程不再等待网络可写；“服务器不读”场景有自动化用例
    （`tests/test_net_client.c` 的 `test_send_to_stalled_server`）。
-9. **桌面端 TLS 的平台差异**：macOS/Linux 构建支持 `wss://`（OpenSSL），
-   Windows 构建没有 OpenSSL、仍为明文且拒绝公网地址，见 §5。
+9. **桌面端 TLS 的平台差异**：三个平台的构建都支持 `wss://`（OpenSSL）。
+   macOS 静态链接 OpenSSL，Windows 随包附带 OpenSSL DLL，Linux 使用发行版
+   的 `libssl`。`net.tls` 自动化测试只在 macOS/Linux 注册，Windows 的 TLS
+   路径没有自动化覆盖，见 §5。
 10. **连接上限与代理层 `limit_conn`** 未做并发压测。
 
 ## 5. 桌面端 WSS：实现与限制
@@ -97,8 +100,12 @@
 | `REVERSI_TLS_E2E=host:port` + 真 nginx WSS + `reversi_server` | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1（本机实测，52 条断言） |
 | `REVERSI_TLS_PUBLIC=1`：真实公共 CA | `example.com` 链与主机名通过、止步于 WS 升级；`expired` / `self-signed` / `wrong.host.badssl.com` 均被拒绝（68 条断言，2026-10-31） |
 
-**平台**：macOS、Linux、Windows 三个构建都带 TLS（Linux CI 安装
-`libssl-dev`；Windows 使用 runner 自带的 OpenSSL）。Windows 的可执行文件
+**平台**：macOS、Linux、Windows 三个构建都带 TLS（Linux CI 与打包都安装
+`libssl-dev`；Windows 使用 runner 自带的 OpenSSL）。macOS 静态链接 OpenSSL，
+因为玩家的 Mac 上一般没有构建机那份 Homebrew OpenSSL；信任库除 OpenSSL
+默认路径外，还加载系统自带的 `/etc/ssl/cert.pem`（2026-11-18 本机验证：
+屏蔽默认信任库后，修复前 `example.com` 报 `tls_certificate_invalid`，修复后
+通过证书校验）。Windows 的可执行文件
 在运行期加载 OpenSSL，因此发布包**自带运行时**：`libssl-3-x64.dll` /
 `libcrypto-3-x64.dll` 同时放在包根（与 `reversi.exe` 同级）和 `bin/`
 （与 `reversi_server.exe` 同级）。打包工作流的冒烟步骤会检查这两个目录都
@@ -109,5 +116,7 @@
 实现细节：Windows 上 OpenSSL 的 `SSL_set_fd()` 接收 `int`，套接字句柄按
 OpenSSL 的惯例转换（64 位句柄值在实际运行中落在 int 范围内）。
 
-**仍未覆盖**：有效但已过期的证书、真实公网 CA、TLS 中断后的自动重连
-（重连路径复用同一传输，但只有明文路径有自动化）。
+**仍未覆盖**：TLS 中断后的自动重连（重连路径复用同一传输，但只有明文
+路径有自动化）；Windows 上的 TLS 路径（`net.tls` 不在 Windows 注册）。
+过期证书与真实公网 CA 见上表 `REVERSI_TLS_PUBLIC=1` 一行，需要外网，
+不在 CI 中运行。

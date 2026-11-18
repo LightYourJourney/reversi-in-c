@@ -27,6 +27,37 @@
 - `scripts/check-server-health.mjs`（无损健康检查）与
   `scripts/rehearse-rollback.sh`（发布切换/回滚演练）。
 
+### Fixed（全项目评审，2026-11-19）
+
+- Lab 导出已结束对局的棋谱时 `result` 行恒为 `-`，导致该棋谱无法再导入；
+  现在取主线终点局面。
+- Lab 导入对局时会停在撤销前的局面；现在定位到玩家当前所在的局面，撤销
+  掉的着法保留为主线后续。
+- 在线对局期间关窗、关页或切页不再覆盖或删除本地自动存档。
+- Web 端在线复盘（Review）与 Lab 读入棋谱不再把约 150 KB 的分析会话放在
+  64 KiB 的 WebAssembly 栈上。
+- Web AI Worker 加载失败时，每个请求都会收到失败回复，AI 不再永远“思考中”；
+  关闭仍在连接中的 WebSocket 不再误报 “Connection failed”。
+- 在大厅中失去服务器（或浏览器连接失败）时不再停在一个可点 Create/Join 的
+  “Lobby”，而是回到可重新连接的状态。
+- 服务器地址输入框收到非 ASCII 字符（如中文输入法）时不再触发 `<ctype.h>`
+  未定义行为。
+- 服务端令牌桶现在同时限制 ping/pong 控制帧；pong 无法入队时关闭连接；读取
+  只读缓冲区剩余空间，缓冲里有半帧时不再误判超限断开。
+- 协议的 `v=` 与 `seq=` 只接受纯十进制数字（此前 `v=1abc`、`v=+1`、溢出值
+  会被接受）；`reversi_server --port` 拒绝非数字或越界值，不再静默改用临时
+  端口。
+- 桌面客户端先写失败原因再发布状态，避免 `tls_required` 提示偶发丢失；TLS
+  读取前检查 OpenSSL 内部已解密的数据。
+- 实验配置：种子严格解析为 32 位无符号数；超长配置文件报错而不是被截断；
+  报告写入在 `fclose` 失败时报错。
+- macOS 包改为静态链接 OpenSSL，并额外加载系统 `/etc/ssl/cert.pem`，不再
+  依赖构建机的 Homebrew OpenSSL 才能启动。
+- nginx 模板不再对文件名不带哈希的 js/wasm 缓存 7 天；Linux 打包工作流安装
+  `libssl-dev`；`scripts/package.sh` 在无法重建 Web 客户端时不再打包旧的
+  `web/dist`；`scripts/run-experiments.sh` 先检查全部工具再改写报告。
+- `THIRD_PARTY_NOTICES.md` 补上 OpenSSL（Apache-2.0）。
+
 ## [2.0.0] - 未发布（Release Candidate，源码截至 2026-10-29）
 
 ### Added

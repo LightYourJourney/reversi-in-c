@@ -160,7 +160,7 @@ Python，未为实验平台引入新的运行时依赖。
 
 ## 10. CI 策略
 
-- `experiment.regression` 每次 CI 运行，耗时约 1 秒，只覆盖确定性与异常。
+- `experiment.regression` 每次 CI 运行，本机 Debug 约 10 秒，只覆盖确定性与异常。
 - 完整实验通过 `scripts/run-experiments.sh` 手动执行，结果提交到
   `docs/experiments/`，不占用每次提交的 CI 预算。
 - 旧版本引擎对照：在同一配置下用基线提交的构建运行，清单中的 `commit`

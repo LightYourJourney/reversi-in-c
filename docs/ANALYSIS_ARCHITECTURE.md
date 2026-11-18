@@ -100,7 +100,7 @@ position_generation ──► requested_generation
 
 ```text
 ┌──────────────────────────────────────────────┐
-│ Back  Load game  Copy record  Paste record   │
+│ Back  Load game  Save record  Load record    │
 ├───────────────────────────┬──────────────────┤
 │                           │ Analyze/Stop/All │
 │         棋盘              │ Main / Edit      │

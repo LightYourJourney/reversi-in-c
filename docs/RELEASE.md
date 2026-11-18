@@ -66,6 +66,8 @@ xcrun stapler staple Reversi.app
 1. 解压 zip 到任意目录（例如 `%LOCALAPPDATA%\Programs\Reversi`）。
 2. 运行 `reversi.exe`。运行时资源在同级 `assets\` 目录中，必须一起保留。
 3. 发行包使用静态 MSVC 运行库，不要求单独安装 Visual C++ Redistributable。
+   （随包的 OpenSSL DLL 来自 CI runner，是否依赖 `vcruntime140.dll` 尚未用
+   `dumpbin /dependents` 核实，在干净的 Windows 上 NOT TESTED。）
 
 卸载：关闭程序后删除解压目录，并可选删除
 `%APPDATA%\Reversi`（设置、统计与存档）。
@@ -157,7 +159,7 @@ cpack -C Release -B package
 
 - `.github/workflows/ci.yml`：Linux/Windows/macOS 的 Debug 与 Release
   构建、CTest、Release 打包上传；Linux ASan+UBSan；Linux Xvfb GUI。
-- `.github/workflows/release.yml`：推送 `v1.0.1` 标签后，三个平台分别
+- `.github/workflows/release.yml`：推送 `v2.0.0` 标签后，三个平台分别
   构建并打包，汇总 `SHA256SUMS`，创建 GitHub Release。
 - 标签必须与 `VERSION` 完全一致（`v` + 版本号），否则发布作业失败。
 - `workflow_dispatch` 只构建并上传工作流产物，不会发布 Release。
@@ -165,8 +167,8 @@ cpack -C Release -B package
 发布前检查：
 
 ```bash
-git tag -a v1.0.1 -m "Reversi 1.0.1"
-git push origin v1.0.1
+git tag -a v2.0.0 -m "Reversi 2.0.0"
+git push origin v2.0.0
 ```
 
 推送标签会触发正式发布；在确认所有平台产物与许可证无误前不要推送。

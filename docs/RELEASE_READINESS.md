@@ -121,7 +121,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | 代理层连接上限 | NOT TESTED | `limit_conn` 已配置、语法通过，未压测 |
 | 10 分钟 ASan soak | PASS | `PASS net.server (865909 checks)`，退出码 0，无报告 |
 | 安装包验收 | PASS（CI） | 三平台归档 + SHA256；Linux 包 Xvfb 验收、Windows `--version`；macOS 包未启动 |
-| CI（最新提交） | PASS 9/9 | `41182743291`（`39fa43f`）：三平台 Debug（含 `net.tls`）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
+| CI（最新提交） | PASS 9/9 | `41182743291`（`39fa43f`）：三平台 Debug（`net.tls` 只在 macOS/Linux 注册）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
 断言数（本机 Debug，全部无窗口测试合计 **1,211,054**）：
@@ -132,9 +132,11 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **Windows 构建没有 TLS**：macOS/Linux 已支持 `wss://`（OpenSSL），
-   Windows 刻意保持明文并拒绝公网地址（链接 OpenSSL 后需随包分发 DLL，
-   未验证前不启用）。Release Notes 必须写明平台差异；见
+1. **Windows 的 TLS 没有自动化测试**：三个平台都已构建 `wss://`
+   （Windows 随包附带 OpenSSL DLL，打包冒烟只验证能启动）。但 `net.tls`
+   不在 Windows 注册，Windows 上的证书校验与 WSS 对局 NOT TESTED；
+   macOS 包改为静态链接 OpenSSL 之后（2026-11-19）也还没有在一台没装
+   Homebrew 的 Mac 上启动验证。Release Notes 必须如实写明；见
    `NETWORK_SECURITY.md` §5。
 2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
    `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/

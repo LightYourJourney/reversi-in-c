@@ -12,7 +12,7 @@ DNS、未申请可信证书**。本地自签 TLS 结果不作为生产 PASS。
 - 无账号系统；房间与令牌都在内存中，进程重启即丢失。因此部署方案不涉及
   数据库、备份或跨实例共享状态。
 - Web 客户端连接 `<host>:<port>/`（路径固定为 `/`），所以 WebSocket 需要
-  独立的**主机名**（推荐 `ws.example.com`），静态站点用另一个主机名
+  独立的**主机名**（模板用 `ws.reversi.example.com`），静态站点用另一个主机名
   （`reversi.example.com`）。两者可共用同一张证书（SAN 或通配符）。
 - 必需组件：Linux x86_64/arm64、systemd、nginx ≥ 1.25（`http2 on;`）、
   certbot（或等价 ACME 客户端）、一个公网域名。
@@ -20,8 +20,8 @@ DNS、未申请可信证书**。本地自签 TLS 结果不作为生产 PASS。
 ## 2. 拓扑
 
 ```text
-浏览器 ── https://reversi.example.com ── nginx(443, TLS) ── /var/www/reversi
-       └─ wss://ws.example.com ────────── nginx(443, TLS, 限速) ── 127.0.0.1:8080
+浏览器 ── https://reversi.example.com ── nginx(443, TLS) ── /opt/reversi/current/web
+       └─ wss://ws.reversi.example.com ─── nginx(443, TLS, 限速) ── 127.0.0.1:8080
 桌面客户端 ── ws://127.0.0.1:8080（仅本机或可信内网；公网请同样经代理）
 ```
 
@@ -32,7 +32,7 @@ DNS、未申请可信证书**。本地自签 TLS 结果不作为生产 PASS。
 ```bash
 # 两个主机名签发同一张证书
 certbot certonly --webroot -w /var/www/acme \
-  -d reversi.example.com -d ws.example.com
+  -d reversi.example.com -d ws.reversi.example.com
 ```
 
 - `ssl_protocols TLSv1.2 TLSv1.3`；TLS 1.0/1.1 由服务端拒绝（本地实测
@@ -46,7 +46,7 @@ certbot certonly --webroot -w /var/www/acme \
 
 | 项 | 值 | 理由 |
 |---|---|---|
-| `add_header` 位置 | 只放在 `server` 级 | nginx 中任何 `location` 级的 `add_header` 会**丢弃**服务器级安全头；静态缓存用 `expires` 而不是 `add_header` |
+| `add_header` 位置 | 只放在 `server` 级 | nginx 中任何 `location` 级的 `add_header` 会**丢弃**服务器级安全头；缓存控制用 `expires -1`（每次重新验证：构建产物文件名不带哈希，长缓存会让新旧 js/wasm 混用） |
 | WSS 限速 | `limit_req 20r/m burst=10` 每 IP | 一局一次连接；阻止房间代码枚举（应用层另有每连接 8 次失败上限） |
 | 连接数 | `limit_conn 4` 每 IP | 每玩家最多开 1–2 条连接，重连短暂叠加 |
 | `proxy_read_timeout` | 300 s | 服务端空闲 120 s、客户端每 2 s ping；300 s 只兜底卡死的升级请求 |
@@ -82,7 +82,7 @@ journalctl -u reversi-server -f
 |---|---|---|
 | 连接 | 48 | 新连接收到 `HTTP/1.1 503` 后关闭；已有连接不受影响（测试覆盖） |
 | 房间 | 32 | `create` 返回 `server_full`；房间释放后可再创建（测试覆盖） |
-| 每连接消息 | 20 msg/s，burst 40 | `rate_limited` 并断开 |
+| 每连接帧数 | 20 帧/s，burst 40（文本、ping、pong 都计入） | `rate_limited` 并断开 |
 | 加入失败 | 8 次/连接 | `rate_limited` 并断开（房间代码枚举防护） |
 | 握手 | 5 s | 未完成 WebSocket 升级则断开 |
 | 空闲 | 120 s | 无任何帧则断开（客户端每 2 s ping） |
@@ -90,7 +90,7 @@ journalctl -u reversi-server -f
 | 结束房间 TTL | 2 min | `roomclosed status=expired` |
 | 发送队列 | 16 KB/连接（`send_queue_bytes`） | 关闭该连接，座位保留重连窗口 |
 | 套接字发送缓冲 | 系统默认（`send_buffer_bytes`） | 仅用于调优/测试；0 表示系统默认 |
-| 消息/帧 | 2048 B | `message_too_large` / 帧错误关闭 |
+| 消息/帧 | 2048 B | 超限帧在 WebSocket 层直接断开（不回 `message_too_large`） |
 
 以上都可通过 `NetServerConfig` 在测试或私有部署中调整；命令行只暴露
 `--bind/--port/--quiet`。
@@ -166,7 +166,7 @@ systemctl restart reversi-server
 systemctl is-active reversi-server
 journalctl -u reversi-server -n 20 --no-pager
 curl -skI https://reversi.example.com/ | grep -i strict-transport
-node scripts/check-server-health.mjs --url wss://ws.example.com/
+node scripts/check-server-health.mjs --url wss://ws.reversi.example.com/
 # 浏览器：开两个窗口各完成一局（建房/加入/落子/投降/重连）
 ```
 
@@ -191,7 +191,7 @@ node scripts/check-server-health.mjs --url wss://ws.example.com/
 | 进程崩溃 | systemd 自动重启；所有房间丢失 | 客户端收到断线并尝试重连 5 次，最终回到大厅；无需干预 |
 | nginx 重载失败 | `nginx -t` 报错，旧配置继续服务 | 修正配置后 reload；`systemctl reload nginx` 原子切换 |
 | 证书过期 | 浏览器证书错误 | 检查 `certbot renew` 与 hook；重新签发后 reload |
-| 连接被打满 | 新玩家无法连接（accept 后关闭） | 检查是否存在恶意连接；必要时下调代理层 `limit_conn` |
+| 连接被打满 | 新玩家无法连接（服务端回 HTTP 503 后关闭） | 检查是否存在恶意连接；必要时下调代理层 `limit_conn` |
 | 房间被枚举 | 代理 503 与应用层 `rate_limited` | 确认 `limit_req` 生效；提高 `burst` 只应针对可信来源 |
 
 ## 10. 明确未做

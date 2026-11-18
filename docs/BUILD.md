@@ -15,6 +15,11 @@ Linux Xvfb 软件渲染下做过冒烟。
   - 未找到时由 CMake `FetchContent` 下载固定版本并校验 SHA256；
   - 首次配置需要网络；离线环境可指定本地 raylib 源码目录。
 - 线程库（AI 后台搜索；macOS/Linux 为 pthread，Windows 为 Win32 线程）
+- OpenSSL 3.0 或更高（可选，默认启用，用于桌面端 `wss://`）：macOS
+  `brew install openssl@3`（静态链接进程序），Linux `libssl-dev`，Windows
+  使用已安装的 OpenSSL（打包时随附 DLL）。找不到时 CMake 只打印一行
+  STATUS 并构建**不带 TLS** 的客户端；`-DREVERSI_ENABLE_TLS=OFF` 可显式关闭。
+  已有构建目录缓存了动态库路径，切换到静态链接需要重新配置一个新目录。
 - OpenGL 驱动与桌面图形会话（运行游戏时）
 
 字体文件位于 `assets/fonts/`。Windows/Linux 构建复制到可执行文件旁；
@@ -102,8 +107,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-开启后 Debug 构建的 CTest 注册 17 个测试（15 个无窗口测试 +
-`app.smoke` + `app.autoplay`）。
+开启后 Debug 构建的 CTest 注册 31 个测试（27 个无窗口测试 +
+`app.smoke`、`app.net`、`app.lab`、`app.autoplay`）；不开启时 27 个。
 完整说明见 [TESTING.md](TESTING.md)。
 
 ## 6. Sanitizer
@@ -146,7 +151,7 @@ cmake --build build --config Release
 Linux（Debian/Ubuntu 示例）：
 
 ```bash
-sudo apt install build-essential cmake libasound2-dev libx11-dev \
+sudo apt install build-essential cmake libssl-dev libasound2-dev libx11-dev \
   libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev \
   libxcursor-dev libxinerama-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -168,9 +173,11 @@ cd build-release
 cpack -C Release -B package
 ```
 
-- macOS：`Reversi-1.0.0-Darwin-arm64.zip`，内含 `Reversi.app`；
-- Windows：`Reversi-1.0.0-Windows-AMD64.zip`，内含 `reversi.exe`；
-- Linux：`Reversi-1.0.0-Linux-x86_64.zip` 与 `.tar.gz`。
+- macOS：`Reversi-<VERSION>-Darwin-arm64.zip`，内含 `Reversi.app`；
+- Windows：`Reversi-<VERSION>-Windows-AMD64.zip`，内含 `reversi.exe`；
+- Linux：`Reversi-<VERSION>-Linux-x86_64.zip` 与 `.tar.gz`。
+
+`<VERSION>` 取自根目录 `VERSION`（当前 2.0.0）。
 
 每个归档同时生成 `.sha256`。CPack 只安装本项目的 `Reversi` 组件，
 不会带入 raylib/GLFW 的开发头文件与静态库。一次性完成构建、测试、

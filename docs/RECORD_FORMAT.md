@@ -43,7 +43,7 @@ result -
 ### 2.3 主线（可选，一次）
 
 ```text
-moves d3 c3 f4 pass e6
+moves d3 c3 c4 e3
 ```
 
 - 从标准开局开始，按顺序重放。
@@ -59,7 +59,8 @@ variation <ply> <token> ...
 
 - `<ply>` 是主线上的 0-based 位置；`0` 表示开局前。
 - 分支从该位置开始重放；第一个 token 通常是主线该步之外的另一种选择。
-- 分支行之间可以任意顺序；导入时先重放主线，再逐个建立分支。
+- 分支行之间可以任意顺序，但都必须写在 `moves` 行之后（否则拒绝）；导入时
+  先重放主线，再逐个建立分支。
 - 只导出**一层**分支：分支内部再分出的兄弟分支不会写入 v1。
 - 每条分支最多 64 个 token；读取与写入两侧都强制。
 
@@ -69,7 +70,7 @@ variation <ply> <token> ...
 # A short reviewed game
 reversi-record 1
 result -
-moves d3 c3 f4 e6
+moves d3 c3 c4 e3
 variation 0 c4 e3
 variation 2 f5
 ```

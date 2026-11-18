@@ -10,8 +10,10 @@
 - **顺序强制**：会话中的第一条消息必须是 `hello`；先发其他消息返回
   `hello_required`，重复 `hello` 返回 `unexpected_message`。重连时同样
   先 `hello` 再 `rejoin`。
-- 版本不一致由服务端拒绝（解码阶段即拒绝 `v≠1` 的 `hello`）；客户端
-  必须检查欢迎版本。
+- 版本不一致由服务端拒绝：`v≠1` 的 `hello` 在解码阶段即失败，服务端回
+  通用的 `bad_message`（没有专门的版本错误码）。客户端同样只接受
+  `v=1` 的 `welcome`；版本不符的 `welcome` 会被当作无法解码的消息丢弃，
+  界面不会给出专门提示（已知缺口）。
 - 客户端 → 服务端：`hello create join ready move resign ping rejoin leave`
 - 服务端 → 客户端：`welcome room start state error opponent gameover roomclosed pong`
 - 未知键、重复键、缺失必需字段、方向不符一律拒绝。
@@ -32,7 +34,7 @@
 | `board` | 64 字符，行主序，`0` 空 / `1` 黑 / `2` 白 |
 | `player` | 座位 `1`/`2`（1 为房主） |
 | `host` / `ready` | `0`/`1` |
-| `status` | `waiting`/`playing`/`finished`/`connected`/`disconnected`/`reconnected`/`normal`/`resign`/`timeout`/`left`/`expired`/`abandoned`/`shutdown` |
+| `status` | `waiting`/`playing`/`finished`/`connected`/`disconnected`/`reconnected`/`normal`/`resign`/`timeout`/`disconnect`/`left`/`expired`/`abandoned`/`shutdown` |
 | `error` | 错误码（见 §6） |
 
 ## 3. 大厅与房间
@@ -101,7 +103,8 @@ S: opponent status=reconnected   (发给对手)
 
 ## 6. 错误码
 
-`bad_message`、`hello_required`、`message_too_large`、`rate_limited`、`not_in_room`、
+`bad_message`、`hello_required`、`message_too_large`（保留：超过 2048 B 的帧
+目前在 WebSocket 层就直接断开，收不到此码）、`rate_limited`、`not_in_room`、
 `already_in_room`、`not_playing`、`not_ready_state`、`not_your_turn`、`stale_state`、
 `illegal_move`、`room_not_found`、`room_full`、`room_closed`、
 `room_in_progress`、
