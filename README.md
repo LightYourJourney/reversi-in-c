@@ -485,48 +485,9 @@ Windows 可执行文件位于 `build/bin/<Config>/reversi.exe`。发行包中的
 ctest --test-dir build --output-on-failure
 ```
 
-`core.*` 与 `ai.*` 测试目标不依赖 raylib，因此可在无图形环境运行：
-
-- `core.board`：623 项断言；棋盘、坐标/记谱、边界与安全访问
-- `core.rules`：227 项断言；开局着法、八方向翻转、多方向/多子翻转、间隙与边界
-- `core.game`：115 项断言；合法/非法落子、自动跳过、主动跳过限制、终局与结果
-- `core.random`：557,924 项断言；500 局确定性随机对局，用独立合法性 oracle
-  校验每步，并检查棋子占用数、总数与终局不变量
-- `core.history`：124 项断言；快照初始化、撤销/重做完整恢复、新落子截断重做
-  分支、跳过事件与终局恢复、容量与空指针
-- `core.match`：1,011 项断言；配置校验、阶段门控与暂停、自动跳过与终局、
-  从暂停/终局重开、撤销/重做恢复一致性、模式切换、AI_THINKING、人机撤销、
-  从着法序列恢复（含期望局面校验、终局恢复、非法序列与越界计数拒绝）
-- `ai.core`：2,977 项断言；配置/名称、评估分量与难度化评估、大量局面的
-  合法性、TT 与无 TT 搜索一致性、单步与 pass 局面、取消与确定性，以及
-  6 局固定深度人机对局 + 1 局使用实际 Hard 参数（深度 10 / 500 ms）的完整对局
-- `ai.worker`：44 项断言；后台搜索、状态快照隔离、取消、空指针与生命周期
-- `storage.save`：102 项断言；往返、覆盖写入、缺失/截断/错误版本/错误校验和/
-  非法着法/棋盘或回合不匹配/越界坐标拒绝、状态消息、路径校验、残留临时文件
-- `storage.settings`：68 项断言；默认值、速度档位、文本解析、往返、损坏头/越界值/非法布尔拒绝、
-  未知键向前兼容
-- `storage.stats`：44 项断言；PVE/PVP 记录与撤回、人机视角胜负、往返、非法汇总拒绝
-- `audio.noop`：2 项断言；未初始化设备时所有音效调用为安全空操作
-- `ui.button`（30 项断言）不创建窗口，直接用合成 `UiInput` 校验按钮的
-  悬停、按下、释放、移出取消、禁用、输入阻断与 reduced-motion 语义。
-- `ui.helpers`（191 项断言）覆盖缓动/颜色、棋盘命中、合法格判断、提示可见性、显示名称/
-  终局标题（含 PvE “You win/Computer wins”）、焦点跳转、对局输入门控、
-  AI_THINKING 门控、新游戏难度选择、各视图的键盘与鼠标动作，以及动画插值。
-- `ui.views`（35 项断言）覆盖运行时主题切换、菜单继续项、设置数值/开关动作、
-  存档槽位保存/加载/删除、帮助翻页与统计页返回。
-
-实际结果（2026-10-23，macOS arm64，v1.2.0 源码）：
-
-| 构建 | 测试结果 |
-|---|---|
-| Debug（无窗口） | 26/26 通过（Phase 15 复跑） |
-| Release（无窗口） | 26/26 通过（Phase 15 复跑） |
-| ASan+UBSan（无窗口） | 26/26 通过，无 Sanitizer 报告（Phase 15 复跑） |
-| Debug + GUI | 30/30 通过（Phase 14）；Phase 15 本机无显示器，NOT TESTED |
-| TSan | `net.session` 96、`net.client` 57 断言，无竞争报告（Phase 15） |
-| 浏览器（Chrome / Firefox / WebKit） | v2.0.0 两个隔离上下文 E2E（本地 HTTPS/WSS）三引擎均通过；Chrome 渲染/缩放/触摸/存档套件 9/9；桌面 Safari 60 手整局通过（2026-10-30）；iOS Safari/Android **NOT TESTED** |
-| Web 构建 | Emscripten 6.0.13 编译通过（主 wasm 395,038 B，Worker 58.7 KB） |
-| GitHub Actions | `40924395184`（Phase 15，`ccfa435`）9/9 通过；此前 Windows 失败均已修复（`2ba11ab`、`ccfa435`） |
+`core.*`、`ai.*`、`net.*`、`storage.*` 等无窗口测试不依赖图形环境。每个测试
+的覆盖范围、断言数、本机与 CI 的最新结果只记录在
+[docs/TESTING.md](docs/TESTING.md) §2，这里不再重复。
 
 AI 基准（Release，Apple M3，seed `0x5EED1234`，每组 20 局，共 180 局）中
 所有对局 `illegal=0 failures=0 unfinished=0`；Hard 对 Random/Greedy 20:0、

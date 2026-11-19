@@ -1,6 +1,7 @@
 # Phase 2 完成报告：图形界面与交互
 
-> 历史阶段报告：记录该阶段完成时的状态；最新发布状态见 README 与 [PHASE_7_REPORT.md](PHASE_7_REPORT.md)。
+> 历史记录：本报告记录该阶段当时的代码与结果，不再随后续改动更新。当前
+> 测试状态见 [TESTING.md](TESTING.md) §2，当前设计见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 日期：2026-10-19
 平台：macOS 26.6.2（Darwin 25.6.0，Apple M3 / arm64）

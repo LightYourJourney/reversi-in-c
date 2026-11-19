@@ -65,9 +65,10 @@ certbot certonly --webroot -w /var/www/acme \
   最多用 1 秒排空发送队列后以退出码 0 结束（本地实测见 §7）。
 - `LimitNOFILE=4096` 覆盖 48 连接 + 监听套接字 + nginx 侧连接。
 
-发布包同时包含服务端（`bin/reversi_server`）与 Web 客户端（`web/`，由
-`scripts/package.sh` 先构建 Web 得到；CI 的打包任务不构建 Web，产物会
-缺 `web/`），按 §8 的目录布局解压即可，不需要从构建目录手工拷贝二进制：
+发布包同时包含服务端（`bin/reversi_server`）与 Web 客户端（`web/`；CI 的
+`web` 任务构建并测试后放进每个平台的包，本地 `scripts/package.sh` 在有
+emsdk 时同样先构建 Web），按 §8 的目录布局解压即可，不需要从构建目录手工
+拷贝二进制：
 
 ```bash
 ls /opt/reversi/current/bin/reversi_server   # 由 §8 的 releases/current 提供

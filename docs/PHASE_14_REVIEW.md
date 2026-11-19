@@ -1,5 +1,8 @@
 # Phase 14 独立验收与代码质量审计（第二次）
 
+> 历史记录：本报告记录该阶段当时的代码与结果，不再随后续改动更新。当前
+> 测试状态见 [TESTING.md](TESTING.md) §2，当前设计见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
 日期：2026-10-28  
 审查对象：Phase 14 Reversi Online；基线 `be5b90d`；审计起点 HEAD `e8bf9ff`  
 历史版本：2026-10-27 的首次审计见 git 历史  

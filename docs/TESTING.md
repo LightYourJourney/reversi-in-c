@@ -59,15 +59,33 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.session | reversi_net_session_tests | 122 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、大厅中失去服务器回到 IDLE、服务器协议版本不符时 FAILED 并提示、TLS 提示不被截断、重连预算耗尽 FAILED、落子记录 | PASS |
 | experiment.regression | reversi_experiment_tests | 101 | 配置拒绝（含非法种子、超长配置文件、局数超过 2×开局数）、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
-| storage.save | reversi_save_tests | 102 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture | PASS |
-| storage.settings | reversi_settings_tests | 68 | 默认值、速度档位、解析、持久化、损坏回退、v1.0.1 设置 fixture | PASS |
-| storage.stats | reversi_stats_tests | 44 | 记录/撤回、视角、汇总、原子持久化 | PASS |
+| storage.save | reversi_save_tests | 118 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture、非标准开局的对局拒绝写出、自动存档决策（在线对局不动本地自动存档） | PASS |
+| storage.settings | reversi_settings_tests | 83 | 默认值、速度/音量档位（到端即止）、难度/主题循环、解析、持久化、损坏回退、v1.0.1 设置 fixture | PASS |
+| storage.stats | reversi_stats_tests | 63 | 记录/撤回、视角、汇总、原子持久化、单局记账（只计一次、撤销撤回、读入的终局存档不再计入或撤回） | PASS |
 | audio.noop | reversi_audio_tests | 2 | 无音频设备时安全空操作 | PASS |
 | ui.button | reversi_ui_button_tests | 30 | 悬停/按下/取消/禁用/reduced-motion | PASS |
 | ui.helpers | reversi_ui_helper_tests | 191 | 布局命中、提示门控、标题、焦点、动画 | PASS |
 | ui.views | reversi_ui_views_tests | 35 | 主题、菜单、设置、存档、帮助、统计动作 | PASS |
 
-实际运行结果：
+### 当前状态
+
+本节与上表是测试数量、断言数与 CI 结果的**唯一来源**；README、BUILD、
+发布就绪评估与各阶段报告只链接到这里（阶段报告里的数字是当时的记录，
+不再更新）。
+
+- 2026-11-20，`improve/audit-roadmap`：本机 macOS Debug 无窗口 **28/28 PASS**
+  （断言合计 1,211,195），GUI 构建 `app.smoke`、`app.autoplay` PASS。
+- CI 新增 Web 任务（`package.yml` 的 `web`）：Emscripten 6.0.13 构建 Release
+  与 Debug 两套 Web 客户端，用运行器自带的 Chrome 跑 `tests/web` 全部 9 个
+  用例；三平台安装包都带上该 Release 产物（`web/`），Linux 包验收要求
+  `web/` 存在（`REVERSI_REQUIRE_WEB=1`）。
+- GitHub Actions 运行 `44584245171`（`d4dd91f`）**10/10 success**：三平台
+  Debug、Linux ASan+UBSan、Linux Xvfb GUI、Web 任务（9/9 用例 PASS）、三平台
+  打包与 Linux 包验收（日志 `Web client: present (web/index.html)`）。此前
+  `44580515755` 只有 Web 任务的 `cancel` 失败（见 §7），`44582297801` 只有
+  macOS 的 `net.client` 失败（断开原因竞态，已修复，见 CHANGELOG）。
+
+### 历史运行记录（各阶段当时的结果，不再更新）
 
 - Phase 15（2026-10-29）：Debug 26/26、Release 26/26、ASan+UBSan 无窗口
   26/26；TSan `net.session`/`net.client` 无竞争；`net.server` 5,758 断言
@@ -258,11 +276,17 @@ SwiftShader 软件渲染。
 | `difficulties` | Easy / Medium / Hard 各自完成一次 AI 回应 | PASS |
 | `mobile-touch` | 390×844 触摸落子并写入自动存档 | PASS |
 | `pagehide` | `pagehide` 触发持久化（重写自动存档） | PASS |
-| `cancel` | 搜索中取消、Worker 终止、主循环不阻塞 | PASS |
+| `cancel` | 搜索中取消（取消后同一任务内断言已停止；下一帧游戏循环会为电脑回合重新开始搜索）、Worker 终止、主循环不阻塞 | PASS |
 | `autoplay` | Debug 构建完整对局到终局 | PASS |
 
 默认情况下，任何 SKIP 都会让套件以非零退出；只有显式设置
 `REVERSI_WEB_ALLOW_SKIP=1` 才接受不完整的运行。
+
+CI 的 `web` 任务（`.github/workflows/package.yml`）每次都执行这 9 个用例：
+Release 产物在 8080、Debug 产物（`BUILD_TYPE=Debug BUILD_DIR=build-web-debug
+DIST_DIR=web/dist-debug scripts/build-web.sh`）在 8081。首次在 CI 上运行时
+`cancel` 失败：用例在取消后等 400 ms 才检查，而游戏循环下一帧就会重新开始
+搜索，只有在快机器上新搜索先结束时才通过；已改为在取消的同一任务内检查。
 
 运行方式见 [WEB_BUILD.md](WEB_BUILD.md) §4。Phase 10 时桌面回归为
 Debug/Release/ASan+UBSan 各 15/15（均无窗口）；v1.2.0 的 17/17 见 §2。
@@ -281,8 +305,9 @@ Playwright）；浏览器存储被禁用的降级路径见 §13 的 `web-runtime
   桌面 GUI、多显示器/锁屏路径未验证。
 - 鼠标点击已由用户人工验证，但没有自动化 GUI 点击回归测试；CI 仅在
   Linux Xvfb 下运行冒烟与自动对局。
-- 终局统计只计一次由 `app.autoplay` 集成测试覆盖；结算后撤销与统计撤回
-  仍有 `storage.stats` 单元测试和应用层代码审查，但没有自动化 GUI 点击测试。
+- 终局统计只计一次由 `app.autoplay` 集成测试覆盖；结算后撤销、统计撤回与
+  “读入的终局存档不再计入”的判定在 `storage.stats`（`stats_match_*`）中有
+  单元测试，app 层只负责调用与写盘；没有自动化 GUI 点击测试。
 - 存档的“终局动画中断”路径通过提前记录统计与自动存档保留逻辑处理，
   未做崩溃注入/断电测试。
 

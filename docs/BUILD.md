@@ -107,10 +107,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-开启后 Debug 构建的 CTest 注册 32 个测试（28 个无窗口测试 +
-`app.smoke`、`app.net`、`app.lab`、`app.autoplay`）；不开启时 28 个
-（Windows 不注册 `net.tls`，为 27 个）。
-完整说明见 [TESTING.md](TESTING.md)。
+开启后 Debug 构建额外注册 `app.smoke`、`app.net`、`app.lab`、`app.autoplay`
+四个 GUI 测试。各平台注册的测试数量与最新结果见 [TESTING.md](TESTING.md) §1–§2。
 
 ## 6. Sanitizer
 

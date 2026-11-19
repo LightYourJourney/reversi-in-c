@@ -72,6 +72,28 @@
 - Windows 包随附 `vcruntime140.dll`：随包的 OpenSSL DLL 依赖它，干净的
   Windows 上此前会因缺 DLL 无法启动。
 
+### Changed（审查路线图，2026-11-20）
+
+- CI 新增 Web 任务：固定 Emscripten 6.0.13 构建 Release 与 Debug Web 客户端，
+  用 Chrome 跑 `tests/web` 全部用例；三平台安装包都带上 `web/`（此前 CI 产出
+  的包缺 `web/`），Linux 包验收要求它存在；发布只上传安装包与校验和。
+- `save_write` 拒绝不是从标准开局开始的对局（这类存档无法读回）；
+  `save.h` 不再声称会保留可重做的着法。
+- 服务端令牌与房间代码只取系统随机数；取不到时回 `server_busy`，不再
+  退化为以时间为种子的伪随机。
+- 计划内停机最多用 1 秒排空发送队列（此前只做一次非阻塞写）。
+- OpenSSL 4 下改用 `SSL_set1_dnsname`（`SSL_set1_host` 已弃用），构建无警告。
+- 设置步进（音量/难度/主题）、统计单局记账与自动存档决策从 `app.c` 移入
+  `settings`/`stats`/`save` 模块，并有无窗口测试覆盖。
+- 测试数量、断言数与 CI 结果只记录在 `docs/TESTING.md`；阶段报告标注为
+  历史记录。
+
+### Fixed（审查路线图，2026-11-20）
+
+- 桌面客户端发送队列满时，断开原因偶尔被工作线程报成 `closed` 或
+  `send_failed`（macOS CI 复现）；现在先记录原因再关闭套接字，且第一次断开的
+  原因不会被覆盖。
+
 ## [2.0.0] - 未发布（Release Candidate，源码截至 2026-10-29）
 
 ### Added

@@ -1,5 +1,8 @@
 # Phase 15.2 — 最终发布阻碍收敛
 
+> 历史记录：本报告记录该阶段当时的代码与结果，不再随后续改动更新。当前
+> 测试状态见 [TESTING.md](TESTING.md) §2，当前设计见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
 日期：2026-10-30  
 基线：`ab89717`（Phase 15 收尾后），源码版本 2.0.0 RC  
 范围：只修真实问题；未部署公网、未购买云资源、未创建标签或 GitHub Release。
