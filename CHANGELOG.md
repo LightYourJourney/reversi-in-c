@@ -87,6 +87,12 @@
   `settings`/`stats`/`save` 模块，并有无窗口测试覆盖。
 - 测试数量、断言数与 CI 结果只记录在 `docs/TESTING.md`；阶段报告标注为
   历史记录。
+- Web 大厅预填的服务器地址可由 `index.html` 的
+  `<meta name="reversi-server" content="host:port">` 配置（此前固定为
+  `127.0.0.1:8080`，公网玩家需手填）。
+- AI：搜索与残局求解共用 `ai_hash.[ch]`（计时、Zobrist 键、着法展开），
+  行为逐节点不变。
+- CI：工作流默认只读，只有发布任务可写；官方 action 固定到提交 SHA。
 
 ### Fixed（审查路线图，2026-11-20）
 
