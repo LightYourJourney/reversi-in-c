@@ -127,6 +127,8 @@ AI 在独立 Web Worker 中运行，取消时终止 Worker，页面保持响应�
 │   │   ├── ai.[ch]       难度配置、评估入口、合法性兜底、同步控制器
 │   │   ├── ai_eval.c     角点/机动性/位置/稳定子/前沿/奇偶评估
 │   │   ├── ai_search.[ch] Negamax、Alpha-Beta、迭代加深、置换表
+│   │   ├── ai_endgame.[ch] 全宽度残局精确求解
+│   │   ├── ai_hash.[ch]  搜索与残局共用的计时、Zobrist 键与着法展开
 │   │   └── ai_worker.[ch] 后台搜索线程、快照、取消与结果回收
 │   ├── ui/
 │   │   ├── theme.[ch]    运行时明暗主题、字号、间距、圆角与时长令牌

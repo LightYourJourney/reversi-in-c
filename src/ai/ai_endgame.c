@@ -1,9 +1,6 @@
-#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
-#endif
-
 #include "ai/ai_endgame.h"
 
+#include "ai/ai_hash.h"
 #include "ai/ai_internal.h"
 #include "core/bitboard.h"
 
@@ -13,13 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__EMSCRIPTEN__)
-#include <emscripten.h>
-#else
-#include <time.h>
-#endif
 
 #define REVERSI_ENDGAME_TT_SIZE (1u << 16)
 #define REVERSI_ENDGAME_CHECK_MASK 1023u
@@ -45,87 +35,10 @@ typedef struct EndgameSearch {
     bool stopped;
     bool cancelled;
     bool timed_out;
-    uint64_t zobrist[REVERSI_BOARD_CELL_COUNT][2];
-    uint64_t turn_key[2];
+    AiZobrist keys;
     EndgameTtEntry *tt;
     uint32_t tt_mask;
 } EndgameSearch;
-
-static uint64_t endgame_now_ms(void)
-{
-#if defined(_WIN32)
-    return (uint64_t)GetTickCount64();
-#elif defined(__EMSCRIPTEN__)
-    return (uint64_t)emscripten_get_now();
-#elif defined(CLOCK_MONOTONIC)
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        return 0;
-    }
-    return (uint64_t)ts.tv_sec * 1000u
-        + (uint64_t)ts.tv_nsec / 1000000u;
-#else
-    struct timespec ts;
-    if (timespec_get(&ts, TIME_UTC) != TIME_UTC) {
-        return 0;
-    }
-    return (uint64_t)ts.tv_sec * 1000u
-        + (uint64_t)ts.tv_nsec / 1000000u;
-#endif
-}
-
-static uint64_t endgame_splitmix64(uint64_t *state)
-{
-    uint64_t z = (*state += 0x9E3779B97F4A7C15ULL);
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-    return z ^ (z >> 31);
-}
-
-static void endgame_init_zobrist(EndgameSearch *search)
-{
-    uint64_t seed = 0x9E3779B97F4A7C15ULL;
-    for (int cell = 0; cell < REVERSI_BOARD_CELL_COUNT; ++cell) {
-        search->zobrist[cell][0] = endgame_splitmix64(&seed);
-        search->zobrist[cell][1] = endgame_splitmix64(&seed);
-    }
-    search->turn_key[0] = endgame_splitmix64(&seed);
-    search->turn_key[1] = endgame_splitmix64(&seed);
-}
-
-static uint64_t endgame_hash(const EndgameSearch *search, const Bitboard *bb,
-                             Stone player)
-{
-    uint64_t hash = (player == STONE_BLACK)
-        ? search->turn_key[0] : search->turn_key[1];
-    uint64_t remaining = bb->black;
-    for (int cell = bitboard_next_index(remaining); cell >= 0;
-         cell = bitboard_next_index(remaining)) {
-        hash ^= search->zobrist[cell][0];
-        remaining &= remaining - 1;
-    }
-    remaining = bb->white;
-    for (int cell = bitboard_next_index(remaining); cell >= 0;
-         cell = bitboard_next_index(remaining)) {
-        hash ^= search->zobrist[cell][1];
-        remaining &= remaining - 1;
-    }
-    return hash;
-}
-
-static uint64_t endgame_hash_move(const EndgameSearch *search, uint64_t hash,
-                                  Stone player, int index, uint64_t flips)
-{
-    const int player_index = (player == STONE_BLACK) ? 0 : 1;
-    hash ^= search->zobrist[index][player_index];
-    uint64_t remaining = flips;
-    for (int cell = bitboard_next_index(remaining); cell >= 0;
-         cell = bitboard_next_index(remaining)) {
-        hash ^= search->zobrist[cell][0] ^ search->zobrist[cell][1];
-        remaining &= remaining - 1;
-    }
-    return hash ^ search->turn_key[0] ^ search->turn_key[1];
-}
 
 static bool endgame_should_stop(EndgameSearch *search)
 {
@@ -143,7 +56,7 @@ static bool endgame_should_stop(EndgameSearch *search)
     }
     if (search->config->time_budget_ms > 0
         && search->start_ms != 0
-        && endgame_now_ms() - search->start_ms
+        && ai_now_ms() - search->start_ms
             >= (uint64_t)search->config->time_budget_ms) {
         search->timed_out = true;
         search->stopped = true;
@@ -165,7 +78,7 @@ static bool endgame_force_stop(EndgameSearch *search)
     }
     if (search->config->time_budget_ms > 0
         && search->start_ms != 0
-        && endgame_now_ms() - search->start_ms
+        && ai_now_ms() - search->start_ms
             >= (uint64_t)search->config->time_budget_ms) {
         search->timed_out = true;
         search->stopped = true;
@@ -197,19 +110,6 @@ static int endgame_move_score(Move move)
     return positional + (corner ? 1000 : 0);
 }
 
-static int moves_from_bits(uint64_t bits, Move *moves)
-{
-    int count = 0;
-    for (int index = 0; index < REVERSI_BOARD_CELL_COUNT; ++index) {
-        if ((bits & (1ULL << index)) != 0) {
-            moves[count].row = index / REVERSI_BOARD_SIZE;
-            moves[count].col = index % REVERSI_BOARD_SIZE;
-            ++count;
-        }
-    }
-    return count;
-}
-
 static void order_moves(Move *moves, int count)
 {
     for (int i = 1; i < count; ++i) {
@@ -238,7 +138,7 @@ static int solve_node(EndgameSearch *search, const Bitboard *bb, uint64_t hash,
             return endgame_terminal_score(bb, player);
         }
         return -solve_node(search, bb,
-                           hash ^ search->turn_key[0] ^ search->turn_key[1],
+                           hash ^ search->keys.turn[0] ^ search->keys.turn[1],
                            stone_opponent(player), -beta, -alpha);
     }
 
@@ -270,7 +170,7 @@ static int solve_node(EndgameSearch *search, const Bitboard *bb, uint64_t hash,
     }
 
     Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = moves_from_bits(legal, moves);
+    const int count = ai_moves_from_bits(legal, moves);
     order_moves(moves, count);
     if (has_tt_best) {
         for (int i = 0; i < count; ++i) {
@@ -296,7 +196,7 @@ static int solve_node(EndgameSearch *search, const Bitboard *bb, uint64_t hash,
             continue;
         }
         const uint64_t child_hash =
-            endgame_hash_move(search, hash, player, index, flips);
+            ai_zobrist_after_move(&search->keys, hash, player, index, flips);
         const int score = -solve_node(search, &child, child_hash,
                                       stone_opponent(player), -beta, -alpha);
         if (search->stopped) {
@@ -362,16 +262,17 @@ bool ai_endgame_solve(const GameState *state, const AiConfig *config,
     EndgameSearch search;
     memset(&search, 0, sizeof(search));
     search.config = config;
-    search.start_ms = endgame_now_ms();
-    endgame_init_zobrist(&search);
+    search.start_ms = ai_now_ms();
+    ai_zobrist_init(&search.keys);
     if (empties >= 8) {
         search.tt = calloc(REVERSI_ENDGAME_TT_SIZE, sizeof(EndgameTtEntry));
         search.tt_mask = REVERSI_ENDGAME_TT_SIZE - 1u;
     }
 
-    const uint64_t hash = endgame_hash(&search, &bb, state->current_player);
+    const uint64_t hash = ai_zobrist_position(&search.keys, bb.black,
+                                              bb.white, state->current_player);
     Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = moves_from_bits(legal, moves);
+    const int count = ai_moves_from_bits(legal, moves);
     order_moves(moves, count);
 
     int alpha = -REVERSI_AI_INF;
@@ -389,8 +290,8 @@ bool ai_endgame_solve(const GameState *state, const AiConfig *config,
                                  &flips)) {
             continue;
         }
-        const uint64_t child_hash = endgame_hash_move(
-            &search, hash, state->current_player, index, flips);
+        const uint64_t child_hash = ai_zobrist_after_move(
+            &search.keys, hash, state->current_player, index, flips);
         const int score = -solve_node(&search, &child, child_hash,
                                       stone_opponent(state->current_player),
                                       -REVERSI_AI_INF, -alpha);
@@ -423,7 +324,7 @@ bool ai_endgame_solve(const GameState *state, const AiConfig *config,
         out_stats->depth = empties;
         out_stats->score = best;
         out_stats->elapsed_ms =
-            (int)(endgame_now_ms() - search.start_ms);
+            (int)(ai_now_ms() - search.start_ms);
         out_stats->cancelled = search.cancelled;
         out_stats->timed_out = search.timed_out;
     }

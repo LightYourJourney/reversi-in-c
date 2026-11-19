@@ -1,11 +1,8 @@
-#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
-#endif
-
 #include "ai/ai_search.h"
 
 #include "ai/ai_analyze.h"
 #include "ai/ai_endgame.h"
+#include "ai/ai_hash.h"
 #include "ai/ai_internal.h"
 #include "core/bitboard.h"
 #include "core/rules.h"
@@ -16,13 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_WIN32)
-#include <windows.h>
-#elif defined(__EMSCRIPTEN__)
-#include <emscripten.h>
-#else
-#include <time.h>
-#endif
 
 #define REVERSI_AI_CANCEL_CHECK_MASK 1023u
 #define REVERSI_AI_TT_SIZE (1u << 16)
@@ -56,44 +46,10 @@ typedef struct AiSearch {
     bool cancelled;
     bool timed_out;
     bool node_limit;
-    uint64_t zobrist[REVERSI_BOARD_CELL_COUNT][2];
-    uint64_t turn_key[2];
+    AiZobrist keys;
     AiTtEntry *tt;
     uint32_t tt_mask;
 } AiSearch;
-
-static uint64_t ai_now_ms(void)
-{
-#if defined(_WIN32)
-    return (uint64_t)GetTickCount64();
-#elif defined(__EMSCRIPTEN__)
-    return (uint64_t)emscripten_get_now();
-#elif defined(CLOCK_MONOTONIC)
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        return 0;
-    }
-    return (uint64_t)ts.tv_sec * 1000u
-        + (uint64_t)ts.tv_nsec / 1000000u;
-#else
-    struct timespec ts;
-    if (timespec_get(&ts, TIME_UTC) != TIME_UTC) {
-        /* Zero only disables the time budget; the depth limit still bounds
-           the search, so this degrades instead of breaking. */
-        return 0;
-    }
-    return (uint64_t)ts.tv_sec * 1000u
-        + (uint64_t)ts.tv_nsec / 1000000u;
-#endif
-}
-
-static uint64_t splitmix64(uint64_t *state)
-{
-    uint64_t z = (*state += 0x9E3779B97F4A7C15ULL);
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-    return z ^ (z >> 31);
-}
 
 static uint64_t rng_next(uint64_t *state)
 {
@@ -105,31 +61,12 @@ static uint64_t rng_next(uint64_t *state)
     return x * 0x2545F4914F6CDD1DULL;
 }
 
-static void init_zobrist(AiSearch *search)
-{
-    uint64_t seed = 0x9E3779B97F4A7C15ULL;
-    for (int cell = 0; cell < REVERSI_BOARD_CELL_COUNT; ++cell) {
-        search->zobrist[cell][0] = splitmix64(&seed);
-        search->zobrist[cell][1] = splitmix64(&seed);
-    }
-    search->turn_key[0] = splitmix64(&seed);
-    search->turn_key[1] = splitmix64(&seed);
-}
-
 static uint64_t state_hash(const AiSearch *search, const GameState *state)
 {
-    uint64_t hash = state->current_player == STONE_BLACK
-        ? search->turn_key[0] : search->turn_key[1];
-    for (int row = 0; row < REVERSI_BOARD_SIZE; ++row) {
-        for (int col = 0; col < REVERSI_BOARD_SIZE; ++col) {
-            const Stone stone = board_get(&state->board, row, col);
-            if (stone == STONE_BLACK || stone == STONE_WHITE) {
-                hash ^= search->zobrist[row * REVERSI_BOARD_SIZE + col]
-                    [stone == STONE_BLACK ? 0 : 1];
-            }
-        }
-    }
-    return hash;
+    Bitboard bb;
+    bitboard_from_board(&state->board, &bb);
+    return ai_zobrist_position(&search->keys, bb.black, bb.white,
+                               state->current_player);
 }
 
 static bool check_stop(AiSearch *search, bool force)
@@ -226,34 +163,6 @@ static void order_moves(Move *moves, int count, Move preferred,
     }
 }
 
-static uint64_t hash_after_move(const AiSearch *search, uint64_t hash,
-                                Stone player, int index, uint64_t flips)
-{
-    const int player_index = (player == STONE_BLACK) ? 0 : 1;
-    hash ^= search->zobrist[index][player_index];
-    uint64_t remaining = flips;
-    for (int cell = bitboard_next_index(remaining); cell >= 0;
-         cell = bitboard_next_index(remaining)) {
-        hash ^= search->zobrist[cell][0] ^ search->zobrist[cell][1];
-        remaining &= remaining - 1;
-    }
-    /* A move always hands the turn over (auto-pass is handled as a node). */
-    return hash ^ search->turn_key[0] ^ search->turn_key[1];
-}
-
-static int moves_from_bits(uint64_t bits, Move *moves)
-{
-    int count = 0;
-    for (int index = 0; index < REVERSI_BOARD_CELL_COUNT; ++index) {
-        if ((bits & (1ULL << index)) != 0) {
-            moves[count].row = index / REVERSI_BOARD_SIZE;
-            moves[count].col = index % REVERSI_BOARD_SIZE;
-            ++count;
-        }
-    }
-    return count;
-}
-
 static bool apply_search_move(const AiSearch *search, GameState *child,
                               Bitboard *child_bb, uint64_t *child_hash,
                               const GameState *state, const Bitboard *bb,
@@ -271,7 +180,8 @@ static bool apply_search_move(const AiSearch *search, GameState *child,
         return false;
     }
     if (child_hash != NULL) {
-        *child_hash = hash_after_move(search, hash, player, index, flips);
+        *child_hash = ai_zobrist_after_move(&search->keys, hash, player,
+                                            index, flips);
     }
     child->current_player = stone_opponent(player);
     /* The search detects terminal positions by move generation. */
@@ -299,7 +209,7 @@ static int negamax(AiSearch *search, const GameState *state,
         GameState passed = *state;
         passed.current_player = stone_opponent(player);
         const uint64_t passed_hash =
-            hash ^ search->turn_key[0] ^ search->turn_key[1];
+            hash ^ search->keys.turn[0] ^ search->keys.turn[1];
         return -negamax(search, &passed, bb, passed_hash, depth,
                         -beta, -alpha);
     }
@@ -339,7 +249,7 @@ static int negamax(AiSearch *search, const GameState *state,
     }
 
     Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = moves_from_bits(legal, moves);
+    const int count = ai_moves_from_bits(legal, moves);
     order_moves(moves, count, tt_best, has_tt_best);
 
     /* The TT probe may have tightened alpha/beta. Bound flags must describe
@@ -400,7 +310,7 @@ static bool root_search(AiSearch *search, const GameState *state,
 {
     const uint64_t legal = bitboard_legal_moves(bb, state->current_player);
     Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = moves_from_bits(legal, moves);
+    const int count = ai_moves_from_bits(legal, moves);
     if (count == 0) {
         return false;
     }
@@ -484,7 +394,7 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     search.start_ms = ai_now_ms();
     search.session_start_ms = search.start_ms;
     search.budget_ms = config->time_budget_ms;
-    init_zobrist(&search);
+    ai_zobrist_init(&search.keys);
     const uint64_t root_hash = state_hash(&search, state);
 
     if (use_tt && (tt_any_difficulty
@@ -496,7 +406,7 @@ static bool search_choose(const GameState *state, const AiConfig *config,
     Bitboard bb;
     bitboard_from_board(&state->board, &bb);
     Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = moves_from_bits(
+    const int count = ai_moves_from_bits(
         bitboard_legal_moves(&bb, state->current_player), moves);
     if (count == 0) {
         free(search.tt);
@@ -620,7 +530,7 @@ bool ai_easy_choose(const GameState *state, const AiConfig *config,
     Bitboard bb;
     bitboard_from_board(&state->board, &bb);
     Move moves[REVERSI_BOARD_CELL_COUNT];
-    const int count = moves_from_bits(
+    const int count = ai_moves_from_bits(
         bitboard_legal_moves(&bb, state->current_player), moves);
     if (count == 0) {
         return false;
@@ -777,7 +687,7 @@ bool ai_analyze_position(const GameState *state, const AiConfig *config,
     search.session_start_ms = search.start_ms;
     search.budget_ms = config->time_budget_ms;
     search.no_tt_cutoffs = true;
-    init_zobrist(&search);
+    ai_zobrist_init(&search.keys);
     const uint64_t root_hash = state_hash(&search, state);
 
     if (config->difficulty == AI_DIFFICULTY_HARD) {
@@ -789,7 +699,7 @@ bool ai_analyze_position(const GameState *state, const AiConfig *config,
     bitboard_from_board(&state->board, &bb);
     const uint64_t legal = bitboard_legal_moves(&bb, state->current_player);
     Move root_moves[REVERSI_BOARD_CELL_COUNT];
-    const int root_count = moves_from_bits(legal, root_moves);
+    const int root_count = ai_moves_from_bits(legal, root_moves);
     if (root_count == 0) {
         finish_stats(&search, 0, 0, &out->stats);
         free(search.tt);
@@ -819,7 +729,7 @@ bool ai_analyze_position(const GameState *state, const AiConfig *config,
         }
 
         Move moves[REVERSI_BOARD_CELL_COUNT];
-        const int count = moves_from_bits(legal, moves);
+        const int count = ai_moves_from_bits(legal, moves);
         order_moves(moves, count, best_count > 0 ? best[0].move : (Move){0, 0},
                     best_count > 0);
 

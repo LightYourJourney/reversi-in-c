@@ -351,6 +351,7 @@ add_library(reversi_ai STATIC
     src/ai/ai_baselines.c
     src/ai/ai_eval.c
     src/ai/ai_endgame.c
+    src/ai/ai_hash.c
     src/ai/ai_search.c
     ${REVERSI_AI_WORKER_SOURCE})
 target_include_directories(reversi_ai PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")

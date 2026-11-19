@@ -12,6 +12,7 @@
 | `ai/ai_search.c` | Negamax + Alpha-Beta、迭代加深、TT、增量 Zobrist |
 | `ai/ai_eval.c` | 局面评估（未改公式） |
 | `ai/ai_endgame.[ch]` | 全宽度残局求解器，EXACT/INCOMPLETE |
+| `ai/ai_hash.[ch]` | 两者共用的单调毫秒时钟、Zobrist 键（固定种子）与位掩码转着法列表 |
 | `ai/ai_worker.c` / `platform/web/ai_worker_web.c` | 搜索隔离 |
 
 标量 `core/rules.c` 仍是外部对局、存档校验与差分测试的 Oracle。
