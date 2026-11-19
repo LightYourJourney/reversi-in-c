@@ -290,6 +290,10 @@ app ──> match_restore_checked（以 Match API 回放并比对期望局面）
   `~/Library/Application Support/Reversi`，Linux
   `$XDG_DATA_HOME/reversi` 或 `~/.local/share/reversi`，Windows
   `%APPDATA%\Reversi`；程序安装目录只读，不写入用户数据。
+- 程序内部的路径一律是 UTF-8 字符串。Windows 上 `storage.c` 用宽字符
+  环境变量（`_wgetenv`）取目录，所有文件操作转成 UTF-16 走宽字符 API
+  （`_wfopen`、`_wstat`、`_wmkdir`、`_wremove`、`MoveFileExW`），用户名含
+  当前代码页以外的字符时也能读写存档。
 - 音效没有外部资源文件，全部在运行时合成；字体是唯一随程序分发的外部资源。
 
 ## 8. 测试策略

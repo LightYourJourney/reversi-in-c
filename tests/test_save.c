@@ -1,3 +1,8 @@
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+/* setenv and getcwd for the non-ASCII user directory test. */
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "core/game.h"
 #include "core/match.h"
 #include "core/rules.h"
@@ -9,6 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <wchar.h>
+#else
+#include <unistd.h>
+#endif
 
 #define REVERSI_TEST_SAVE_PATH "test-save.rvs"
 
@@ -432,6 +443,75 @@ static void test_v101_fixture(TestStats *stats)
     (void)storage_remove(path);
 }
 
+/*
+ * The user directory lives under a profile path the player does not choose;
+ * on Windows it often contains characters outside the active code page
+ * (C:\Users\Zoë, C:\Users\张三). Points the platform's base directory at
+ * such a path and round-trips a file through every storage entry point.
+ */
+static void test_non_ascii_user_dir(TestStats *stats)
+{
+    /* "Zoë-张三" */
+#ifdef _WIN32
+    const wchar_t *variable = L"APPDATA";
+    wchar_t *saved = NULL;
+    const wchar_t *old = _wgetenv(variable);
+    if (old != NULL) {
+        saved = _wcsdup(old);
+    }
+    wchar_t base[600];
+    REVERSI_TEST_ASSERT(stats, _wgetcwd(base, 500) != NULL);
+    wcscat_s(base, 600, L"\\unicode-Zo\u00EB-\u5F20\u4E09");
+    REVERSI_TEST_ASSERT(stats, _wputenv_s(variable, base) == 0);
+#else
+    char *saved_home = getenv("HOME") != NULL ? strdup(getenv("HOME")) : NULL;
+    char *saved_xdg = getenv("XDG_DATA_HOME") != NULL
+        ? strdup(getenv("XDG_DATA_HOME")) : NULL;
+    char base[1100];
+    REVERSI_TEST_ASSERT(stats, getcwd(base, 1000) != NULL);
+    strcat(base, "/unicode-Zo\xC3\xAB-\xE5\xBC\xA0\xE4\xB8\x89");
+    REVERSI_TEST_ASSERT(stats, setenv("HOME", base, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, setenv("XDG_DATA_HOME", base, 1) == 0);
+#endif
+
+    char path[1024];
+    REVERSI_TEST_ASSERT(stats, storage_make_user_dir());
+    REVERSI_TEST_ASSERT(stats, storage_path("unicode.rvs", path,
+                                            sizeof(path)));
+    REVERSI_TEST_ASSERT(stats,
+        strstr(path, "Zo\xC3\xAB-\xE5\xBC\xA0\xE4\xB8\x89") != NULL);
+    (void)storage_remove(path);
+    REVERSI_TEST_ASSERT(stats, storage_write_atomic(path, "one", 3));
+    REVERSI_TEST_ASSERT(stats, storage_write_atomic(path, "two!", 4));
+    REVERSI_TEST_ASSERT(stats, storage_exists(path));
+    char *data = NULL;
+    size_t size = 0;
+    REVERSI_TEST_ASSERT(stats, storage_read(path, &data, &size, 64));
+    REVERSI_TEST_ASSERT(stats, size == 4 && data != NULL
+                                   && memcmp(data, "two!", 4) == 0);
+    free(data);
+    REVERSI_TEST_ASSERT(stats, storage_remove(path));
+    REVERSI_TEST_ASSERT(stats, !storage_exists(path));
+
+#ifdef _WIN32
+    (void)_wputenv_s(variable, saved != NULL ? saved : L"");
+    free(saved);
+#else
+    if (saved_home != NULL) {
+        (void)setenv("HOME", saved_home, 1);
+    } else {
+        (void)unsetenv("HOME");
+    }
+    if (saved_xdg != NULL) {
+        (void)setenv("XDG_DATA_HOME", saved_xdg, 1);
+    } else {
+        (void)unsetenv("XDG_DATA_HOME");
+    }
+    free(saved_home);
+    free(saved_xdg);
+#endif
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -445,6 +525,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_storage_path);
     REVERSI_RUN_TEST(&stats, test_atomic_overwrite);
     REVERSI_RUN_TEST(&stats, test_v101_fixture);
+    REVERSI_RUN_TEST(&stats, test_non_ascii_user_dir);
 
     return reversi_test_summary(&stats, "storage.save");
 }

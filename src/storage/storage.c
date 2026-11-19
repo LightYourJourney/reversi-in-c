@@ -15,22 +15,106 @@
 #include <direct.h>
 #include <io.h>
 #include <sys/stat.h>
+#include <wchar.h>
 #include <windows.h>
-#define REVERSI_STORAGE_MKDIR(path) _mkdir(path)
-#define REVERSI_STORAGE_STAT _stat
 #define REVERSI_STORAGE_IS_DIR(mode) (((mode) & _S_IFDIR) != 0)
 #define REVERSI_STORAGE_IS_REG(mode) (((mode) & _S_IFREG) != 0)
+typedef struct _stat StorageStat;
 #else
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#define REVERSI_STORAGE_MKDIR(path) mkdir((path), 0700)
-#define REVERSI_STORAGE_STAT stat
 #define REVERSI_STORAGE_IS_DIR(mode) S_ISDIR(mode)
 #define REVERSI_STORAGE_IS_REG(mode) S_ISREG(mode)
+typedef struct stat StorageStat;
 #endif
 
 #define REVERSI_STORAGE_PATH_CAP 1024
+
+/*
+ * Paths are UTF-8 strings everywhere in the program. On Windows the ANSI
+ * file APIs would reinterpret them in the active code page, so a profile
+ * directory such as C:\Users\Zoë or C:\Users\张三 could not be reached;
+ * every file system call below converts to UTF-16 and uses the wide API.
+ */
+#ifdef _WIN32
+static bool to_wide(const char *text, wchar_t *out, int cap)
+{
+    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, out,
+                               cap) > 0;
+}
+
+static bool from_wide(const wchar_t *text, char *out, size_t cap)
+{
+    return WideCharToMultiByte(CP_UTF8, 0, text, -1, out, (int)cap, NULL,
+                               NULL) > 0;
+}
+#endif
+
+static int path_stat(const char *path, StorageStat *info)
+{
+#ifdef _WIN32
+    wchar_t wide[REVERSI_STORAGE_PATH_CAP];
+    return to_wide(path, wide, REVERSI_STORAGE_PATH_CAP)
+        ? _wstat(wide, info) : -1;
+#else
+    return stat(path, info);
+#endif
+}
+
+static int path_mkdir(const char *path)
+{
+#ifdef _WIN32
+    wchar_t wide[REVERSI_STORAGE_PATH_CAP];
+    if (!to_wide(path, wide, REVERSI_STORAGE_PATH_CAP)) {
+        errno = EINVAL;
+        return -1;
+    }
+    return _wmkdir(wide);
+#else
+    return mkdir(path, 0700);
+#endif
+}
+
+static FILE *path_fopen(const char *path, const char *mode)
+{
+#ifdef _WIN32
+    wchar_t wide[REVERSI_STORAGE_PATH_CAP];
+    wchar_t wide_mode[8];
+    if (!to_wide(path, wide, REVERSI_STORAGE_PATH_CAP)
+        || !to_wide(mode, wide_mode, 8)) {
+        return NULL;
+    }
+    return _wfopen(wide, wide_mode);
+#else
+    return fopen(path, mode);
+#endif
+}
+
+static int path_remove(const char *path)
+{
+#ifdef _WIN32
+    wchar_t wide[REVERSI_STORAGE_PATH_CAP];
+    return to_wide(path, wide, REVERSI_STORAGE_PATH_CAP)
+        ? _wremove(wide) : -1;
+#else
+    return remove(path);
+#endif
+}
+
+/* Replaces `path` with `temp` in one step. */
+static bool path_replace(const char *temp, const char *path)
+{
+#ifdef _WIN32
+    wchar_t wide_temp[REVERSI_STORAGE_PATH_CAP];
+    wchar_t wide_path[REVERSI_STORAGE_PATH_CAP];
+    return to_wide(temp, wide_temp, REVERSI_STORAGE_PATH_CAP)
+        && to_wide(path, wide_path, REVERSI_STORAGE_PATH_CAP)
+        && MoveFileExW(wide_temp, wide_path, MOVEFILE_REPLACE_EXISTING);
+#else
+    return rename(temp, path) == 0;
+#endif
+}
 
 static bool copy_text(char *out, size_t cap, const char *text)
 {
@@ -47,8 +131,8 @@ static bool copy_text(char *out, size_t cap, const char *text)
 
 static bool path_is_dir(const char *path)
 {
-    struct REVERSI_STORAGE_STAT info;
-    if (REVERSI_STORAGE_STAT(path, &info) != 0) {
+    StorageStat info;
+    if (path_stat(path, &info) != 0) {
         return false;
     }
     return REVERSI_STORAGE_IS_DIR(info.st_mode);
@@ -86,7 +170,7 @@ static bool make_dir_recursive(const char *path)
         }
     }
 
-    if (REVERSI_STORAGE_MKDIR(path) == 0) {
+    if (path_mkdir(path) == 0) {
         return true;
     }
     return errno == EEXIST && path_is_dir(path);
@@ -95,10 +179,22 @@ static bool make_dir_recursive(const char *path)
 bool storage_user_dir(char *out, size_t cap)
 {
 #ifdef _WIN32
-    const char *base = getenv("APPDATA");
-    if (base == NULL || base[0] == '\0') {
-        const char *profile = getenv("USERPROFILE");
-        if (profile == NULL || profile[0] == '\0') {
+    /* The wide environment holds the real profile path; getenv would give
+     * its code-page approximation. */
+    char base_utf8[REVERSI_STORAGE_PATH_CAP];
+    char profile_utf8[REVERSI_STORAGE_PATH_CAP];
+    const wchar_t *wide_base = _wgetenv(L"APPDATA");
+    const wchar_t *wide_profile = _wgetenv(L"USERPROFILE");
+    const char *base = wide_base != NULL && wide_base[0] != L'\0'
+            && from_wide(wide_base, base_utf8, sizeof(base_utf8))
+        ? base_utf8 : NULL;
+    if (base == NULL) {
+        const char *profile = wide_profile != NULL
+                && wide_profile[0] != L'\0'
+                && from_wide(wide_profile, profile_utf8,
+                             sizeof(profile_utf8))
+            ? profile_utf8 : NULL;
+        if (profile == NULL) {
             return false;
         }
         char path[REVERSI_STORAGE_PATH_CAP];
@@ -178,13 +274,13 @@ bool storage_read(const char *path, char **out, size_t *out_size,
     *out = NULL;
     *out_size = 0;
 
-    struct REVERSI_STORAGE_STAT info;
-    if (REVERSI_STORAGE_STAT(path, &info) != 0
+    StorageStat info;
+    if (path_stat(path, &info) != 0
         || !REVERSI_STORAGE_IS_REG(info.st_mode)) {
         return false;
     }
 
-    FILE *file = fopen(path, "rb");
+    FILE *file = path_fopen(path, "rb");
     if (file == NULL) {
         return false;
     }
@@ -233,8 +329,8 @@ bool storage_write_atomic(const char *path, const char *data, size_t size)
         return false;
     }
 
-    (void)remove(temp);
-    FILE *file = fopen(temp, "wb");
+    (void)path_remove(temp);
+    FILE *file = path_fopen(temp, "wb");
     if (file == NULL) {
         return false;
     }
@@ -258,22 +354,10 @@ bool storage_write_atomic(const char *path, const char *data, size_t size)
     if (fclose(file) != 0) {
         ok = false;
     }
-    if (!ok) {
-        (void)remove(temp);
+    if (!ok || !path_replace(temp, path)) {
+        (void)path_remove(temp);
         return false;
     }
-
-#ifdef _WIN32
-    if (!MoveFileExA(temp, path, MOVEFILE_REPLACE_EXISTING)) {
-        (void)remove(temp);
-        return false;
-    }
-#else
-    if (rename(temp, path) != 0) {
-        (void)remove(temp);
-        return false;
-    }
-#endif
     return true;
 }
 
@@ -282,7 +366,7 @@ bool storage_remove(const char *path)
     if (path == NULL || path[0] == '\0') {
         return false;
     }
-    return remove(path) == 0 || !storage_exists(path);
+    return path_remove(path) == 0 || !storage_exists(path);
 }
 
 bool storage_exists(const char *path)
@@ -290,6 +374,6 @@ bool storage_exists(const char *path)
     if (path == NULL || path[0] == '\0') {
         return false;
     }
-    struct REVERSI_STORAGE_STAT info;
-    return REVERSI_STORAGE_STAT(path, &info) == 0;
+    StorageStat info;
+    return path_stat(path, &info) == 0;
 }

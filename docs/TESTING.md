@@ -59,7 +59,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.session | reversi_net_session_tests | 122 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、大厅中失去服务器回到 IDLE、服务器协议版本不符时 FAILED 并提示、TLS 提示不被截断、重连预算耗尽 FAILED、落子记录 | PASS |
 | experiment.regression | reversi_experiment_tests | 101 | 配置拒绝（含非法种子、超长配置文件、局数超过 2×开局数）、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
-| storage.save | reversi_save_tests | 118 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture、非标准开局的对局拒绝写出、自动存档决策（在线对局不动本地自动存档） | PASS |
+| storage.save | reversi_save_tests | 131 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture、非标准开局的对局拒绝写出、自动存档决策（在线对局不动本地自动存档）、用户目录含非 ASCII 字符（`Zoë-张三`）时的建目录/原子写/读/删（Windows 上验证宽字符路径） | PASS |
 | storage.settings | reversi_settings_tests | 83 | 默认值、速度/音量档位（到端即止）、难度/主题循环、解析、持久化、损坏回退、v1.0.1 设置 fixture | PASS |
 | storage.stats | reversi_stats_tests | 63 | 记录/撤回、视角、汇总、原子持久化、单局记账（只计一次、撤销撤回、读入的终局存档不再计入或撤回） | PASS |
 | audio.noop | reversi_audio_tests | 2 | 无音频设备时安全空操作 | PASS |
