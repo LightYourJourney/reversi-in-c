@@ -65,7 +65,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | audio.noop | reversi_audio_tests | 2 | 无音频设备时安全空操作 | PASS |
 | ui.button | reversi_ui_button_tests | 30 | 悬停/按下/取消/禁用/reduced-motion | PASS |
 | ui.helpers | reversi_ui_helper_tests | 191 | 布局命中、提示门控、标题、焦点、动画 | PASS |
-| ui.views | reversi_ui_views_tests | 35 | 主题、菜单、设置、存档、帮助、统计动作 | PASS |
+| ui.views | reversi_ui_views_tests | 59 | 主题、菜单、设置、存档、帮助、统计动作、大厅预填服务器（`host:port` 严格解析，格式不对时保留 127.0.0.1:8080） | PASS |
 
 ### 当前状态
 
@@ -74,7 +74,14 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 不再更新）。
 
 - 2026-11-20，`improve/audit-roadmap`：本机 macOS Debug 无窗口 **28/28 PASS**
-  （断言合计 1,211,195），GUI 构建 `app.smoke`、`app.autoplay` PASS。
+  （断言合计 1,211,239），GUI 构建 `app.smoke`、`app.autoplay` PASS。
+- `storage.save` 的非 ASCII 用户目录用例先在未修复的代码上于 Windows CI 失败
+  （运行 `44587356614`，7 条断言），修复后通过；macOS/Linux 上它本来就通过。
+- 本机 ASan+UBSan：无窗口 26 项（含 `ai.core`，不含 `core.random`/`core.bitboard`）
+  PASS 且无报告；TSan：`net.client` 72、`net.session` 122、`ai.worker` 44 PASS，
+  无竞争报告。
+- AI 去重（`ai_hash.[ch]`）前后用同一程序对比 12 局：选着、残局求解与 MultiPV
+  分析共 456 行输出（着法、分数、节点数、剪枝数、TT 命中）逐字节相同。
 - CI 新增 Web 任务（`package.yml` 的 `web`）：Emscripten 6.0.13 构建 Release
   与 Debug 两套 Web 客户端，用运行器自带的 Chrome 跑 `tests/web` 全部 9 个
   用例；三平台安装包都带上该 Release 产物（`web/`），Linux 包验收要求
@@ -84,6 +91,8 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
   打包与 Linux 包验收（日志 `Web client: present (web/index.html)`）。此前
   `44580515755` 只有 Web 任务的 `cancel` 失败（见 §7），`44582297801` 只有
   macOS 的 `net.client` 失败（断开原因竞态，已修复，见 CHANGELOG）。
+- 路线图全部提交后的运行 `44588367653`（`64acfb2`，Windows 宽字符路径、AI
+  去重、CI 权限收紧之后）**10/10 success**。
 
 ### 历史运行记录（各阶段当时的结果，不再更新）
 
