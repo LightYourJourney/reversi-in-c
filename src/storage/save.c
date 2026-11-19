@@ -83,6 +83,15 @@ static char stone_letter(Stone stone)
     }
 }
 
+SaveAutosaveAction save_autosave_action(const Match *match, bool online)
+{
+    if (match == NULL || online) {
+        return SAVE_AUTOSAVE_SKIP;
+    }
+    return match->phase == MATCH_PHASE_GAME_OVER ? SAVE_AUTOSAVE_REMOVE
+                                                 : SAVE_AUTOSAVE_WRITE;
+}
+
 SaveStatus save_write(const char *path, const Match *match, int difficulty)
 {
     if (path == NULL || path[0] == '\0' || match == NULL) {

@@ -81,6 +81,32 @@ void stats_unrecord(GameStats *stats, GameMode mode, Stone human_color,
     adjust_record(stats, mode, human_color, difficulty, result, -1);
 }
 
+bool stats_match_finished(GameStats *stats, StatsMatchState *state,
+                          GameMode mode, Stone human_color, int difficulty,
+                          GameResult result)
+{
+    if (stats == NULL || state == NULL || *state != STATS_MATCH_PENDING
+        || result == GAME_RESULT_ONGOING) {
+        return false;
+    }
+    *state = STATS_MATCH_RECORDED;
+    stats_record(stats, mode, human_color, difficulty, result);
+    return true;
+}
+
+bool stats_match_reopened(GameStats *stats, StatsMatchState *state,
+                          GameMode mode, Stone human_color, int difficulty,
+                          GameResult previous)
+{
+    if (stats == NULL || state == NULL || *state != STATS_MATCH_RECORDED
+        || previous == GAME_RESULT_ONGOING) {
+        return false;
+    }
+    *state = STATS_MATCH_PENDING;
+    stats_unrecord(stats, mode, human_color, difficulty, previous);
+    return true;
+}
+
 static bool apply_field(GameStats *stats, const char *key, const char *value)
 {
     if (strcmp(key, "pvp_games") == 0 || strcmp(key, "pvp_draws") == 0) {

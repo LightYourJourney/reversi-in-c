@@ -200,6 +200,25 @@ static void test_pve_round_trip(TestStats *stats)
     (void)storage_remove(path);
 }
 
+static void test_autosave_action(TestStats *stats)
+{
+    Match match;
+    const MatchConfig config = pvp_config();
+    REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
+    REVERSI_TEST_ASSERT(stats, save_autosave_action(&match, false)
+        == SAVE_AUTOSAVE_WRITE);
+    /* Online play never touches the local autosave, finished or not. */
+    REVERSI_TEST_ASSERT(stats, save_autosave_action(&match, true)
+        == SAVE_AUTOSAVE_SKIP);
+    match.phase = MATCH_PHASE_GAME_OVER;
+    REVERSI_TEST_ASSERT(stats, save_autosave_action(&match, false)
+        == SAVE_AUTOSAVE_REMOVE);
+    REVERSI_TEST_ASSERT(stats, save_autosave_action(&match, true)
+        == SAVE_AUTOSAVE_SKIP);
+    REVERSI_TEST_ASSERT(stats, save_autosave_action(NULL, false)
+        == SAVE_AUTOSAVE_SKIP);
+}
+
 static void test_refuse_custom_root(TestStats *stats)
 {
     /* A save is replayed from the standard opening, so a match that began
@@ -419,6 +438,7 @@ int main(void)
 
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_pve_round_trip);
+    REVERSI_RUN_TEST(&stats, test_autosave_action);
     REVERSI_RUN_TEST(&stats, test_refuse_custom_root);
     REVERSI_RUN_TEST(&stats, test_reject_bad_files);
     REVERSI_RUN_TEST(&stats, test_status_messages);

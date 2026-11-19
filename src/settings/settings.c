@@ -35,6 +35,34 @@ int settings_speed_next(int speed, int direction)
     return SETTINGS_SPEEDS[index];
 }
 
+int settings_volume_next(int volume, int direction)
+{
+    const int next = volume + (direction < 0 ? -REVERSI_SETTINGS_VOLUME_STEP
+                                             : REVERSI_SETTINGS_VOLUME_STEP);
+    if (next < 0) {
+        return 0;
+    }
+    return next > REVERSI_SETTINGS_VOLUME_MAX ? REVERSI_SETTINGS_VOLUME_MAX
+                                              : next;
+}
+
+static int wrap_next(int value, int direction, int count)
+{
+    const int start = value >= 0 && value < count ? value : 0;
+    return (start + (direction < 0 ? count - 1 : 1)) % count;
+}
+
+int settings_difficulty_next(int difficulty, int direction)
+{
+    return wrap_next(difficulty, direction,
+                     REVERSI_SETTINGS_DIFFICULTY_COUNT);
+}
+
+int settings_theme_next(int theme, int direction)
+{
+    return wrap_next(theme, direction, REVERSI_SETTINGS_THEME_COUNT);
+}
+
 void settings_defaults(Settings *settings)
 {
     if (settings == NULL) {
@@ -58,7 +86,7 @@ static bool apply_setting(Settings *settings, const char *key,
     int number = 0;
     if (strcmp(key, "volume") == 0) {
         if (!storage_text_parse_int(value, -1000000, 1000000, &number)
-            || number < 0 || number > 100) {
+            || number < 0 || number > REVERSI_SETTINGS_VOLUME_MAX) {
             return false;
         }
         settings->volume = number;
@@ -95,13 +123,14 @@ static bool apply_setting(Settings *settings, const char *key,
         settings->last_move_highlight = number == 1;
     } else if (strcmp(key, "default_difficulty") == 0) {
         if (!storage_text_parse_int(value, -1000000, 1000000, &number)
-            || number < 0 || number > 2) {
+            || number < 0
+            || number >= REVERSI_SETTINGS_DIFFICULTY_COUNT) {
             return false;
         }
         settings->default_difficulty = number;
     } else if (strcmp(key, "theme") == 0) {
         if (!storage_text_parse_int(value, -1000000, 1000000, &number)
-            || (number != 0 && number != 1)) {
+            || number < 0 || number >= REVERSI_SETTINGS_THEME_COUNT) {
             return false;
         }
         settings->theme = number;
@@ -173,12 +202,14 @@ done:
 
 static bool settings_valid(const Settings *settings)
 {
-    return settings->volume >= 0 && settings->volume <= 100
+    return settings->volume >= 0
+        && settings->volume <= REVERSI_SETTINGS_VOLUME_MAX
         && settings->animation_speed >= REVERSI_SETTINGS_ANIMATION_MIN
         && settings->animation_speed <= REVERSI_SETTINGS_ANIMATION_MAX
         && settings->default_difficulty >= 0
-        && settings->default_difficulty <= 2
-        && (settings->theme == 0 || settings->theme == 1);
+        && settings->default_difficulty < REVERSI_SETTINGS_DIFFICULTY_COUNT
+        && settings->theme >= 0
+        && settings->theme < REVERSI_SETTINGS_THEME_COUNT;
 }
 
 bool settings_save_path(const char *path, const Settings *settings)

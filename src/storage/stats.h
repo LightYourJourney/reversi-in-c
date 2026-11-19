@@ -97,6 +97,29 @@ void stats_record(GameStats *stats, GameMode mode, Stone human_color,
 void stats_unrecord(GameStats *stats, GameMode mode, Stone human_color,
                     int difficulty, GameResult result);
 
+/*
+ * Per-match bookkeeping that keeps a result from being counted twice: a game
+ * is recorded once when it ends, withdrawn if Undo reopens it, and a finished
+ * game loaded from a save (counted when it was first played) is never
+ * recorded or withdrawn again.
+ */
+typedef enum StatsMatchState {
+    STATS_MATCH_PENDING = 0, /* record the result when the game ends */
+    STATS_MATCH_RECORDED,    /* recorded in this session */
+    STATS_MATCH_FROM_SAVE    /* a finished save: leave the counts alone */
+} StatsMatchState;
+
+/* The match reached `result`. Returns true when the counts changed. */
+bool stats_match_finished(GameStats *stats, StatsMatchState *state,
+                          GameMode mode, Stone human_color, int difficulty,
+                          GameResult result);
+
+/* Undo reopened a match that had ended as `previous`. Returns true when the
+ * counts changed. */
+bool stats_match_reopened(GameStats *stats, StatsMatchState *state,
+                          GameMode mode, Stone human_color, int difficulty,
+                          GameResult previous);
+
 /* Missing or corrupt files reset to zero and return false. */
 bool stats_load(GameStats *stats);
 bool stats_save(const GameStats *stats);

@@ -47,6 +47,29 @@ static void test_speed_presets(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, settings_speed_next(33, 1) == 100);
 }
 
+static void test_step_helpers(TestStats *stats)
+{
+    /* Volume moves in steps of 5 and stops at 0 and 100. */
+    REVERSI_TEST_ASSERT(stats, settings_volume_next(50, 1) == 55);
+    REVERSI_TEST_ASSERT(stats, settings_volume_next(50, -1) == 45);
+    REVERSI_TEST_ASSERT(stats, settings_volume_next(98, 1) == 100);
+    REVERSI_TEST_ASSERT(stats, settings_volume_next(100, 1) == 100);
+    REVERSI_TEST_ASSERT(stats, settings_volume_next(3, -1) == 0);
+    REVERSI_TEST_ASSERT(stats, settings_volume_next(0, -1) == 0);
+
+    /* Difficulty and theme wrap around in both directions. */
+    REVERSI_TEST_ASSERT(stats, settings_difficulty_next(0, 1) == 1);
+    REVERSI_TEST_ASSERT(stats, settings_difficulty_next(2, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, settings_difficulty_next(0, -1) == 2);
+    REVERSI_TEST_ASSERT(stats, settings_difficulty_next(1, -1) == 0);
+    REVERSI_TEST_ASSERT(stats, settings_theme_next(0, 1) == 1);
+    REVERSI_TEST_ASSERT(stats, settings_theme_next(1, 1) == 0);
+    REVERSI_TEST_ASSERT(stats, settings_theme_next(0, -1) == 1);
+    /* Out-of-range input restarts from the first value. */
+    REVERSI_TEST_ASSERT(stats, settings_difficulty_next(7, 1) == 1);
+    REVERSI_TEST_ASSERT(stats, settings_theme_next(-3, -1) == 1);
+}
+
 static void test_defaults(TestStats *stats)
 {
     Settings settings;
@@ -197,6 +220,7 @@ int main(void)
 
     REVERSI_RUN_TEST(&stats, test_text_helpers);
     REVERSI_RUN_TEST(&stats, test_speed_presets);
+    REVERSI_RUN_TEST(&stats, test_step_helpers);
     REVERSI_RUN_TEST(&stats, test_defaults);
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_invalid_files);

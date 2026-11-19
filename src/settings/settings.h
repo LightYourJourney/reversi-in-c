@@ -7,6 +7,10 @@
 #define REVERSI_SETTINGS_ANIMATION_MIN 50
 #define REVERSI_SETTINGS_ANIMATION_MAX 200
 #define REVERSI_SETTINGS_SPEED_COUNT 5
+#define REVERSI_SETTINGS_VOLUME_MAX 100
+#define REVERSI_SETTINGS_VOLUME_STEP 5
+#define REVERSI_SETTINGS_DIFFICULTY_COUNT 3
+#define REVERSI_SETTINGS_THEME_COUNT 2
 
 typedef struct Settings {
     int volume;              /* 0..100 */
@@ -22,7 +26,12 @@ typedef struct Settings {
 void settings_defaults(Settings *settings);
 
 /* Next preset speed in direction (-1 slower, +1 faster), clamped. */
+/* The value one step up (direction > 0) or down from the current one.
+ * Speed and volume stop at their ends; difficulty and theme wrap around. */
 int settings_speed_next(int speed, int direction);
+int settings_volume_next(int volume, int direction);
+int settings_difficulty_next(int difficulty, int direction);
+int settings_theme_next(int theme, int direction);
 
 /*
  * Loads persisted settings from the user data directory. Missing, corrupt,

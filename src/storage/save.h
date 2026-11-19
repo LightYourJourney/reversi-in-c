@@ -30,6 +30,17 @@ typedef struct SavedGame {
     GameState expected;
 } SavedGame;
 
+/* What the autosave should do after a match changes. */
+typedef enum SaveAutosaveAction {
+    SAVE_AUTOSAVE_SKIP = 0, /* leave the autosave file alone */
+    SAVE_AUTOSAVE_REMOVE,   /* the game is over: nothing left to resume */
+    SAVE_AUTOSAVE_WRITE     /* overwrite it with the current match */
+} SaveAutosaveAction;
+
+/* An online match mirrors the server (often from a mid-game root), so it
+ * neither overwrites nor deletes the local game's autosave. */
+SaveAutosaveAction save_autosave_action(const Match *match, bool online);
+
 /* English status text for the UI. */
 const char *save_status_message(SaveStatus status);
 

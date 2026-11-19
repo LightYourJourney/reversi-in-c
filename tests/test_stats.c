@@ -44,6 +44,55 @@ static void test_records(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, stats_human_losses(&record) == 1);
 }
 
+static void test_match_bookkeeping(TestStats *stats)
+{
+    GameStats record;
+    stats_reset(&record);
+
+    /* A finished game is counted once, however often the end is seen. */
+    StatsMatchState state = STATS_MATCH_PENDING;
+    REVERSI_TEST_ASSERT(stats, !stats_match_finished(
+        &record, &state, GAME_MODE_PVE, STONE_BLACK, 1, GAME_RESULT_ONGOING));
+    REVERSI_TEST_ASSERT(stats, state == STATS_MATCH_PENDING);
+    REVERSI_TEST_ASSERT(stats, stats_match_finished(
+        &record, &state, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_BLACK_WIN));
+    REVERSI_TEST_ASSERT(stats, state == STATS_MATCH_RECORDED);
+    REVERSI_TEST_ASSERT(stats, !stats_match_finished(
+        &record, &state, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_BLACK_WIN));
+    REVERSI_TEST_ASSERT(stats, record.pve[1].games == 1);
+    REVERSI_TEST_ASSERT(stats, record.pve[1].wins == 1);
+
+    /* Undo withdraws it; finishing differently counts the new result. */
+    REVERSI_TEST_ASSERT(stats, stats_match_reopened(
+        &record, &state, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_BLACK_WIN));
+    REVERSI_TEST_ASSERT(stats, state == STATS_MATCH_PENDING);
+    REVERSI_TEST_ASSERT(stats, record.pve[1].games == 0);
+    REVERSI_TEST_ASSERT(stats, !stats_match_reopened(
+        &record, &state, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_BLACK_WIN));
+    REVERSI_TEST_ASSERT(stats, stats_match_finished(
+        &record, &state, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_WHITE_WIN));
+    REVERSI_TEST_ASSERT(stats, record.pve[1].games == 1);
+    REVERSI_TEST_ASSERT(stats, record.pve[1].losses == 1);
+    REVERSI_TEST_ASSERT(stats, record.pve[1].wins == 0);
+
+    /* A finished save was counted when it was played: undoing into it and
+     * finishing again changes nothing. */
+    StatsMatchState loaded = STATS_MATCH_FROM_SAVE;
+    REVERSI_TEST_ASSERT(stats, !stats_match_reopened(
+        &record, &loaded, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_WHITE_WIN));
+    REVERSI_TEST_ASSERT(stats, !stats_match_finished(
+        &record, &loaded, GAME_MODE_PVE, STONE_BLACK, 1,
+        GAME_RESULT_BLACK_WIN));
+    REVERSI_TEST_ASSERT(stats, loaded == STATS_MATCH_FROM_SAVE);
+    REVERSI_TEST_ASSERT(stats, stats_total_games(&record) == 1);
+}
+
 static void test_unrecord(TestStats *stats)
 {
     GameStats record;
@@ -164,6 +213,7 @@ int main(void)
 
     REVERSI_RUN_TEST(&stats, test_records);
     REVERSI_RUN_TEST(&stats, test_unrecord);
+    REVERSI_RUN_TEST(&stats, test_match_bookkeeping);
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_invalid_and_missing);
 
