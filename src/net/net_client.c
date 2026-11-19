@@ -236,17 +236,29 @@ static bool socket_wait_connected(NetClient *client, ClientSocket socket_fd,
     }
 }
 
+/* Caller holds the mutex. The reason is written before the status is
+ * published, so a poll that sees the new status also sees why. The first
+ * reason for a disconnect wins: the socket error that a deliberate shutdown
+ * provokes on the worker thread must not replace the cause. */
+static void set_status_locked(NetClient *client, NetClientStatus status,
+                              const char *reason)
+{
+    if (status == NET_CLIENT_DISCONNECTED
+        && atomic_load(&client->status) == NET_CLIENT_DISCONNECTED) {
+        return;
+    }
+    if (reason != NULL) {
+        snprintf(client->reason, sizeof(client->reason), "%s", reason);
+    }
+    atomic_store_explicit(&client->status, (int)status, memory_order_release);
+}
+
 static void set_status(NetClient *client, NetClientStatus status,
                        const char *reason)
 {
-    /* Write the reason before publishing the status, so a poll that sees
-     * the new status also sees why. */
-    if (reason != NULL) {
-        lock_client(client);
-        snprintf(client->reason, sizeof(client->reason), "%s", reason);
-        unlock_client(client);
-    }
-    atomic_store_explicit(&client->status, (int)status, memory_order_release);
+    lock_client(client);
+    set_status_locked(client, status, reason);
+    unlock_client(client);
 }
 
 static void queue_message(NetClient *client, const char *text, size_t length)
@@ -1073,7 +1085,14 @@ bool net_client_send(NetClient *client, const NetMessage *message)
         queued = outbound_push(client, frame, length);
         overflow = !queued;
     }
-    if (overflow && socket != REVERSI_NET_CLIENT_INVALID) {
+    if (overflow) {
+        /* The queue is the only buffer between this call and a peer that
+         * stopped reading. Once it is full the frame cannot arrive in time,
+         * so drop the connection and let the session resync. The cause is
+         * recorded before the shutdown wakes the worker with an error of
+         * its own. */
+        set_status_locked(client, NET_CLIENT_DISCONNECTED, "send_queue_full");
+        atomic_store(&client->stop, true);
         /* Shut the socket down while the mutex still pins it: the descriptor
          * could otherwise be closed and reused by the worker before this
          * call reaches shutdown(). */
@@ -1084,13 +1103,6 @@ bool net_client_send(NetClient *client, const NetMessage *message)
 #endif
     }
     unlock_client(client);
-    if (overflow) {
-        /* The queue is the only buffer between this call and a peer that
-         * stopped reading. Once it is full the frame cannot arrive in time,
-         * so drop the connection and let the session resync. */
-        set_status(client, NET_CLIENT_DISCONNECTED, "send_queue_full");
-        atomic_store(&client->stop, true);
-    }
     return queued;
 }
 
