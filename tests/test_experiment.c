@@ -38,6 +38,14 @@ static void test_config_parse(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, !experiment_config_parse(
         &config, "version 1\nbogus 1\nengine-a kind=random\n"
                  "engine-b kind=greedy\n", error, sizeof(error)));
+    /* More pairs than openings would replay openings as fake samples. */
+    REVERSI_TEST_ASSERT(stats, !experiment_config_parse(
+        &config, "version 1\ngames 6\nopenings 2\nengine-a kind=random\n"
+                 "engine-b kind=greedy\n", error, sizeof(error)));
+    REVERSI_TEST_ASSERT(stats, strstr(error, "openings") != NULL);
+    REVERSI_TEST_ASSERT(stats, experiment_config_parse(
+        &config, "version 1\ngames 4\nopenings 2\nengine-a kind=random\n"
+                 "engine-b kind=greedy\n", error, sizeof(error)));
 
     /* Seeds are strict decimal unsigned values that fit in 32 bits. */
     static const char *const bad_seeds[] = {
@@ -277,6 +285,9 @@ static void test_invalid_run_config(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
                                               sizeof(error)));
     config.openings = REVERSI_EXPERIMENT_MAX_OPENINGS + 1;
+    REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
+                                              sizeof(error)));
+    config.openings = 1;   /* games 4 needs at least 2 openings */
     REVERSI_TEST_ASSERT(stats, !experiment_run(&config, &result, error,
                                               sizeof(error)));
     config.openings = 2;

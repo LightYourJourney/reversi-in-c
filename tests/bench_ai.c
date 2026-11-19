@@ -10,8 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BENCH_MAX_PLIES 200
-#define BENCH_SEED 0x5EED1234ULL
+#define REVERSI_BENCH_MAX_PLIES 200
+#define REVERSI_BENCH_SEED 0x5EED1234ULL
 
 #define REVERSI_BENCH_STRINGIFY_IMPL(value) #value
 #define REVERSI_BENCH_STRINGIFY(value) REVERSI_BENCH_STRINGIFY_IMPL(value)
@@ -114,7 +114,7 @@ static BenchOutcome play_game(BenchPlayer *black, BenchPlayer *white,
     black->color = STONE_BLACK;
     white->color = STONE_WHITE;
 
-    for (int ply = 0; ply < BENCH_MAX_PLIES
+    for (int ply = 0; ply < REVERSI_BENCH_MAX_PLIES
          && state.result == GAME_RESULT_ONGOING; ++ply) {
         if (game_must_pass(&state)) {
             if (!game_pass(&state)) {
@@ -169,20 +169,22 @@ static BenchTotals run_matchup(const char *firstName, BenchKind first_kind,
         BenchPlayer first = {
             .name = firstName,
             .kind = first_kind,
-            .rng = BENCH_SEED + (uint64_t)game * 7919u + 1u
+            .rng = REVERSI_BENCH_SEED + (uint64_t)game * 7919u + 1u
         };
         BenchPlayer second = {
             .name = secondName,
             .kind = second_kind,
-            .rng = BENCH_SEED + (uint64_t)game * 104729u + 3u
+            .rng = REVERSI_BENCH_SEED + (uint64_t)game * 104729u + 3u
         };
         if (first_config != NULL) {
             first.config = *first_config;
-            first.config.seed = (unsigned)(BENCH_SEED + (uint64_t)game * 17u);
+            first.config.seed =
+                (unsigned)(REVERSI_BENCH_SEED + (uint64_t)game * 17u);
         }
         if (second_config != NULL) {
             second.config = *second_config;
-            second.config.seed = (unsigned)(BENCH_SEED + (uint64_t)game * 31u);
+            second.config.seed =
+                (unsigned)(REVERSI_BENCH_SEED + (uint64_t)game * 31u);
         }
 
         BenchPlayer *black = (game % 2 == 0) ? &first : &second;
@@ -256,7 +258,7 @@ static GameState midgame_position(void)
 {
     GameState state;
     game_init(&state);
-    uint64_t rng = BENCH_SEED ^ 0xABCDEFULL;
+    uint64_t rng = REVERSI_BENCH_SEED ^ 0xABCDEFULL;
     for (int i = 0; i < 20 && state.result == GAME_RESULT_ONGOING; ++i) {
         if (game_must_pass(&state)) {
             (void)game_pass(&state);
@@ -329,7 +331,8 @@ int main(int argc, char **argv)
 
     printf("Reversi AI benchmark\n");
     printf("compiler=%s\n", REVERSI_BENCH_COMPILER);
-    printf("seed=0x%" PRIX64 " games=%d\n", (uint64_t)BENCH_SEED, games);
+    printf("seed=0x%" PRIX64 " games=%d\n", (uint64_t)REVERSI_BENCH_SEED,
+           games);
     printf("matchup configs: Easy depth 1; Medium depth 4 (10 s cap); "
            "Hard depth 6 (10 s cap)\n\n");
 

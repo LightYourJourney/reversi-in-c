@@ -283,8 +283,12 @@ bool net_protocol_decode(const char *text, NetDirection direction,
 
         if (strcmp(key, "v") == 0) {
             int version = 0;
+            /* The server refuses a foreign hello outright. A welcome
+             * carrying another version still decodes, so the client can
+             * tell the player why instead of dropping it silently. */
             if (seen.version || !parse_seq(value, &version)
-                || version != REVERSI_NET_VERSION) {
+                || (out->type != NET_MSG_WELCOME
+                    && version != REVERSI_NET_VERSION)) {
                 return false;
             }
             out->version = version;
@@ -327,13 +331,16 @@ bool net_protocol_decode(const char *text, NetDirection direction,
             }
             seen.pass = true;
         } else if (strcmp(key, "cell") == 0) {
-            if (seen.last || !move_from_notation(value, &out->last)) {
+            /* Both keys fill the same field; each belongs to one message
+             * type, so "move last=d3" or "state cell=d3" is malformed. */
+            if (seen.last || out->type != NET_MSG_MOVE
+                || !move_from_notation(value, &out->last)) {
                 return false;
             }
             out->has_last = true;
             seen.last = true;
         } else if (strcmp(key, "last") == 0) {
-            if (seen.last) {
+            if (seen.last || out->type != NET_MSG_STATE) {
                 return false;
             }
             if (strcmp(value, "-") == 0) {

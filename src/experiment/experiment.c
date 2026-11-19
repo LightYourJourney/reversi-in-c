@@ -11,7 +11,6 @@
 #include "reversi/version.h"
 
 #include <ctype.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -213,7 +212,7 @@ bool experiment_config_parse(ExperimentConfig *config, const char *text,
     snprintf(config->name, sizeof(config->name), "experiment");
     config->seed = 1;
     config->games = 8;
-    config->openings = 2;
+    config->openings = 4;
     config->opening_plies = 4;
     config->max_plies = 100;
 
@@ -320,6 +319,14 @@ bool experiment_config_parse(ExperimentConfig *config, const char *text,
     if (!have_version || !have_a || !have_b) {
         set_error(error, error_size,
                   "config needs version, engine-a and engine-b");
+        return false;
+    }
+    /* Each colour-swapped pair needs its own opening: a deterministic engine
+     * would replay a reused opening move for move, and the copy would be
+     * counted as an independent sample. */
+    if (config->games > 2 * config->openings) {
+        set_error(error, error_size,
+                  "games must not exceed 2 x openings");
         return false;
     }
     return true;
@@ -607,6 +614,7 @@ static bool experiment_config_valid(const ExperimentConfig *config)
         || (config->games % 2) != 0
         || config->openings < 1
         || config->openings > REVERSI_EXPERIMENT_MAX_OPENINGS
+        || config->games > 2 * config->openings
         || config->opening_plies < 0 || config->opening_plies > 32
         || config->max_plies < 1
         || config->max_plies > REVERSI_EXPERIMENT_MAX_PLIES) {
@@ -863,31 +871,4 @@ bool experiment_run(const ExperimentConfig *config, ExperimentResult *result,
     finalize_engine_stats(&summary->b_stats, result->moves,
                           result->move_count, 1);
     return true;
-}
-
-void experiment_print_summary(const ExperimentResult *result)
-{
-    if (result == NULL) {
-        return;
-    }
-    const ExperimentSummary *s = &result->summary;
-    printf("Experiment %s: %d games (%d completed)\n",
-           result->config.name, s->games, s->completed);
-    if (s->elo_defined) {
-        printf("  %s: W=%d D=%d L=%d  score=%.3f  Elo=%+.0f [%+.0f, %+.0f]\n",
-               result->config.engines[0].name, s->a_wins, s->draws,
-               s->b_wins, s->a_score, s->elo, s->elo_low, s->elo_high);
-    } else {
-        printf("  %s: W=%d D=%d L=%d  score=n/a (no completed games)\n",
-               result->config.engines[0].name, s->a_wins, s->draws,
-               s->b_wins);
-    }
-    printf("  illegal=%d timeouts=%d aborted=%d\n", s->illegal,
-           s->timeouts, s->aborted);
-    printf("  A moves=%d nodes=%" PRIu64 " p50=%dms p95=%dms depth=%d\n",
-           s->a_stats.moves, s->a_stats.nodes, s->a_stats.p50_ms,
-           s->a_stats.p95_ms, s->a_stats.max_depth);
-    printf("  B moves=%d nodes=%" PRIu64 " p50=%dms p95=%dms depth=%d\n",
-           s->b_stats.moves, s->b_stats.nodes, s->b_stats.p50_ms,
-           s->b_stats.p95_ms, s->b_stats.max_depth);
 }

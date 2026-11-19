@@ -1,7 +1,6 @@
 #include "ui/lab_view.h"
 
 #include "analysis/record.h"
-#include "storage/storage.h"
 #include "core/rules.h"
 #include "ui/board_view.h"
 #include "ui/theme.h"
@@ -44,7 +43,7 @@ static void lab_store_curve(LabView *view, int ply,
     view->review_exact[ply] = line->exact;
 }
 
-static void lab_notice(LabView *view, const char *text)
+void lab_view_notice(LabView *view, const char *text)
 {
     snprintf(view->notice, sizeof(view->notice), "%s", text);
     view->notice_timer = REVERSI_LAB_NOTICE_SECONDS;
@@ -242,7 +241,7 @@ static void lab_start_batch(LabView *view, AiWorker *worker)
     if (!lab_start_job(view, worker,
                        &view->session.positions[nodes[0]].state, 0)) {
         view->batch_running = false;
-        lab_notice(view, "Could not start analysis");
+        lab_view_notice(view, "Could not start analysis");
     }
 }
 
@@ -264,7 +263,7 @@ static void lab_poll_analysis(LabView *view, AiWorker *worker)
         AiAnalysis discarded;
         (void)ai_worker_take_analysis(worker, &discarded);
         view->batch_running = false;
-        lab_notice(view, "Analysis cancelled or failed");
+        lab_view_notice(view, "Analysis cancelled or failed");
         return;
     }
     if (!lab_view_accepts_result(view->requested_generation,
@@ -289,11 +288,11 @@ static void lab_poll_analysis(LabView *view, AiWorker *worker)
                                &view->session.positions[next].state,
                                view->batch_index)) {
                 view->batch_running = false;
-                lab_notice(view, "Could not continue analysis");
+                lab_view_notice(view, "Could not continue analysis");
             }
         } else {
             view->batch_running = false;
-            lab_notice(view, "Analysis complete");
+            lab_view_notice(view, "Analysis complete");
         }
         return;
     }
@@ -335,64 +334,30 @@ static void lab_handle_actions(LabView *view, AiWorker *worker,
             && match->history.count > 1) {
             moved = analysis_import_history(&view->session,
                                             &match->history);
-            lab_notice(view, moved ? "Loaded game record"
-                                   : "Could not load game record");
+            lab_view_notice(view, moved ? "Loaded game record"
+                                        : "Could not load game record");
         } else if (view->has_match && match != NULL) {
             moved = analysis_load_state(&view->session, &match->state,
                                         ANALYSIS_POSITION_VALID);
-            lab_notice(view, moved ? "Loaded current position"
-                                   : "Current position is not playable");
+            lab_view_notice(view, moved ? "Loaded current position"
+                                        : "Current position is not playable");
         } else {
-            lab_notice(view, "No game available");
+            lab_view_notice(view, "No game available");
         }
         if (moved) {
             lab_position_changed(view, worker);
         }
         return;
     }
+    /* Reading and writing the record file is the app's job (ARCHITECTURE.md
+     * rule 8); the view only reports the request. */
     if (view->clicked[LAB_BTN_SAVE_RECORD]) {
-        char record[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
-        char path[1024];
-        const size_t written = analysis_record_write(
-            &view->session, record, sizeof(record));
-        if (written == 0) {
-            lab_notice(view,
-                       "Custom position or oversized record cannot be saved");
-        } else if (!storage_path("lab-record.rvr", path, sizeof(path))) {
-            lab_notice(view, "User data directory is unavailable");
-        } else if (!storage_write_atomic(path, record, written)) {
-            lab_notice(view, "Could not save the record");
-        } else {
-            lab_notice(view, "Record saved");
-        }
+        *action = LAB_ACTION_SAVE_RECORD;
+        return;
     }
     if (view->clicked[LAB_BTN_LOAD_RECORD]) {
-        char path[1024];
-        char *text = NULL;
-        size_t size = 0;
-        if (!storage_path("lab-record.rvr", path, sizeof(path))
-            || !storage_read(path, &text, &size,
-                             REVERSI_ANALYSIS_MAX_RECORD_BYTES)) {
-            lab_notice(view, "No saved record");
-        } else {
-            char error[128] = {0};
-            /* Parse into the live session: the reader validates in a heap
-               copy and only commits on success, so a bad record leaves the
-               session untouched, and nothing this large lands on the
-               64 KiB WebAssembly stack. */
-            if (analysis_record_read(&view->session, text, error,
-                                     sizeof(error))) {
-                moved = true;
-                lab_notice(view, "Record loaded");
-            } else {
-                lab_notice(view, error[0] != '\0' ? error
-                                                  : "Invalid record");
-            }
-            free(text);
-        }
-        if (moved) {
-            lab_position_changed(view, worker);
-        }
+        *action = LAB_ACTION_LOAD_RECORD;
+        return;
     }
     if (view->clicked[LAB_BTN_FIRST]) {
         lab_navigate(view, worker, analysis_first(&view->session));
@@ -423,18 +388,18 @@ static void lab_handle_actions(LabView *view, AiWorker *worker,
     if (view->clicked[LAB_BTN_ANALYZE]) {
         const AnalysisPosition *pos = analysis_current(&view->session);
         if (pos == NULL || !analysis_current_playable(&view->session)) {
-            lab_notice(view, "No legal move to analyse");
+            lab_view_notice(view, "No legal move to analyse");
         } else if (!lab_start_job(view, worker, &pos->state, -1)) {
-            lab_notice(view, "Analysis worker is busy");
+            lab_view_notice(view, "Analysis worker is busy");
         }
     }
     if (view->clicked[LAB_BTN_STOP]) {
         lab_cancel_analysis(view, worker);
-        lab_notice(view, "Analysis stopped");
+        lab_view_notice(view, "Analysis stopped");
     }
     if (view->clicked[LAB_BTN_ANALYZE_ALL]) {
         if (view->analyzing) {
-            lab_notice(view, "Analysis is already running");
+            lab_view_notice(view, "Analysis is already running");
         } else {
             lab_start_batch(view, worker);
         }
@@ -537,6 +502,24 @@ bool lab_view_enter_session(LabView *view, const AnalysisSession *session)
     view->session = *session;
     view->has_match = false;
     lab_reset_analysis_state(view);
+    return true;
+}
+
+bool lab_view_load_record(LabView *view, AiWorker *worker, const char *text)
+{
+    if (view == NULL || text == NULL) {
+        return false;
+    }
+    char error[128] = {0};
+    /* Parse into the live session: the reader validates in a heap copy and
+       only commits on success, so a bad record leaves the session untouched,
+       and nothing this large lands on the 64 KiB WebAssembly stack. */
+    if (!analysis_record_read(&view->session, text, error, sizeof(error))) {
+        lab_view_notice(view, error[0] != '\0' ? error : "Invalid record");
+        return false;
+    }
+    lab_view_notice(view, "Record loaded");
+    lab_position_changed(view, worker);
     return true;
 }
 
@@ -699,7 +682,7 @@ LabAction lab_view_update(LabView *view, const UiInput *input, float dt,
                 if (analysis_edit_cell(&view->session, row, col,
                                        view->edit_stone)) {
                     lab_position_changed(view, worker);
-                    lab_notice(view, "Custom position");
+                    lab_view_notice(view, "Custom position");
                 }
             } else {
                 const Move move = {row, col};

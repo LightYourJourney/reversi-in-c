@@ -5,6 +5,7 @@
 #include "core/rules.h"
 #include "net/net_server.h"
 #include "net/net_session.h"
+#include "net/net_ws.h"
 #include "test_harness.h"
 
 #include <stdbool.h>
@@ -14,8 +15,28 @@
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+typedef SOCKET TestSocket;
+#define REVERSI_TEST_SOCKET_INVALID INVALID_SOCKET
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+typedef int TestSocket;
+#define REVERSI_TEST_SOCKET_INVALID (-1)
 #endif
+
+static void close_test_socket(TestSocket socket_fd)
+{
+#if defined(_WIN32)
+    closesocket(socket_fd);
+#else
+    close(socket_fd);
+#endif
+}
 
 static void test_sleep_ms(int ms)
 {
@@ -257,6 +278,77 @@ static void test_session_lobby_server_loss(TestStats *stats)
     net_session_destroy(a);
 }
 
+static void test_session_version_mismatch(TestStats *stats)
+{
+    /* A server that answers with another protocol version must stop the
+     * session with a reason the player can read, not leave it hanging. */
+    NetSession *a = net_session_create();   /* WSAStartup on Windows */
+    REVERSI_TEST_ASSERT(stats, a != NULL);
+    TestSocket listener = socket(AF_INET, SOCK_STREAM, 0);
+    REVERSI_TEST_ASSERT(stats, listener != REVERSI_TEST_SOCKET_INVALID);
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+    REVERSI_TEST_ASSERT(stats, bind(listener, (struct sockaddr *)&address,
+                                    sizeof(address)) == 0);
+    REVERSI_TEST_ASSERT(stats, listen(listener, 1) == 0);
+#if defined(_WIN32)
+    int address_length = (int)sizeof(address);
+#else
+    socklen_t address_length = sizeof(address);
+#endif
+    REVERSI_TEST_ASSERT(stats, getsockname(listener,
+        (struct sockaddr *)&address, &address_length) == 0);
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1",
+                                                   ntohs(address.sin_port)));
+    TestSocket server = accept(listener, NULL, NULL);
+    REVERSI_TEST_ASSERT(stats, server != REVERSI_TEST_SOCKET_INVALID);
+
+    char request[2048];
+    size_t used = 0;
+    while (used < sizeof(request) - 1) {
+        const int read = (int)recv(server, request + used,
+                                   (int)(sizeof(request) - 1 - used), 0);
+        if (read <= 0) {
+            break;
+        }
+        used += (size_t)read;
+        request[used] = '\0';
+        if (strstr(request, "\r\n\r\n") != NULL) {
+            break;
+        }
+    }
+    char key[25];
+    char response[256];
+    REVERSI_TEST_ASSERT(stats, net_ws_parse_handshake(request, used, key));
+    REVERSI_TEST_ASSERT(stats, net_ws_build_handshake_response(key, response));
+    send(server, response, (int)strlen(response), 0);
+
+    static const char welcome[] =
+        "welcome v=2 token=0123456789abcdef0123456789abcdef player=1";
+    uint8_t frame[128];
+    const size_t length = net_ws_encode(0x1, (const uint8_t *)welcome,
+                                        strlen(welcome), false, NULL, frame,
+                                        sizeof(frame));
+    REVERSI_TEST_ASSERT(stats, length > 0);
+    send(server, (const char *)frame, (int)length, 0);
+
+    for (int elapsed = 0; elapsed < 3000 && a->phase != NET_SESSION_FAILED;
+         ++elapsed) {
+        net_session_update(a, 0.002f);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FAILED);
+    REVERSI_TEST_ASSERT(stats, strstr(a->error, "v2") != NULL);
+    REVERSI_TEST_ASSERT(stats, !a->active);
+    REVERSI_TEST_ASSERT(stats, a->token[0] == '\0');
+
+    close_test_socket(server);
+    close_test_socket(listener);
+    net_session_destroy(a);
+}
+
 static void test_session_reconnect_budget(TestStats *stats)
 {
     NetServerConfig config = {.bind_address = "127.0.0.1", .port = 0,
@@ -303,6 +395,9 @@ static void test_session_plaintext_refused(TestStats *stats)
     /* The wording depends on whether this build can offer wss; both name
      * TLS as the thing that is missing. */
     REVERSI_TEST_ASSERT(stats, strstr(a->error, "TLS") != NULL);
+    /* The whole hint fits; it used to be cut at 31 characters. */
+    REVERSI_TEST_ASSERT(stats, strstr(a->error, "(wss)") != NULL
+                        || strstr(a->error, "LAN server") != NULL);
     net_session_destroy(a);
 }
 
@@ -386,6 +481,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_session_flow);
     REVERSI_RUN_TEST(&stats, test_session_server_restart);
     REVERSI_RUN_TEST(&stats, test_session_lobby_server_loss);
+    REVERSI_RUN_TEST(&stats, test_session_version_mismatch);
     REVERSI_RUN_TEST(&stats, test_session_reconnect_budget);
     REVERSI_RUN_TEST(&stats, test_session_plaintext_refused);
     REVERSI_RUN_TEST(&stats, test_session_move_log);

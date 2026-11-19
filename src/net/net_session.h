@@ -47,7 +47,7 @@ typedef struct NetSession {
     GameResult result;
     char reason[24];
     char opponent_status[24];
-    char error[32];
+    char error[64];  /* fits the longest local hint, untruncated */
     bool state_dirty;
     bool started;
     bool active;
@@ -82,6 +82,5 @@ bool net_session_resign(NetSession *session);
 void net_session_leave(NetSession *session);
 
 bool net_session_can_move(const NetSession *session);
-const char *net_session_status_text(const NetSession *session);
 
 #endif

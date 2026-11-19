@@ -154,8 +154,26 @@ static void apply_state(NetSession *session, const NetMessage *message)
 static void on_message(void *context, const NetMessage *message)
 {
     NetSession *session = context;
+    /* Messages still queued behind a failure (for example after an
+     * incompatible welcome) must not revive the session. */
+    if (session->phase == NET_SESSION_FAILED) {
+        return;
+    }
     switch (message->type) {
     case NET_MSG_WELCOME:
+        if (message->version != REVERSI_NET_VERSION) {
+            /* Nothing else this server says can be trusted to mean what
+             * protocol v1 means; stop here and say why. */
+            snprintf(session->error, sizeof(session->error),
+                     "Server speaks protocol v%d; this build needs v%d",
+                     message->version, REVERSI_NET_VERSION);
+            net_client_disconnect(session->client);
+            session->active = false;
+            session->token[0] = '\0';
+            session->code[0] = '\0';
+            session->phase = NET_SESSION_FAILED;
+            break;
+        }
         snprintf(session->token, sizeof(session->token), "%s",
                  message->token);
         session->player = message->player;
@@ -413,24 +431,5 @@ void net_session_leave(NetSession *session)
     } else if (session->phase != NET_SESSION_FAILED
                && session->phase != NET_SESSION_IDLE) {
         session->phase = NET_SESSION_LOBBY;
-    }
-}
-
-const char *net_session_status_text(const NetSession *session)
-{
-    if (session == NULL) {
-        return "Idle";
-    }
-    switch (session->phase) {
-    case NET_SESSION_CONNECTING: return "Connecting...";
-    case NET_SESSION_LOBBY: return "Lobby";
-    case NET_SESSION_WAITING: return "Waiting for opponent";
-    case NET_SESSION_PLAYING: return "Game in progress";
-    case NET_SESSION_FINISHED: return "Game over";
-    case NET_SESSION_DISCONNECTED: return "Reconnecting...";
-    case NET_SESSION_FAILED: return "Connection failed";
-    case NET_SESSION_IDLE:
-    default:
-        return "Offline";
     }
 }

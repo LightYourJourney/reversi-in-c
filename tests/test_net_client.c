@@ -18,14 +18,14 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 typedef SOCKET TestSocket;
-#define TEST_SOCKET_INVALID INVALID_SOCKET
+#define REVERSI_TEST_SOCKET_INVALID INVALID_SOCKET
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 typedef int TestSocket;
-#define TEST_SOCKET_INVALID (-1)
+#define REVERSI_TEST_SOCKET_INVALID (-1)
 #endif
 
 typedef struct Events {
@@ -262,7 +262,7 @@ static void test_send_to_stalled_server(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, client != NULL);
 
     TestSocket listener = socket(AF_INET, SOCK_STREAM, 0);
-    REVERSI_TEST_ASSERT(stats, listener != TEST_SOCKET_INVALID);
+    REVERSI_TEST_ASSERT(stats, listener != REVERSI_TEST_SOCKET_INVALID);
     int buffer_size = 1024;
     setsockopt(listener, SOL_SOCKET, SO_RCVBUF,
                (const char *)&buffer_size, sizeof(buffer_size));
@@ -286,7 +286,7 @@ static void test_send_to_stalled_server(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, net_client_connect(client, "127.0.0.1", port));
 
     TestSocket server = accept(listener, NULL, NULL);
-    REVERSI_TEST_ASSERT(stats, server != TEST_SOCKET_INVALID);
+    REVERSI_TEST_ASSERT(stats, server != REVERSI_TEST_SOCKET_INVALID);
     setsockopt(server, SOL_SOCKET, SO_RCVBUF,
                (const char *)&buffer_size, sizeof(buffer_size));
 
@@ -426,6 +426,138 @@ static void test_public_address_refused(TestStats *stats)
     net_client_destroy(client);
 }
 
+/* Accepts one client on a fresh loopback listener and completes the
+ * WebSocket upgrade; the response header is returned unsent so the caller
+ * decides how it reaches the wire. */
+static bool fake_server_accept(TestSocket *listener, TestSocket *server,
+                               NetClient *client, char *response,
+                               size_t response_size)
+{
+    (void)response_size;
+    *listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (*listener == REVERSI_TEST_SOCKET_INVALID) {
+        return false;
+    }
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+#if defined(_WIN32)
+    int address_length = (int)sizeof(address);
+#else
+    socklen_t address_length = sizeof(address);
+#endif
+    if (bind(*listener, (struct sockaddr *)&address, sizeof(address)) != 0
+        || listen(*listener, 1) != 0
+        || getsockname(*listener, (struct sockaddr *)&address,
+                       &address_length) != 0
+        || !net_client_connect(client, "127.0.0.1",
+                               ntohs(address.sin_port))) {
+        return false;
+    }
+    *server = accept(*listener, NULL, NULL);
+    if (*server == REVERSI_TEST_SOCKET_INVALID) {
+        return false;
+    }
+    char request[2048];
+    size_t used = 0;
+    while (used < sizeof(request) - 1) {
+        const int read = (int)recv(*server, request + used,
+                                   (int)(sizeof(request) - 1 - used), 0);
+        if (read <= 0) {
+            return false;
+        }
+        used += (size_t)read;
+        request[used] = '\0';
+        if (strstr(request, "\r\n\r\n") != NULL) {
+            break;
+        }
+    }
+    char key[25];
+    return net_ws_parse_handshake(request, used, key)
+        && net_ws_build_handshake_response(key, response);
+}
+
+static size_t pong_frame(uint8_t *out, size_t capacity)
+{
+    static const char text[] = "pong";
+    return net_ws_encode(0x1, (const uint8_t *)text, strlen(text), false,
+                         NULL, out, capacity);
+}
+
+static bool wait_for_pong(NetClient *client, Events *events)
+{
+    NetMessage message;
+    for (int elapsed = 0; elapsed < 3000; ++elapsed) {
+        net_client_poll(client);
+        if (take_message(events, NET_MSG_PONG, &message)) {
+            return true;
+        }
+        test_sleep_ms(1);
+    }
+    return false;
+}
+
+static void test_frame_with_handshake_response(TestStats *stats)
+{
+    /* A frame in the same segment as the 101 response must be parsed, not
+     * discarded with the rest of the handshake buffer. */
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    TestSocket listener = REVERSI_TEST_SOCKET_INVALID;
+    TestSocket server = REVERSI_TEST_SOCKET_INVALID;
+    char response[256];
+    REVERSI_TEST_ASSERT(stats, fake_server_accept(&listener, &server, client,
+                                                  response,
+                                                  sizeof(response)));
+    uint8_t wire[512];
+    const size_t header = strlen(response);
+    memcpy(wire, response, header);
+    const size_t frame = pong_frame(wire + header, sizeof(wire) - header);
+    REVERSI_TEST_ASSERT(stats, frame > 0);
+    send(server, (const char *)wire, (int)(header + frame), 0);
+    REVERSI_TEST_ASSERT(stats, wait_for_pong(client, &events));
+    net_client_destroy(client);
+    close_test_socket(server);
+    close_test_socket(listener);
+}
+
+static void test_frame_split_across_reads(TestStats *stats)
+{
+    /* A frame whose bytes arrive in two reads must be reassembled. */
+    Events events = {0};
+    NetClient *client = net_client_create(on_message, on_status, &events);
+    REVERSI_TEST_ASSERT(stats, client != NULL);
+    TestSocket listener = REVERSI_TEST_SOCKET_INVALID;
+    TestSocket server = REVERSI_TEST_SOCKET_INVALID;
+    char response[256];
+    REVERSI_TEST_ASSERT(stats, fake_server_accept(&listener, &server, client,
+                                                  response,
+                                                  sizeof(response)));
+    send(server, response, (int)strlen(response), 0);
+    for (int elapsed = 0; elapsed < 3000
+         && events.status != NET_CLIENT_CONNECTED; ++elapsed) {
+        net_client_poll(client);
+        test_sleep_ms(1);
+    }
+    REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_CONNECTED);
+    uint8_t frame[64];
+    const size_t length = pong_frame(frame, sizeof(frame));
+    REVERSI_TEST_ASSERT(stats, length > 3);
+    send(server, (const char *)frame, 3, 0);
+    for (int i = 0; i < 100; ++i) {   /* let the client read the half */
+        net_client_poll(client);
+        test_sleep_ms(1);
+    }
+    send(server, (const char *)frame + 3, (int)(length - 3), 0);
+    REVERSI_TEST_ASSERT(stats, wait_for_pong(client, &events));
+    REVERSI_TEST_ASSERT(stats, events.status == NET_CLIENT_CONNECTED);
+    net_client_destroy(client);
+    close_test_socket(server);
+    close_test_socket(listener);
+}
+
 int main(void)
 {
     TestStats stats = {0};
@@ -435,5 +567,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_connect_cancelled);
     REVERSI_RUN_TEST(&stats, test_connect_timeout);
     REVERSI_RUN_TEST(&stats, test_public_address_refused);
+    REVERSI_RUN_TEST(&stats, test_frame_with_handshake_response);
+    REVERSI_RUN_TEST(&stats, test_frame_split_across_reads);
     return reversi_test_summary(&stats, "net.client");
 }

@@ -2,7 +2,7 @@ version 1
 name tt-vs-nott
 seed 20261025
 games 8
-openings 2
+openings 4
 opening-ply 4
 max-plies 100
 engine-a kind=search difficulty=hard depth=6 time=10000 tt=on endgame=off label=TT

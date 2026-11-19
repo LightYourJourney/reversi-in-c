@@ -11,6 +11,7 @@
 #include "ai/ai_worker.h"
 
 #include "core/game.h"
+#include "platform/web/web_callbacks.h"
 
 #include <emscripten.h>
 #include <stdbool.h>
@@ -33,10 +34,6 @@ struct AiWorker {
 static AiWorker *g_active_worker = NULL;
 static unsigned g_generation = 0;
 
-void reversi_ai_worker_complete(unsigned generation, int ok, int row, int col,
-                                double nodes, int depth, int cancelled);
-void reversi_ai_worker_analysis_complete(unsigned generation, int ok,
-                                         const char *text);
 
 EM_JS(void, reversi_web_ai_post, (const char *request, unsigned generation), {
     function createWorker() {

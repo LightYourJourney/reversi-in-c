@@ -17,6 +17,8 @@
  *          "<row> <col> <score> <depth> <complete> <exact> <pvlen>"
  *          and the PV coordinate pairs.
  */
+#include "ai_worker_exports.h"
+
 #include "ai/ai.h"
 #include "ai/ai_analyze.h"
 #include "core/board.h"
@@ -30,8 +32,6 @@
 #include <string.h>
 
 static char g_reply[4096];
-
-const char *reversi_ai_worker_request(const char *request);
 
 static const char *fail(void)
 {

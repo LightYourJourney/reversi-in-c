@@ -2,6 +2,7 @@
 
 #include "ai/ai.h"
 #include "ai/ai_worker.h"
+#include "analysis/record.h"
 #include "audio/audio.h"
 #include "core/game.h"
 #include "core/match.h"
@@ -33,6 +34,8 @@
 #include <raylib.h>
 
 #ifdef __EMSCRIPTEN__
+#include "app/app_web.h"
+
 #include <emscripten.h>
 #include <emscripten/heap.h>
 #endif
@@ -126,6 +129,9 @@ typedef struct App {
     AiDifficulty ai_difficulty;
     unsigned ai_seed;
     bool stats_recorded;
+    /* The finished game came from a save: it was counted when it was first
+     * played, so undo/redo/replay on it must not touch the statistics. */
+    bool stats_from_save;
     int pending_delete_row;
 } App;
 
@@ -206,6 +212,43 @@ static void app_review_online(App *app)
 static void app_update_net_game(App *app, const UiInput *input, float dt);
 static void app_draw_net_hud(const App *app);
 static void app_review_online(App *app);
+
+#define REVERSI_LAB_RECORD_FILE "lab-record.rvr"
+
+static void app_save_lab_record(App *app)
+{
+    char record[REVERSI_ANALYSIS_MAX_RECORD_BYTES];
+    char path[1024];
+    const size_t written = analysis_record_write(&app->lab.session, record,
+                                                 sizeof(record));
+    const char *notice = "Record saved";
+    if (written == 0) {
+        notice = "Custom position or oversized record cannot be saved";
+    } else if (!storage_make_user_dir()
+               || !storage_path(REVERSI_LAB_RECORD_FILE, path,
+                                sizeof(path))) {
+        /* On a fresh install nothing has created the directory yet. */
+        notice = "User data directory is unavailable";
+    } else if (!storage_write_atomic(path, record, written)) {
+        notice = "Could not save the record";
+    }
+    lab_view_notice(&app->lab, notice);
+}
+
+static void app_load_lab_record(App *app)
+{
+    char path[1024];
+    char *text = NULL;
+    size_t size = 0;
+    if (!storage_path(REVERSI_LAB_RECORD_FILE, path, sizeof(path))
+        || !storage_read(path, &text, &size,
+                         REVERSI_ANALYSIS_MAX_RECORD_BYTES)) {
+        lab_view_notice(&app->lab, "No saved record");
+        return;
+    }
+    (void)lab_view_load_record(&app->lab, app->ai_worker, text);
+    free(text);
+}
 
 static UiInput read_input(void)
 {
@@ -327,6 +370,7 @@ static void app_init(App *app)
     app->ai_difficulty = AI_DIFFICULTY_MEDIUM;
     app->ai_seed = 0x51ED270Bu;
     app->stats_recorded = true;
+    app->stats_from_save = false;
     app->pending_delete_row = -1;
     app->saves_saving = false;
     app->saves_return = APP_SCREEN_MENU;
@@ -366,7 +410,7 @@ static void app_init(App *app)
     stats_view_init(&app->stats_view);
     saves_view_init(&app->saves_view);
     lab_view_init(&app->lab);
-    net_view_init(&app->net_view);
+    net_view_init(&app->net_view, net_session_tls_selectable());
     app->net = net_session_create();
     app->net_mode = false;
     app->net_state_seq = -1;
@@ -656,7 +700,8 @@ static void app_save_stats(App *app)
 
 static void app_unrecord_result(App *app, GameResult previous)
 {
-    if (!app->stats_recorded || previous == GAME_RESULT_ONGOING) {
+    if (!app->stats_recorded || previous == GAME_RESULT_ONGOING
+        || app->stats_from_save) {
         return;
     }
     app->stats_recorded = false;
@@ -718,6 +763,7 @@ static bool app_restore_saved(App *app, const char *path)
     app->ai = ai;
     app->ai_difficulty = difficulty;
     app->stats_recorded = app->match.phase == MATCH_PHASE_GAME_OVER;
+    app->stats_from_save = app->stats_recorded;
     app->pending_action = PENDING_GAME_LOAD;
     app_notice(app, "Game loaded");
     app_request_screen(app, APP_SCREEN_GAME);
@@ -758,6 +804,7 @@ static void app_switch_screen(App *app, AppScreen target)
         if (match_start(&app->match, &app->pending_config)) {
             app_reset_match_ui(app);
             app->stats_recorded = false;
+            app->stats_from_save = false;
             app_maybe_start_ai(app);
             app_autosave(app);
         } else {
@@ -804,6 +851,7 @@ static void app_begin_match(App *app, const MatchConfig *config)
         if (match_start(&app->match, config)) {
             app_reset_match_ui(app);
             app->stats_recorded = false;
+            app->stats_from_save = false;
             app_maybe_start_ai(app);
             app_autosave(app);
         }
@@ -813,6 +861,7 @@ static void app_begin_match(App *app, const MatchConfig *config)
     app->pending_config = *config;
     app->pending_action = PENDING_GAME_START;
     app->stats_recorded = false;
+    app->stats_from_save = false;
     app_request_screen(app, APP_SCREEN_GAME);
 }
 
@@ -1100,6 +1149,7 @@ static void app_handle_modal_confirm(App *app)
         if (match_restart(&app->match)) {
             app_reset_match_ui(app);
             app->stats_recorded = false;
+            app->stats_from_save = false;
             app_maybe_start_ai(app);
             app_autosave(app);
         }
@@ -1353,7 +1403,9 @@ static void app_update_game(App *app, const UiInput *input, float dt)
         return;
     }
 
-    if (input->save_pressed) {
+    /* Like every other action key, Ctrl+S waits for the move animation
+     * (ARCHITECTURE.md §13.4). */
+    if (input->save_pressed && match->phase != MATCH_PHASE_ANIMATING) {
         app_open_saves(app, true);
         return;
     }
@@ -1788,6 +1840,10 @@ static void app_update(App *app, const UiInput *input, float dt)
             audio_play(AUDIO_CUE_BUTTON);
             lab_view_leave(&app->lab, app->ai_worker);
             app_request_screen(app, APP_SCREEN_MENU);
+        } else if (action == LAB_ACTION_SAVE_RECORD) {
+            app_save_lab_record(app);
+        } else if (action == LAB_ACTION_LOAD_RECORD) {
+            app_load_lab_record(app);
         }
         break;
     }
@@ -1976,28 +2032,6 @@ static bool app_should_stop(const AppRun *run)
 }
 
 #ifdef __EMSCRIPTEN__
-int reversi_web_frames(void);
-int reversi_web_mouse_x(void);
-int reversi_web_mouse_y(void);
-int reversi_web_screen_w(void);
-int reversi_web_screen_h(void);
-#ifndef NDEBUG
-void reversi_web_debug_autoplay(unsigned seed);
-#endif
-int reversi_web_game_over(void);
-int reversi_web_result(void);
-int reversi_web_screen_index(void);
-const char *reversi_web_net_code(void);
-int reversi_web_net_phase(void);
-int reversi_web_net_seq(void);
-int reversi_web_ai_active(void);
-int reversi_web_match_mode(void);
-void reversi_web_cancel_ai_test(void);
-int reversi_web_heap_bytes(void);
-int reversi_web_audio_ready(void);
-void reversi_web_resize(int width, int height);
-void reversi_web_persist(void);
-
 static AppRun g_web_run;
 
 static void app_web_main_loop(void *arg)
@@ -2049,6 +2083,7 @@ void reversi_web_debug_autoplay(unsigned seed)
     app->autoplay = true;
     app->settings.animations = false;
     app->stats_recorded = false;
+    app->stats_from_save = false;
     srand(seed != 0 ? seed : (unsigned)time(NULL));
     app->screen = APP_SCREEN_GAME;
 }

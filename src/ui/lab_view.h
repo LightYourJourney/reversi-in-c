@@ -12,7 +12,9 @@
 
 typedef enum LabAction {
     LAB_ACTION_NONE = 0,
-    LAB_ACTION_BACK
+    LAB_ACTION_BACK,
+    LAB_ACTION_SAVE_RECORD, /* app writes the record file */
+    LAB_ACTION_LOAD_RECORD  /* app reads it, then calls lab_view_load_record */
 } LabAction;
 
 typedef enum LabButtonIndex {
@@ -121,6 +123,14 @@ bool lab_view_enter_session(LabView *view, const AnalysisSession *session);
 
 /* Cancels any running analysis and joins the worker. */
 void lab_view_leave(LabView *view, AiWorker *worker);
+
+/* Shows a transient notice in the Lab status line. */
+void lab_view_notice(LabView *view, const char *text);
+
+/* Replaces the session with a parsed record (text owned by the caller) and
+ * reports the outcome as a notice. A bad record leaves the session as it
+ * was. */
+bool lab_view_load_record(LabView *view, AiWorker *worker, const char *text);
 
 LabAction lab_view_update(LabView *view, const UiInput *input, float dt,
                           AiWorker *worker, const Match *match,

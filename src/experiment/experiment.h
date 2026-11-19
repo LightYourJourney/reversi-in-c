@@ -161,7 +161,5 @@ void experiment_result_free(ExperimentResult *result);
 bool experiment_write_all(const ExperimentResult *result, const char *dir,
                           char *error, size_t error_size);
 
-/* Human-readable summary for CLI output. */
-void experiment_print_summary(const ExperimentResult *result);
 
 #endif

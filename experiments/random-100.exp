@@ -2,7 +2,7 @@ version 1
 name random-100
 seed 20261025
 games 100
-openings 4
+openings 50
 opening-ply 0
 max-plies 100
 engine-a kind=random label=RandomA

@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TEST_SETTINGS_PATH "test-settings.dat"
+#define REVERSI_TEST_SETTINGS_PATH "test-settings.dat"
 
 
 static void test_text_helpers(TestStats *stats)
@@ -68,7 +68,7 @@ static void test_defaults(TestStats *stats)
 
 static void test_round_trip(TestStats *stats)
 {
-    (void)storage_remove(TEST_SETTINGS_PATH);
+    (void)storage_remove(REVERSI_TEST_SETTINGS_PATH);
     Settings saved;
     settings_defaults(&saved);
     saved.volume = 0;
@@ -81,12 +81,12 @@ static void test_round_trip(TestStats *stats)
     saved.theme = 1;
 
     REVERSI_TEST_ASSERT(stats,
-        settings_save_path(TEST_SETTINGS_PATH, &saved));
+        settings_save_path(REVERSI_TEST_SETTINGS_PATH, &saved));
 
     Settings loaded;
     settings_defaults(&loaded);
     REVERSI_TEST_ASSERT(stats,
-        settings_load_path(TEST_SETTINGS_PATH, &loaded));
+        settings_load_path(REVERSI_TEST_SETTINGS_PATH, &loaded));
     REVERSI_TEST_ASSERT(stats, loaded.volume == 0);
     REVERSI_TEST_ASSERT(stats, !loaded.sfx);
     REVERSI_TEST_ASSERT(stats, !loaded.animations);
@@ -96,18 +96,18 @@ static void test_round_trip(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, loaded.default_difficulty == 2);
     REVERSI_TEST_ASSERT(stats, loaded.theme == 1);
 
-    (void)storage_remove(TEST_SETTINGS_PATH);
+    (void)storage_remove(REVERSI_TEST_SETTINGS_PATH);
 
     Settings invalid;
     settings_defaults(&invalid);
     invalid.volume = 101;
     REVERSI_TEST_ASSERT(stats,
-        !settings_save_path(TEST_SETTINGS_PATH, &invalid));
+        !settings_save_path(REVERSI_TEST_SETTINGS_PATH, &invalid));
     invalid = saved;
     invalid.animation_speed = 33;
     REVERSI_TEST_ASSERT(stats,
-        !settings_save_path(TEST_SETTINGS_PATH, &invalid));
-    REVERSI_TEST_ASSERT(stats, !storage_exists(TEST_SETTINGS_PATH));
+        !settings_save_path(REVERSI_TEST_SETTINGS_PATH, &invalid));
+    REVERSI_TEST_ASSERT(stats, !storage_exists(REVERSI_TEST_SETTINGS_PATH));
 }
 
 static void test_invalid_files(TestStats *stats)

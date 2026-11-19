@@ -39,11 +39,14 @@ typedef struct NetView {
     int focus;
     Stone color;
     bool use_tls;
+    bool tls_selectable; /* whether this build can offer wss:// at all */
     float caret;
     UiButton buttons[NET_BTN_COUNT];
 } NetView;
 
-void net_view_init(NetView *view);
+/* The view only reads NetSession; the app supplies the build's TLS
+ * capability so the view never calls into the network module. */
+void net_view_init(NetView *view, bool tls_selectable);
 NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
                               const NetSession *session);
 void net_view_draw(const NetView *view, const NetSession *session,

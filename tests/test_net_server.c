@@ -21,7 +21,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 typedef SOCKET TestSocket;
-#define TEST_INVALID INVALID_SOCKET
+#define REVERSI_TEST_SOCKET_INVALID INVALID_SOCKET
 #else
 #include <arpa/inet.h>
 #include <errno.h>
@@ -32,7 +32,7 @@ typedef SOCKET TestSocket;
 #include <time.h>
 #include <unistd.h>
 typedef int TestSocket;
-#define TEST_INVALID (-1)
+#define REVERSI_TEST_SOCKET_INVALID (-1)
 #endif
 
 typedef struct TestClient {
@@ -88,13 +88,13 @@ static void test_sleep_ms(int ms)
 
 static void test_close(TestClient *client)
 {
-    if (client->socket != TEST_INVALID) {
+    if (client->socket != REVERSI_TEST_SOCKET_INVALID) {
 #if defined(_WIN32)
         closesocket(client->socket);
 #else
         close(client->socket);
 #endif
-        client->socket = TEST_INVALID;
+        client->socket = REVERSI_TEST_SOCKET_INVALID;
     }
 }
 
@@ -123,7 +123,7 @@ static bool test_connect_buffer(NetServer *server, TestClient *client,
 {
     memset(client, 0, sizeof(*client));
     client->socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (client->socket == TEST_INVALID) {
+    if (client->socket == REVERSI_TEST_SOCKET_INVALID) {
         return false;
     }
     if (receive_buffer > 0) {
@@ -1148,8 +1148,8 @@ static void test_rejoin_finished(TestStats *stats)
 static TestSocket test_connect_raw(int port)
 {
     TestSocket socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd == TEST_INVALID) {
-        return TEST_INVALID;
+    if (socket_fd == REVERSI_TEST_SOCKET_INVALID) {
+        return REVERSI_TEST_SOCKET_INVALID;
     }
     struct sockaddr_in address;
     memset(&address, 0, sizeof(address));
@@ -1159,7 +1159,7 @@ static TestSocket test_connect_raw(int port)
     if (connect(socket_fd, (struct sockaddr *)&address,
                 sizeof(address)) != 0) {
         test_close_socket(socket_fd);
-        return TEST_INVALID;
+        return REVERSI_TEST_SOCKET_INVALID;
     }
     test_nonblocking(socket_fd);
     return socket_fd;
@@ -1221,7 +1221,7 @@ static void test_handshake_timeout(TestStats *stats)
     char error[128];
     REVERSI_TEST_ASSERT(stats, net_server_start(server, error, sizeof(error)));
     const TestSocket raw = test_connect_raw(net_server_port(server));
-    REVERSI_TEST_ASSERT(stats, raw != TEST_INVALID);
+    REVERSI_TEST_ASSERT(stats, raw != REVERSI_TEST_SOCKET_INVALID);
     bool closed = false;
     char byte;
     for (int elapsed = 0; elapsed < 2000 && !closed; elapsed += 5) {
@@ -1521,7 +1521,7 @@ static void test_connection_cap(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, !test_connect(server, &extra, port));
     /* The rejected connection gets an HTTP-level 503, not a silent reset. */
     TestSocket raw = test_connect_raw(port);
-    REVERSI_TEST_ASSERT(stats, raw != TEST_INVALID);
+    REVERSI_TEST_ASSERT(stats, raw != REVERSI_TEST_SOCKET_INVALID);
     uint64_t rng = 0x5151ULL;
     char key[25];
     char request[256];
@@ -1668,18 +1668,18 @@ static void play_verified_game(TestStats *stats, NetServer *server,
  * This is network simulation, not a real cross-network measurement.
  * ------------------------------------------------------------------ */
 
-#define PROXY_MAX_LINKS 4
-#define PROXY_BUFFER 8192
-#define PROXY_DELAY_MS 20
+#define REVERSI_TEST_PROXY_MAX_LINKS 4
+#define REVERSI_TEST_PROXY_BUFFER 8192
+#define REVERSI_TEST_PROXY_DELAY_MS 20
 
 typedef struct ProxyLink {
     bool used;
     TestSocket client;
     TestSocket server;
-    uint8_t c2s[PROXY_BUFFER];
+    uint8_t c2s[REVERSI_TEST_PROXY_BUFFER];
     size_t c2s_length;
     uint64_t c2s_due;
-    uint8_t s2c[PROXY_BUFFER];
+    uint8_t s2c[REVERSI_TEST_PROXY_BUFFER];
     size_t s2c_length;
     uint64_t s2c_due;
 } ProxyLink;
@@ -1687,7 +1687,7 @@ typedef struct ProxyLink {
 typedef struct Proxy {
     TestSocket listener;
     int upstream_port;
-    ProxyLink links[PROXY_MAX_LINKS];
+    ProxyLink links[REVERSI_TEST_PROXY_MAX_LINKS];
 } Proxy;
 
 
@@ -1696,7 +1696,7 @@ static bool proxy_start(Proxy *proxy, int upstream_port)
     memset(proxy, 0, sizeof(*proxy));
     proxy->upstream_port = upstream_port;
     proxy->listener = socket(AF_INET, SOCK_STREAM, 0);
-    if (proxy->listener == TEST_INVALID) {
+    if (proxy->listener == REVERSI_TEST_SOCKET_INVALID) {
         return false;
     }
     struct sockaddr_in address;
@@ -1708,7 +1708,7 @@ static bool proxy_start(Proxy *proxy, int upstream_port)
              sizeof(address)) != 0
         || listen(proxy->listener, 8) != 0) {
         test_close_socket(proxy->listener);
-        proxy->listener = TEST_INVALID;
+        proxy->listener = REVERSI_TEST_SOCKET_INVALID;
         return false;
     }
     test_nonblocking(proxy->listener);
@@ -1740,11 +1740,11 @@ static void proxy_accept(Proxy *proxy)
 {
     for (;;) {
         const TestSocket client = accept(proxy->listener, NULL, NULL);
-        if (client == TEST_INVALID) {
+        if (client == REVERSI_TEST_SOCKET_INVALID) {
             return;
         }
         ProxyLink *slot = NULL;
-        for (int i = 0; i < PROXY_MAX_LINKS; ++i) {
+        for (int i = 0; i < REVERSI_TEST_PROXY_MAX_LINKS; ++i) {
             if (!proxy->links[i].used) {
                 slot = &proxy->links[i];
                 break;
@@ -1760,10 +1760,10 @@ static void proxy_accept(Proxy *proxy)
         address.sin_family = AF_INET;
         address.sin_port = htons((uint16_t)proxy->upstream_port);
         inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
-        if (upstream == TEST_INVALID
+        if (upstream == REVERSI_TEST_SOCKET_INVALID
             || connect(upstream, (struct sockaddr *)&address,
                        sizeof(address)) != 0) {
-            if (upstream != TEST_INVALID) {
+            if (upstream != REVERSI_TEST_SOCKET_INVALID) {
                 test_close_socket(upstream);
             }
             test_close_socket(client);
@@ -1783,7 +1783,7 @@ static void proxy_accept(Proxy *proxy)
 static bool proxy_read(TestSocket from, uint8_t *buffer, size_t *used,
                        uint64_t *due, uint64_t delay)
 {
-    const size_t free_space = PROXY_BUFFER - *used;
+    const size_t free_space = REVERSI_TEST_PROXY_BUFFER - *used;
     if (free_space == 0) {
         return true;
     }
@@ -1821,16 +1821,16 @@ static void proxy_write(TestSocket to, uint8_t *buffer, size_t *used,
 static void proxy_pump(Proxy *proxy)
 {
     proxy_accept(proxy);
-    for (int i = 0; i < PROXY_MAX_LINKS; ++i) {
+    for (int i = 0; i < REVERSI_TEST_PROXY_MAX_LINKS; ++i) {
         ProxyLink *link = &proxy->links[i];
         if (!link->used) {
             continue;
         }
         const bool alive =
             proxy_read(link->client, link->c2s, &link->c2s_length,
-                       &link->c2s_due, PROXY_DELAY_MS)
+                       &link->c2s_due, REVERSI_TEST_PROXY_DELAY_MS)
             && proxy_read(link->server, link->s2c, &link->s2c_length,
-                          &link->s2c_due, PROXY_DELAY_MS);
+                          &link->s2c_due, REVERSI_TEST_PROXY_DELAY_MS);
         if (!alive) {
             proxy_link_close(link);
             continue;
@@ -1844,12 +1844,12 @@ static void proxy_pump(Proxy *proxy)
 
 static void proxy_stop(Proxy *proxy)
 {
-    for (int i = 0; i < PROXY_MAX_LINKS; ++i) {
+    for (int i = 0; i < REVERSI_TEST_PROXY_MAX_LINKS; ++i) {
         proxy_link_close(&proxy->links[i]);
     }
-    if (proxy->listener != TEST_INVALID) {
+    if (proxy->listener != REVERSI_TEST_SOCKET_INVALID) {
         test_close_socket(proxy->listener);
-        proxy->listener = TEST_INVALID;
+        proxy->listener = REVERSI_TEST_SOCKET_INVALID;
     }
 }
 

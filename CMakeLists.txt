@@ -185,8 +185,9 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Project targets. Dependencies point downwards only:
-#   main -> app -> {ui, ai, persistence, audio}
-#   ui -> raylib; audio -> raylib; persistence -> core
+#   main -> app -> {ui, ai, analysis, persistence, audio, net_client}
+#   ui -> {raylib, core}; audio -> raylib; persistence -> core
+#   analysis -> core; net_client -> net (protocol, ws) -> core
 # ---------------------------------------------------------------------------
 add_library(reversi_core STATIC
     src/core/board.c
@@ -416,6 +417,7 @@ add_library(reversi_ui STATIC
     src/ui/history_view.c
     src/ui/menu_view.c
     src/ui/modal.c
+    src/ui/net_view.c
     src/ui/pause_view.c
     src/ui/result_view.c
     src/ui/saves_view.c
@@ -424,17 +426,20 @@ add_library(reversi_ui STATIC
     src/ui/stats_view.c
     src/ui/theme.c)
 target_include_directories(reversi_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+# Views call core's read-only queries (legal moves, pass, undo availability);
+# declare that instead of relying on the app to link core for them.
 target_link_libraries(reversi_ui
-    PUBLIC ${REVERSI_RAYLIB_TARGET}
+    PUBLIC ${REVERSI_RAYLIB_TARGET} reversi_core
     PRIVATE reversi_warnings)
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     target_link_libraries(reversi_ui PUBLIC m)
 endif()
 
+# lab_view drives analysis and the AI worker, so it is built with the app
+# (ARCHITECTURE.md §21.6); every other view lives in reversi_ui.
 add_library(reversi_app STATIC
     src/app/app.c
-    src/ui/lab_view.c
-    src/ui/net_view.c)
+    src/ui/lab_view.c)
 target_include_directories(reversi_app PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_BINARY_DIR}/generated")
@@ -704,6 +709,22 @@ if(REVERSI_BUILD_TESTS AND NOT EMSCRIPTEN)
             OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
         add_test(NAME net.tls COMMAND reversi_net_tls_tests)
         set_tests_properties(net.tls PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            TIMEOUT 120)
+    endif()
+
+    # Portable public-CA check, Windows included (net.tls above needs POSIX
+    # and the openssl CLI). Passes as a no-op unless REVERSI_TLS_PUBLIC=1.
+    if(REVERSI_HAVE_TLS)
+        add_executable(reversi_net_tls_public_tests
+            tests/test_net_tls_public.c)
+        target_include_directories(reversi_net_tls_public_tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        target_link_libraries(reversi_net_tls_public_tests PRIVATE
+            reversi_net_client reversi_warnings)
+        add_test(NAME net.tls_public COMMAND reversi_net_tls_public_tests)
+        set_tests_properties(net.tls_public PROPERTIES
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
             TIMEOUT 120)
     endif()

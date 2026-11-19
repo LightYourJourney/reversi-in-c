@@ -4,6 +4,7 @@
  * sends. All callbacks run on the main thread.
  */
 #include "net/net_client.h"
+#include "platform/web/web_callbacks.h"
 
 #include <emscripten.h>
 #include <stdbool.h>
@@ -37,8 +38,6 @@ struct NetClient {
 
 static NetClient *g_web_client = NULL;
 
-void reversi_net_client_web_message(const char *text);
-void reversi_net_client_web_status(int status, const char *reason);
 
 EM_JS(void, reversi_web_net_connect, (const char *host, int port), {
     var scheme = globalThis.location

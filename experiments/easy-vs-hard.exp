@@ -2,7 +2,7 @@ version 1
 name easy-vs-hard
 seed 20261025
 games 8
-openings 2
+openings 4
 opening-ply 4
 max-plies 100
 engine-a kind=ai difficulty=easy label=Easy

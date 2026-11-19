@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TEST_SAVE_PATH "test-save.rvs"
+#define REVERSI_TEST_SAVE_PATH "test-save.rvs"
 
 static bool dummy_select(void *context, const GameState *state,
                          Move *out_move)
@@ -116,7 +116,7 @@ static void build_initial_payload(char *out, size_t cap)
 
 static void test_round_trip(TestStats *stats)
 {
-    (void)storage_remove(TEST_SAVE_PATH);
+    (void)storage_remove(REVERSI_TEST_SAVE_PATH);
     Match match;
     const MatchConfig config = pvp_config();
     REVERSI_TEST_ASSERT(stats, match_start(&match, &config));
@@ -126,11 +126,11 @@ static void test_round_trip(TestStats *stats)
 
     REVERSI_TEST_ASSERT(stats, match_is_consistent(&match));
     REVERSI_TEST_ASSERT(stats,
-        save_write(TEST_SAVE_PATH, &match, 1) == SAVE_STATUS_OK);
+        save_write(REVERSI_TEST_SAVE_PATH, &match, 1) == SAVE_STATUS_OK);
 
     SavedGame saved;
     REVERSI_TEST_ASSERT(stats,
-        save_read(TEST_SAVE_PATH, &saved) == SAVE_STATUS_OK);
+        save_read(REVERSI_TEST_SAVE_PATH, &saved) == SAVE_STATUS_OK);
     REVERSI_TEST_ASSERT(stats, saved.mode == GAME_MODE_PVP);
     REVERSI_TEST_ASSERT(stats, saved.human_color == STONE_BLACK);
     REVERSI_TEST_ASSERT(stats, saved.difficulty == 1);
@@ -159,17 +159,17 @@ static void test_round_trip(TestStats *stats)
     /* Overwrite with a longer match. */
     play_move(stats, &match, first_legal_move(&match));
     REVERSI_TEST_ASSERT(stats,
-        save_write(TEST_SAVE_PATH, &match, 2) == SAVE_STATUS_OK);
+        save_write(REVERSI_TEST_SAVE_PATH, &match, 2) == SAVE_STATUS_OK);
     REVERSI_TEST_ASSERT(stats,
-        save_read(TEST_SAVE_PATH, &saved) == SAVE_STATUS_OK);
+        save_read(REVERSI_TEST_SAVE_PATH, &saved) == SAVE_STATUS_OK);
     REVERSI_TEST_ASSERT(stats, saved.difficulty == 2);
     REVERSI_TEST_ASSERT(stats,
         saved.move_count == history_position(&match.history));
     REVERSI_TEST_ASSERT(stats,
         game_state_equal(&saved.expected, &match.state));
 
-    (void)storage_remove(TEST_SAVE_PATH);
-    (void)storage_remove(TEST_SAVE_PATH ".tmp");
+    (void)storage_remove(REVERSI_TEST_SAVE_PATH);
+    (void)storage_remove(REVERSI_TEST_SAVE_PATH ".tmp");
 }
 
 static void test_pve_round_trip(TestStats *stats)

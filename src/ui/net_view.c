@@ -25,12 +25,29 @@ static void set_button(NetView *view, int index, const char *label,
     ui_button_set_bounds(button, bounds);
 }
 
-void net_view_init(NetView *view)
+static const char *phase_text(NetSessionPhase phase)
+{
+    switch (phase) {
+    case NET_SESSION_CONNECTING: return "Connecting...";
+    case NET_SESSION_LOBBY: return "Lobby";
+    case NET_SESSION_WAITING: return "Waiting for opponent";
+    case NET_SESSION_PLAYING: return "Game in progress";
+    case NET_SESSION_FINISHED: return "Game over";
+    case NET_SESSION_DISCONNECTED: return "Reconnecting...";
+    case NET_SESSION_FAILED: return "Connection failed";
+    case NET_SESSION_IDLE:
+    default:
+        return "Offline";
+    }
+}
+
+void net_view_init(NetView *view, bool tls_selectable)
 {
     if (view == NULL) {
         return;
     }
     memset(view, 0, sizeof(*view));
+    view->tls_selectable = tls_selectable;
     snprintf(view->host, sizeof(view->host), "127.0.0.1");
     snprintf(view->port, sizeof(view->port), "8080");
     view->color = STONE_BLACK;
@@ -118,7 +135,7 @@ NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
                 break;
             }
         }
-        if (net_session_tls_selectable()
+        if (view->tls_selectable
             && CheckCollisionPointRec(input->mouse,
                                       net_view_tls_bounds())) {
             view->use_tls = !view->use_tls;
@@ -244,8 +261,7 @@ void net_view_draw(const NetView *view, const NetSession *session,
     }
 
     char status[192];
-    snprintf(status, sizeof(status), "%s",
-             net_session_status_text(session));
+    snprintf(status, sizeof(status), "%s", phase_text(session->phase));
     if (session->latency_ms > 0) {
         const size_t used = strlen(status);
         snprintf(status + used, sizeof(status) - used, "   Ping %d ms",
@@ -255,7 +271,7 @@ void net_view_draw(const NetView *view, const NetSession *session,
                          (Rectangle){x, top + 140.0f, panel_width, 20.0f},
                          REVERSI_UI_FONT_SMALL, REVERSI_UI_COLOR_TEXT,
                          UI_ALIGN_LEFT);
-    if (net_session_tls_selectable()) {
+    if (view->tls_selectable) {
         const Rectangle box = net_view_tls_bounds();
         ui_draw_panel((Rectangle){box.x, box.y + 4.0f, 16.0f, 16.0f},
                       REVERSI_UI_RADIUS_SM, REVERSI_UI_COLOR_SURFACE_ALT,

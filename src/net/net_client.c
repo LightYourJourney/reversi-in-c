@@ -367,6 +367,12 @@ static bool tls_handshake(NetClient *client, const char **reason)
          * its root set as /etc/ssl/cert.pem; add it so a statically linked
          * client still verifies public servers. */
         (void)SSL_CTX_load_verify_locations(ctx, "/etc/ssl/cert.pem", NULL);
+#elif defined(_WIN32) && OPENSSL_VERSION_NUMBER >= 0x30200000L
+        /* OpenSSL's default paths on Windows name a directory under the
+         * OpenSSL install, which a player's PC does not have. Since 3.2 the
+         * Windows certificate store is available as a store URI; add it so
+         * public servers verify against the system roots. */
+        (void)SSL_CTX_load_verify_store(ctx, "org.openssl.winstore:");
 #endif
         client->tls_ctx = ctx;
     }
@@ -523,8 +529,13 @@ static void outbound_clear(NetClient *client)
     client->outbound_count = 0;
 }
 
-static bool client_handshake(NetClient *client)
+/* Completes the WebSocket upgrade. Bytes the server sent after the response
+ * header in the same read are frames; they go to `leftover` so the caller
+ * parses them instead of losing them. */
+static bool client_handshake(NetClient *client, uint8_t *leftover,
+                             size_t leftover_capacity, size_t *leftover_length)
 {
+    *leftover_length = 0;
     char key[25];
     if (!net_ws_generate_key(&client->rng, key)) {
         return false;
@@ -539,6 +550,7 @@ static bool client_handshake(NetClient *client)
     }
     char response[1024];
     size_t used = 0;
+    size_t header_length = 0;
     const uint64_t deadline = now_ms() + 5000;
     while (used < sizeof(response) - 1 && now_ms() < deadline
            && !atomic_load(&client->stop)) {
@@ -554,7 +566,9 @@ static bool client_handshake(NetClient *client)
         if (read > 0) {
             used += (size_t)read;
             response[used] = '\0';
-            if (strstr(response, "\r\n\r\n") != NULL) {
+            const char *end = strstr(response, "\r\n\r\n");
+            if (end != NULL) {
+                header_length = (size_t)(end - response) + 4;
                 break;
             }
         } else if (read == 0) {
@@ -563,7 +577,13 @@ static bool client_handshake(NetClient *client)
             return false;
         }
     }
-    return net_ws_validate_handshake_response(response, used, key);
+    if (header_length == 0
+        || used - header_length > leftover_capacity) {
+        return false;
+    }
+    memcpy(leftover, response + header_length, used - header_length);
+    *leftover_length = used - header_length;
+    return net_ws_validate_handshake_response(response, header_length, key);
 }
 
 /* Plaintext (ws://) is only ever sent to loopback or private ranges, so the
@@ -705,14 +725,18 @@ static void *client_thread(void *argument)
         REVERSI_NET_CLIENT_THREAD_RETURN;
     }
 #endif
-    if (!client_handshake(client)) {
+    /* Unparsed bytes carry over between reads: a frame split across two
+     * reads (or arriving with the handshake response) must not be lost. */
+    uint8_t buffer[REVERSI_NET_WS_MAX_PAYLOAD * 2 + 64];
+    size_t buffered = 0;
+    if (!client_handshake(client, buffer, sizeof(buffer), &buffered)) {
         client_fail(client, socket_fd, "handshake_failed");
         REVERSI_NET_CLIENT_THREAD_RETURN;
     }
     set_status(client, NET_CLIENT_CONNECTED, NULL);
     NetWsParser parser;
     net_ws_parser_init(&parser);
-    uint8_t buffer[4096];
+    bool pending_frames = buffered > 0;
     while (!atomic_load(&client->stop)) {
         /* Drain the outbound queue before sleeping: queued frames are at
          * most one poll interval (20 ms) old. */
@@ -725,39 +749,47 @@ static void *client_thread(void *argument)
         }
         /* Selecting keeps teardown join bounded: a blocked recv is not
          * reliably interrupted by shutdown() from another thread on Windows. */
-        const int ready = connection_has_buffered(client)
-            ? 1 : socket_wait_readable(socket_fd, 20);
-        if (ready == 0) {
-            continue;
-        }
-        if (ready < 0) {
-            set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
-            break;
-        }
-        const int read = connection_read(client, buffer, sizeof(buffer));
-        if (read == 0) {
-            /* A shutdown this client asked for already carries its own
-             * reason; do not overwrite it with "closed". */
-            if (!atomic_load(&client->stop)) {
-                set_status(client, NET_CLIENT_DISCONNECTED, "closed");
-            }
-            break;
-        }
-        if (read < 0) {
-            if (read == -2) {
+        if (!pending_frames) {
+            const int ready = connection_has_buffered(client)
+                ? 1 : socket_wait_readable(socket_fd, 20);
+            if (ready == 0) {
                 continue;
             }
-            if (!atomic_load(&client->stop)) {
+            if (ready < 0) {
                 set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
+                break;
             }
-            break;
+            /* Never full here: what stays buffered is less than one
+             * maximum frame, and the buffer holds two. */
+            const int read = connection_read(client, buffer + buffered,
+                                             sizeof(buffer) - buffered);
+            if (read == 0) {
+                /* A shutdown this client asked for already carries its own
+                 * reason; do not overwrite it with "closed". */
+                if (!atomic_load(&client->stop)) {
+                    set_status(client, NET_CLIENT_DISCONNECTED, "closed");
+                }
+                break;
+            }
+            if (read < 0) {
+                if (read == -2) {
+                    continue;
+                }
+                if (!atomic_load(&client->stop)) {
+                    set_status(client, NET_CLIENT_DISCONNECTED,
+                               "socket_error");
+                }
+                break;
+            }
+            buffered += (size_t)read;
         }
+        pending_frames = false;
         size_t offset = 0;
-        while (offset < (size_t)read) {
+        while (offset < buffered) {
             NetWsFrame frame;
             size_t consumed = 0;
             const NetWsResult result = net_ws_parse(
-                &parser, buffer + offset, (size_t)read - offset, false,
+                &parser, buffer + offset, buffered - offset, false,
                 &frame, &consumed);
             if (result == NET_WS_NEED_MORE) {
                 if (consumed == 0) {
@@ -795,6 +827,8 @@ static void *client_thread(void *argument)
             }
             offset += consumed;
         }
+        memmove(buffer, buffer + offset, buffered - offset);
+        buffered -= offset;
     }
 #if REVERSI_NET_CLIENT_TLS
     tls_release(client);

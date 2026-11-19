@@ -61,6 +61,11 @@ static void test_rejects_bad_input(TestStats *stats)
         "bogus", NET_DIRECTION_CLIENT_TO_SERVER, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
         "hello v=2", NET_DIRECTION_CLIENT_TO_SERVER, &out));
+    /* A foreign welcome decodes so the client can explain the mismatch. */
+    REVERSI_TEST_ASSERT(stats, net_protocol_decode(
+        "welcome v=2 token=0123456789abcdef0123456789abcdef player=1",
+        NET_DIRECTION_SERVER_TO_CLIENT, &out));
+    REVERSI_TEST_ASSERT(stats, out.version == 2);
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
         "hello v=1 extra=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
@@ -80,6 +85,28 @@ static void test_rejects_bad_input(TestStats *stats)
     }
     REVERSI_TEST_ASSERT(stats, net_protocol_decode(
         "hello v=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
+
+    /* "cell" belongs to move and "last" to state; swapping them is
+     * malformed, and "move last=-" would otherwise be a move without a
+     * square. */
+    REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
+        "move last=d3 seq=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
+    REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
+        "move last=- seq=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
+    REVERSI_TEST_ASSERT(stats, net_protocol_decode(
+        "move cell=d3 seq=1", NET_DIRECTION_CLIENT_TO_SERVER, &out));
+    char state[REVERSI_NET_MAX_MESSAGE + 1];
+    char board[REVERSI_BOARD_CELL_COUNT + 1];
+    memset(board, '0', REVERSI_BOARD_CELL_COUNT);
+    board[REVERSI_BOARD_CELL_COUNT] = '\0';
+    snprintf(state, sizeof(state),
+             "state turn=B seq=1 board=%s pass=0 result=O cell=d3", board);
+    REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
+        state, NET_DIRECTION_SERVER_TO_CLIENT, &out));
+    snprintf(state, sizeof(state),
+             "state turn=B seq=1 board=%s pass=0 result=O last=d3", board);
+    REVERSI_TEST_ASSERT(stats, net_protocol_decode(
+        state, NET_DIRECTION_SERVER_TO_CLIENT, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
         "create color=X", NET_DIRECTION_CLIENT_TO_SERVER, &out));
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(

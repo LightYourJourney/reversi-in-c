@@ -10,10 +10,10 @@
 
 #if defined(__has_include)
 #if __has_include("core/bitboard.h")
-#define HAVE_BITBOARD 1
+#define REVERSI_BENCH_HAVE_BITBOARD 1
 #endif
 #endif
-#ifdef HAVE_BITBOARD
+#ifdef REVERSI_BENCH_HAVE_BITBOARD
 #include "core/bitboard.h"
 #endif
 
@@ -30,8 +30,8 @@
 #include <time.h>
 #endif
 
-#define CORPUS_SIZE 14
-#define MICRO_ITERATIONS 10000
+#define REVERSI_BENCH_CORPUS_SIZE 14
+#define REVERSI_BENCH_MICRO_ITERATIONS 10000
 
 static volatile uint64_t g_sink;
 
@@ -189,13 +189,13 @@ static double micro_movegen_scalar(const GameState *state)
     Move moves[REVERSI_BOARD_CELL_COUNT];
     const uint64_t start = now_ns();
     int checksum = 0;
-    for (int i = 0; i < MICRO_ITERATIONS; ++i) {
+    for (int i = 0; i < REVERSI_BENCH_MICRO_ITERATIONS; ++i) {
         checksum += rules_generate_legal_moves(
             &state->board, state->current_player, moves,
             REVERSI_BOARD_CELL_COUNT);
     }
     g_sink += (uint64_t)checksum;
-    return (double)(now_ns() - start) / MICRO_ITERATIONS;
+    return (double)(now_ns() - start) / REVERSI_BENCH_MICRO_ITERATIONS;
 }
 
 static double micro_apply_scalar(const GameState *state)
@@ -210,24 +210,24 @@ static double micro_apply_scalar(const GameState *state)
     const Move move = moves[0];
     const uint64_t start = now_ns();
     int checksum = 0;
-    for (int i = 0; i < MICRO_ITERATIONS; ++i) {
+    for (int i = 0; i < REVERSI_BENCH_MICRO_ITERATIONS; ++i) {
         Board board = state->board;
         checksum += rules_apply_move(&board, state->current_player, move);
     }
     g_sink += (uint64_t)checksum;
-    return (double)(now_ns() - start) / MICRO_ITERATIONS;
+    return (double)(now_ns() - start) / REVERSI_BENCH_MICRO_ITERATIONS;
 }
 
-#ifdef HAVE_BITBOARD
+#ifdef REVERSI_BENCH_HAVE_BITBOARD
 static double micro_movegen_bitboard(const Bitboard *bb, Stone player)
 {
     const uint64_t start = now_ns();
     uint64_t checksum = 0;
-    for (int i = 0; i < MICRO_ITERATIONS; ++i) {
+    for (int i = 0; i < REVERSI_BENCH_MICRO_ITERATIONS; ++i) {
         checksum ^= bitboard_legal_moves(bb, player);
     }
     g_sink += checksum;
-    return (double)(now_ns() - start) / MICRO_ITERATIONS;
+    return (double)(now_ns() - start) / REVERSI_BENCH_MICRO_ITERATIONS;
 }
 
 static double micro_apply_bitboard(const Bitboard *bb, Stone player)
@@ -239,12 +239,12 @@ static double micro_apply_bitboard(const Bitboard *bb, Stone player)
     const int index = bitboard_next_index(legal);
     const uint64_t start = now_ns();
     uint64_t checksum = 0;
-    for (int i = 0; i < MICRO_ITERATIONS; ++i) {
+    for (int i = 0; i < REVERSI_BENCH_MICRO_ITERATIONS; ++i) {
         Bitboard copy = *bb;
         checksum += bitboard_apply_move(&copy, player, index, NULL) ? 1 : 0;
     }
     g_sink += checksum;
-    return (double)(now_ns() - start) / MICRO_ITERATIONS;
+    return (double)(now_ns() - start) / REVERSI_BENCH_MICRO_ITERATIONS;
 }
 #endif
 
@@ -291,7 +291,7 @@ static void measure_search(const CorpusEntry *entry)
 
 int main(void)
 {
-    CorpusEntry corpus[CORPUS_SIZE];
+    CorpusEntry corpus[REVERSI_BENCH_CORPUS_SIZE];
     memset(corpus, 0, sizeof(corpus));
 
     corpus[0].name = "opening";
@@ -354,20 +354,21 @@ int main(void)
     }
 
     printf("Reversi AI corpus benchmark\n");
-    printf("micro iterations per position: %d\n", MICRO_ITERATIONS);
+    printf("micro iterations per position: %d\n",
+           REVERSI_BENCH_MICRO_ITERATIONS);
     printf("fixed search: Medium depth 6, no TT; practical: Hard default "
            "(500 ms budget)\n\n");
     printf("%-18s %5s %10s %10s %10s %10s\n",
            "position", "empty", "scalar-gen", "scalar-play",
            "bb-gen", "bb-play");
-    for (int i = 0; i < CORPUS_SIZE; ++i) {
+    for (int i = 0; i < REVERSI_BENCH_CORPUS_SIZE; ++i) {
         CorpusEntry *entry = &corpus[i];
         entry->empty = empty_count(&entry->state.board);
         const bool playable =
             legal_count(&entry->state, entry->state.current_player) > 0;
         double bb_gen = -1.0;
         double bb_play = -1.0;
-#ifdef HAVE_BITBOARD
+#ifdef REVERSI_BENCH_HAVE_BITBOARD
         Bitboard bb;
         bitboard_from_board(&entry->state.board, &bb);
         bb_gen = micro_movegen_bitboard(&bb, entry->state.current_player);
@@ -383,7 +384,7 @@ int main(void)
     }
 
     printf("\nsearch (ns/op above; times below)\n");
-    for (int i = 0; i < CORPUS_SIZE; ++i) {
+    for (int i = 0; i < REVERSI_BENCH_CORPUS_SIZE; ++i) {
         measure_search(&corpus[i]);
     }
     printf("\npeak_rss_kb=%ld\n", peak_rss_kb());
