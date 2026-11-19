@@ -31,6 +31,8 @@ jobs:
       - name: Download packages
         uses: actions/download-artifact@v4
         with:
+          # The Web client artifact comes along too; it is already inside each
+          # package, so only the archives below are published.
           pattern: Reversi-*
           merge-multiple: true
           path: release-files
@@ -48,6 +50,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "${GITHUB_REF_NAME}"
-          release-files/*
+          release-files/Reversi-*.zip release-files/Reversi-*.tar.gz
+          release-files/*.sha256 release-files/SHA256SUMS
           --title "Reversi ${GITHUB_REF_NAME#v}"
           --generate-notes

@@ -6,13 +6,22 @@
 # Environment:
 #   EMSDK_DIR    Emscripten SDK root (default: ~/emsdk)
 #   BUILD_TYPE   CMake build type (default: Release)
+#   BUILD_DIR    CMake build directory (default: build-web)
+#   DIST_DIR     Assembled static site (default: web/dist)
 #   JOBS         Parallel build jobs (default: CPU count)
+#
+# A Debug build (with the autoplay hook the browser tests use) goes to its
+# own directories, e.g.
+#   BUILD_TYPE=Debug BUILD_DIR=build-web-debug DIST_DIR=web/dist-debug \
+#     scripts/build-web.sh
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 emsdk_dir="${EMSDK_DIR:-$HOME/emsdk}"
-build_dir="${root}/build-web"
-dist_dir="${root}/web/dist"
+build_dir="${BUILD_DIR:-${root}/build-web}"
+dist_dir="${DIST_DIR:-${root}/web/dist}"
+case "${build_dir}" in /*) ;; *) build_dir="${root}/${build_dir}" ;; esac
+case "${dist_dir}" in /*) ;; *) dist_dir="${root}/${dist_dir}" ;; esac
 build_type="${BUILD_TYPE:-Release}"
 jobs="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 

@@ -113,6 +113,7 @@ jobs:
       - name: Verify package under Xvfb
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
+          REVERSI_REQUIRE_WEB: "1"
         run: >
           xvfb-run -a -s "-screen 0 1100x800x24"
           ./scripts/verify-package.sh artifacts/Reversi-*.zip

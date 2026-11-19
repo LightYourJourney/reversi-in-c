@@ -14,8 +14,62 @@ on:
         default: ""
 
 jobs:
+  web:
+    # The WebAssembly client: built with the pinned Emscripten, exercised in
+    # Chrome (Release and the Debug autoplay build), then shipped inside every
+    # desktop package as web/.
+    name: Web build and browser tests
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: "6.0.13"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$HOME/emsdk/emsdk" activate "$EMSDK_VERSION"
+
+      - name: Build Release and Debug Web clients
+        run: |
+          ./scripts/build-web.sh
+          BUILD_TYPE=Debug BUILD_DIR=build-web-debug DIST_DIR=web/dist-debug \
+            ./scripts/build-web.sh
+
+      - name: Install browser test dependencies
+        working-directory: tests/web
+        env:
+          # The tests drive the runner's own Chrome (channel "chrome").
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci
+
+      - name: Browser tests (Chrome)
+        run: |
+          python3 -m http.server 8080 --bind 127.0.0.1 --directory web/dist \
+            > /tmp/serve-release.log 2>&1 &
+          python3 -m http.server 8081 --bind 127.0.0.1 --directory web/dist-debug \
+            > /tmp/serve-debug.log 2>&1 &
+          for port in 8080 8081; do
+            for _ in $(seq 1 50); do
+              curl -fs "http://127.0.0.1:$port/index.html" > /dev/null && break
+              sleep 0.2
+            done
+          done
+          REVERSI_WEB_URL=http://127.0.0.1:8080 \
+          REVERSI_WEB_DEBUG_URL=http://127.0.0.1:8081 \
+            node tests/web/run-tests.js
+
+      - name: Upload Web client
+        uses: actions/upload-artifact@v4
+        with:
+          name: Reversi-Web-dist${{ inputs.artifact_suffix }}
+          path: web/dist
+          if-no-files-found: error
+
   package:
     name: Package ${{ matrix.name }}
+    needs: web
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -29,6 +83,12 @@ jobs:
             name: macOS
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download Web client
+        uses: actions/download-artifact@v4
+        with:
+          name: Reversi-Web-dist${{ inputs.artifact_suffix }}
+          path: web/dist
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'

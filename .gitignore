@@ -4,6 +4,7 @@
 /cmake-build-*/
 /out/
 /web/dist/
+/web/dist-debug/
 /tests/web/node_modules/
 /tests/web/screenshots/
 

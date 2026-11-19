@@ -110,6 +110,9 @@ if [ -d "${root}/web" ]; then
     echo "Web client: present (web/index.html)"
 else
     echo "Web client: absent (packaged without scripts/build-web.sh)" >&2
+    if [ "${REVERSI_REQUIRE_WEB:-0}" = "1" ]; then
+        exit 1
+    fi
 fi
 if ! "${server}" --help 2>&1 | grep -q "usage:"; then
     echo "Packaged server does not start" >&2
