@@ -45,8 +45,10 @@ typedef struct NetView {
 } NetView;
 
 /* The view only reads NetSession; the app supplies the build's TLS
- * capability so the view never calls into the network module. */
-void net_view_init(NetView *view, bool tls_selectable);
+ * capability and suggested server so the view never calls into the network
+ * module. `server` is "host:port" (port 1..65535); NULL or a malformed value
+ * keeps 127.0.0.1:8080. */
+void net_view_init(NetView *view, bool tls_selectable, const char *server);
 NetViewAction net_view_update(NetView *view, const UiInput *input, float dt,
                               const NetSession *session);
 void net_view_draw(const NetView *view, const NetSession *session,

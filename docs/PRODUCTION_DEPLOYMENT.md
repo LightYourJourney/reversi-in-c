@@ -14,6 +14,9 @@ DNS、未申请可信证书**。本地自签 TLS 结果不作为生产 PASS。
 - Web 客户端连接 `<host>:<port>/`（路径固定为 `/`），所以 WebSocket 需要
   独立的**主机名**（模板用 `ws.reversi.example.com`），静态站点用另一个主机名
   （`reversi.example.com`）。两者可共用同一张证书（SAN 或通配符）。
+  大厅里预填的服务器地址来自 `web/index.html` 的
+  `<meta name="reversi-server" content="host:port">`；留空时预填
+  `127.0.0.1:8080`，公网部署要按 §8 写成自己的 WebSocket 主机。
 - 必需组件：Linux x86_64/arm64、systemd、nginx ≥ 1.25（`http2 on;`）、
   certbot（或等价 ACME 客户端）、一个公网域名。
 
@@ -153,6 +156,9 @@ REV=/opt/reversi/releases/2.0.0
 mkdir -p "$REV"
 tar -xzf Reversi-2.0.0-<平台>.tar.gz -C "$REV" --strip-components=1
 ls "$REV"/bin/reversi_server "$REV"/web/index.html   # 包内路径自检
+# 大厅预填的服务器地址（玩家仍可修改）
+sed -i 's|<meta name="reversi-server" content="[^"]*">|<meta name="reversi-server" content="ws.reversi.example.com:443">|' \
+    "$REV"/web/index.html
 ln -sfn "$REV" /opt/reversi/current
 systemctl restart reversi-server
 ```

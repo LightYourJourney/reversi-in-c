@@ -307,6 +307,11 @@ bool net_session_tls_selectable(void)
     return net_client_tls_selectable();
 }
 
+const char *net_session_default_server(void)
+{
+    return net_client_default_server();
+}
+
 void net_session_disconnect(NetSession *session)
 {
     if (session == NULL) {

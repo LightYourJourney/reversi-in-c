@@ -41,6 +41,12 @@ bool net_client_connect_tls(NetClient *client, const char *host, int port);
  * build returns false: the browser upgrades https:// to wss:// by itself, so
  * there is nothing for the player to choose. */
 bool net_client_tls_selectable(void);
+
+/* The server the lobby should suggest, as "host:port", or NULL to keep the
+ * built-in default (127.0.0.1:8080). The Web build reads it from the page's
+ * <meta name="reversi-server" content="host:port">, so a deployment points
+ * players at its own WebSocket host; desktop builds return NULL. */
+const char *net_client_default_server(void);
 void net_client_disconnect(NetClient *client);
 void net_client_poll(NetClient *client);
 

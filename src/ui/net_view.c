@@ -41,15 +41,53 @@ static const char *phase_text(NetSessionPhase phase)
     }
 }
 
-void net_view_init(NetView *view, bool tls_selectable)
+/* Splits "host:port" into the lobby fields. Only printable ASCII without
+ * spaces is accepted for the host, and the port must be 1..65535. */
+static bool apply_server(NetView *view, const char *server)
+{
+    const char *colon = server != NULL ? strrchr(server, ':') : NULL;
+    if (colon == NULL) {
+        return false;
+    }
+    const size_t host_length = (size_t)(colon - server);
+    const size_t port_length = strlen(colon + 1);
+    if (host_length == 0 || host_length >= sizeof(view->host)
+        || port_length == 0 || port_length > 5) {
+        return false;
+    }
+    for (size_t i = 0; i < host_length; ++i) {
+        if (server[i] <= ' ' || server[i] > '~') {
+            return false;
+        }
+    }
+    long port = 0;
+    for (size_t i = 0; i < port_length; ++i) {
+        const char digit = colon[1 + i];
+        if (digit < '0' || digit > '9') {
+            return false;
+        }
+        port = port * 10 + (digit - '0');
+    }
+    if (port < 1 || port > 65535) {
+        return false;
+    }
+    memcpy(view->host, server, host_length);
+    view->host[host_length] = '\0';
+    snprintf(view->port, sizeof(view->port), "%ld", port);
+    return true;
+}
+
+void net_view_init(NetView *view, bool tls_selectable, const char *server)
 {
     if (view == NULL) {
         return;
     }
     memset(view, 0, sizeof(*view));
     view->tls_selectable = tls_selectable;
-    snprintf(view->host, sizeof(view->host), "127.0.0.1");
-    snprintf(view->port, sizeof(view->port), "8080");
+    if (!apply_server(view, server)) {
+        snprintf(view->host, sizeof(view->host), "127.0.0.1");
+        snprintf(view->port, sizeof(view->port), "8080");
+    }
     view->color = STONE_BLACK;
     view->focus = -1;
     for (int i = 0; i < NET_BTN_COUNT; ++i) {

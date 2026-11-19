@@ -2,12 +2,42 @@
 #include "test_harness.h"
 #include "ui/help_view.h"
 #include "ui/menu_view.h"
+#include "ui/net_view.h"
 #include "ui/saves_view.h"
 #include "ui/settings_view.h"
 #include "ui/stats_view.h"
 #include "ui/theme.h"
 
 #include <string.h>
+
+static void expect_server(TestStats *stats, const char *server,
+                          const char *host, const char *port)
+{
+    NetView view;
+    net_view_init(&view, false, server);
+    REVERSI_TEST_ASSERT(stats, strcmp(view.host, host) == 0);
+    REVERSI_TEST_ASSERT(stats, strcmp(view.port, port) == 0);
+}
+
+static void test_net_view_default_server(TestStats *stats)
+{
+    expect_server(stats, NULL, "127.0.0.1", "8080");
+    expect_server(stats, "ws.reversi.example.com:443",
+                  "ws.reversi.example.com", "443");
+    expect_server(stats, "192.168.1.20:9000", "192.168.1.20", "9000");
+    /* Malformed values keep the built-in default. */
+    expect_server(stats, "", "127.0.0.1", "8080");
+    expect_server(stats, "example.com", "127.0.0.1", "8080");
+    expect_server(stats, ":443", "127.0.0.1", "8080");
+    expect_server(stats, "example.com:", "127.0.0.1", "8080");
+    expect_server(stats, "example.com:0", "127.0.0.1", "8080");
+    expect_server(stats, "example.com:65536", "127.0.0.1", "8080");
+    expect_server(stats, "example.com:+443", "127.0.0.1", "8080");
+    expect_server(stats, "exa mple.com:443", "127.0.0.1", "8080");
+    expect_server(stats,
+        "a-host-name-that-is-far-too-long-for-the-lobby-field-of-64-bytes.example:443",
+        "127.0.0.1", "8080");
+}
 
 static void test_theme_switch(TestStats *stats)
 {
@@ -193,6 +223,7 @@ int main(void)
     TestStats stats = {0};
 
     REVERSI_RUN_TEST(&stats, test_theme_switch);
+    REVERSI_RUN_TEST(&stats, test_net_view_default_server);
     REVERSI_RUN_TEST(&stats, test_menu_continue_and_focus);
     REVERSI_RUN_TEST(&stats, test_settings_actions);
     REVERSI_RUN_TEST(&stats, test_saves_actions);

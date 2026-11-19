@@ -70,6 +70,9 @@ bool net_session_connect_tls(NetSession *session, const char *host,
 
 /* Whether the lobby should offer the "Use TLS (wss)" toggle at all. */
 bool net_session_tls_selectable(void);
+/* The server the lobby should suggest ("host:port"), or NULL; see
+ * net_client_default_server. */
+const char *net_session_default_server(void);
 void net_session_disconnect(NetSession *session);
 void net_session_update(NetSession *session, float dt);
 

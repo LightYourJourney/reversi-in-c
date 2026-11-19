@@ -126,6 +126,11 @@ node tests/web/run-tests.js
   流程会替换文件名；当前构建文件名固定，若频繁更新建议改为
   `max-age=0, must-revalidate`）
 
+- 大厅预填的服务器地址：`index.html` 中
+  `<meta name="reversi-server" content="host:port">`（如
+  `ws.reversi.example.com:443`）；留空或格式不对时预填 `127.0.0.1:8080`。
+  页面是 `https://` 时客户端自动用 `wss://`。
+
 公开部署需要单独授权；本阶段只生成本地产物。
 
 ## 6. 运行时结构

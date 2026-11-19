@@ -251,6 +251,27 @@ bool net_client_tls_selectable(void)
     return false;
 }
 
+EM_JS(int, reversi_web_server_meta, (char *out, int cap), {
+    try {
+        var meta = document.querySelector('meta[name="reversi-server"]');
+        var value = meta ? String(meta.content || '').trim() : '';
+        if (value === '' || lengthBytesUTF8(value) >= cap) {
+            return 0;
+        }
+        stringToUTF8(value, out, cap);
+        return 1;
+    } catch (e) {
+        return 0;
+    }
+})
+
+const char *net_client_default_server(void)
+{
+    static char server[96];
+    return reversi_web_server_meta(server, (int)sizeof(server))
+        ? server : NULL;
+}
+
 NetClientStatus net_client_status(const NetClient *client)
 {
     return client != NULL ? client->status : NET_CLIENT_IDLE;

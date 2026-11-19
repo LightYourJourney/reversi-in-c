@@ -1000,6 +1000,11 @@ bool net_client_tls_selectable(void)
     return REVERSI_NET_CLIENT_TLS != 0;
 }
 
+const char *net_client_default_server(void)
+{
+    return NULL;
+}
+
 void net_client_disconnect(NetClient *client)
 {
     if (client == NULL) {

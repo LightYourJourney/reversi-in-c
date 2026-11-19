@@ -406,7 +406,8 @@ static void app_init(App *app)
     stats_view_init(&app->stats_view);
     saves_view_init(&app->saves_view);
     lab_view_init(&app->lab);
-    net_view_init(&app->net_view, net_session_tls_selectable());
+    net_view_init(&app->net_view, net_session_tls_selectable(),
+                  net_session_default_server());
     app->net = net_session_create();
     app->net_mode = false;
     app->net_state_seq = -1;
