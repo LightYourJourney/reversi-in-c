@@ -62,7 +62,7 @@ certbot certonly --webroot -w /var/www/acme \
 - `MemoryMax=256M`：服务端上限为 48 连接 × 16 KB 发送缓冲 + 32 房间，
   正常占用远低于此；超限重启可防止泄漏累积。
 - `KillSignal=SIGTERM`：进程收到信号后广播 `roomclosed status=shutdown`，
-  刷出队列后以退出码 0 结束（本地实测见 §7）。
+  最多用 1 秒排空发送队列后以退出码 0 结束（本地实测见 §7）。
 - `LimitNOFILE=4096` 覆盖 48 连接 + 监听套接字 + nginx 侧连接。
 
 发布包同时包含服务端（`bin/reversi_server`）与 Web 客户端（`web/`，由

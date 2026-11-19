@@ -34,9 +34,11 @@ typedef struct SavedGame {
 const char *save_status_message(SaveStatus status);
 
 /*
- * Writes a complete match. The move list is the current history branch, so
- * undo/redo state is preserved exactly; loading always resumes at a decision
- * point. Any consistent match phase may be saved.
+ * Writes a match that started from the standard opening (any other root is
+ * refused with SAVE_STATUS_STATE, since loading replays from the opening).
+ * The move list ends at the current position: moves undone but not redone
+ * are not saved, and loading resumes at a decision point. Any consistent
+ * match phase may be saved.
  */
 SaveStatus save_write(const char *path, const Match *match, int difficulty);
 

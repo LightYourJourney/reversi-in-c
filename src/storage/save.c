@@ -99,6 +99,14 @@ SaveStatus save_write(const char *path, const Match *match, int difficulty)
         || history->current > REVERSI_SAVE_MAX_MOVES) {
         return SAVE_STATUS_STATE;
     }
+    /* save_read replays the moves from the standard opening; a match that
+     * began anywhere else would write a file that can never load. */
+    GameState opening;
+    game_init(&opening);
+    if (history->count <= 0
+        || !game_state_equal(&history->entries[0].state, &opening)) {
+        return SAVE_STATUS_STATE;
+    }
 
     char payload[REVERSI_SAVE_PAYLOAD_CAP];
     TextBuilder builder = {

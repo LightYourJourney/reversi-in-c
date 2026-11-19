@@ -200,6 +200,28 @@ static void test_pve_round_trip(TestStats *stats)
     (void)storage_remove(path);
 }
 
+static void test_refuse_custom_root(TestStats *stats)
+{
+    /* A save is replayed from the standard opening, so a match that began
+     * elsewhere (a mid-game position, an online game) must be refused
+     * rather than written as a file that can never be loaded. */
+    const char *path = "test-save-custom.rvs";
+    (void)storage_remove(path);
+    Match source;
+    const MatchConfig config = pvp_config();
+    REVERSI_TEST_ASSERT(stats, match_start(&source, &config));
+    play_move(stats, &source, first_legal_move(&source));
+    play_move(stats, &source, first_legal_move(&source));
+
+    Match custom;
+    REVERSI_TEST_ASSERT(stats, match_start_from(&custom, &config,
+                                                &source.state));
+    play_move(stats, &custom, first_legal_move(&custom));
+    REVERSI_TEST_ASSERT(stats, save_write(path, &custom, 0)
+        == SAVE_STATUS_STATE);
+    REVERSI_TEST_ASSERT(stats, !storage_exists(path));
+}
+
 static void test_reject_bad_files(TestStats *stats)
 {
     const char *path = "test-save-bad.rvs";
@@ -397,6 +419,7 @@ int main(void)
 
     REVERSI_RUN_TEST(&stats, test_round_trip);
     REVERSI_RUN_TEST(&stats, test_pve_round_trip);
+    REVERSI_RUN_TEST(&stats, test_refuse_custom_root);
     REVERSI_RUN_TEST(&stats, test_reject_bad_files);
     REVERSI_RUN_TEST(&stats, test_status_messages);
     REVERSI_RUN_TEST(&stats, test_storage_path);

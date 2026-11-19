@@ -43,6 +43,7 @@ typedef socklen_t NetSockLen;
 #define REVERSI_NET_SERVER_MAX_CONNECTIONS 48
 #define REVERSI_NET_SERVER_MAX_ROOMS 32
 #define REVERSI_NET_SERVER_READ_CAP 8192
+#define REVERSI_NET_SERVER_SHUTDOWN_DRAIN_MS 1000
 #define REVERSI_NET_SERVER_SEND_CAP 16384
 #define REVERSI_NET_SERVER_TOKEN_CAP 40
 #define REVERSI_NET_SERVER_TOKEN_RATE 20
@@ -110,7 +111,6 @@ struct NetServer {
     bool started;
     ServerConnection connections[REVERSI_NET_SERVER_MAX_CONNECTIONS];
     ServerRoom rooms[REVERSI_NET_SERVER_MAX_ROOMS];
-    uint64_t rng;
 };
 
 static uint64_t now_ms(void)
@@ -140,16 +140,6 @@ static bool os_random(uint8_t *buffer, size_t length)
     fclose(file);
     return read == length;
 #endif
-}
-
-static uint64_t next_rng(NetServer *server)
-{
-    uint64_t x = server->rng;
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    server->rng = x;
-    return x * 0x2545F4914F6CDD1DULL;
 }
 
 static void log_line(NetServer *server, const char *format, ...)
@@ -374,9 +364,7 @@ static bool generate_code(NetServer *server, char out[7])
     for (int attempt = 0; attempt < 100; ++attempt) {
         uint8_t bytes[REVERSI_NET_CODE_LEN];
         if (!os_random(bytes, sizeof(bytes))) {
-            for (size_t i = 0; i < sizeof(bytes); ++i) {
-                bytes[i] = (uint8_t)next_rng(server);
-            }
+            return false;
         }
         for (int i = 0; i < REVERSI_NET_CODE_LEN; ++i) {
             out[i] = ALPHABET[bytes[i] % (sizeof(ALPHABET) - 1)];
@@ -389,13 +377,14 @@ static bool generate_code(NetServer *server, char out[7])
     return false;
 }
 
-static bool generate_token(NetServer *server, char out[33])
+/* Tokens and room codes come only from the OS generator: a predictable
+ * fallback would let anyone guess a seat. Without it the request fails
+ * ("server_busy") instead of degrading silently. */
+static bool generate_token(char out[33])
 {
     uint8_t bytes[16];
     if (!os_random(bytes, sizeof(bytes))) {
-        for (size_t i = 0; i < sizeof(bytes); ++i) {
-            bytes[i] = (uint8_t)next_rng(server);
-        }
+        return false;
     }
     static const char HEX[] = "0123456789abcdef";
     for (size_t i = 0; i < sizeof(bytes); ++i) {
@@ -650,6 +639,11 @@ static void handle_rejoin(NetServer *server, int connection,
                 || strcmp(player->token, message->token) != 0) {
                 continue;
             }
+            char token[REVERSI_NET_TOKEN_LEN + 1];
+            if (!generate_token(token)) {
+                send_error(server, connection, "server_busy");
+                return;
+            }
             if (player->connection >= 0) {
                 /* The token holder owns the seat. The old socket can be a
                  * half-open connection the server has not reaped yet, so a
@@ -670,7 +664,7 @@ static void handle_rejoin(NetServer *server, int connection,
             if (!room->playing && !room->finished) {
                 room->expires = now + (uint64_t)server->config.room_wait_ms;
             }
-            generate_token(server, player->token);
+            memcpy(player->token, token, sizeof(token));
             NetMessage welcome = {
                 .type = NET_MSG_WELCOME,
                 .version = REVERSI_NET_VERSION,
@@ -714,7 +708,8 @@ static void handle_create(NetServer *server, int connection,
     ServerRoom *room = &server->rooms[index];
     room_reset(room);
     char generated[REVERSI_NET_CODE_LEN + 1];
-    if (!generate_code(server, generated)) {
+    char token[REVERSI_NET_TOKEN_LEN + 1];
+    if (!generate_code(server, generated) || !generate_token(token)) {
         send_error(server, connection, "server_busy");
         return;
     }
@@ -723,7 +718,7 @@ static void handle_create(NetServer *server, int connection,
     room->players[0].seated = true;
     room->players[0].color = message->color;
     room->players[0].connection = connection;
-    generate_token(server, room->players[0].token);
+    memcpy(room->players[0].token, token, sizeof(token));
     conn->room = index;
     conn->seat = 0;
     room->expires = now_ms() + (uint64_t)server->config.room_wait_ms;
@@ -767,10 +762,15 @@ static void handle_join(NetServer *server, int connection,
             join_rejected(server, connection, "color_taken");
             return;
         }
+        char token[REVERSI_NET_TOKEN_LEN + 1];
+        if (!generate_token(token)) {
+            send_error(server, connection, "server_busy");
+            return;
+        }
         room->players[seat].seated = true;
         room->players[seat].color = message->color;
         room->players[seat].connection = connection;
-        generate_token(server, room->players[seat].token);
+        memcpy(room->players[seat].token, token, sizeof(token));
         room->expires = now_ms() + (uint64_t)server->config.room_wait_ms;
         conn->room = index;
         conn->seat = seat;
@@ -1198,15 +1198,6 @@ NetServer *net_server_create(const NetServerConfig *config)
     for (int i = 0; i < REVERSI_NET_SERVER_MAX_ROOMS; ++i) {
         room_reset(&server->rooms[i]);
     }
-    uint8_t seed[8];
-    if (os_random(seed, sizeof(seed))) {
-        memcpy(&server->rng, seed, sizeof(server->rng));
-    } else {
-        server->rng = now_ms() ^ 0x9E3779B97F4A7C15ULL;
-    }
-    if (server->rng == 0) {
-        server->rng = 1;
-    }
     return server;
 }
 
@@ -1399,11 +1390,40 @@ void net_server_shutdown(NetServer *server)
     }
     log_line(server, "shutdown: closed %d room(s)", closed);
     server->started = false;
-    /* Best-effort flush: sockets are closed by net_server_destroy. */
-    for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
-        if (server->connections[i].state != CONNECTION_FREE) {
+    /* Drain queued bytes (the roomclosed notices) for a bounded time; a
+     * peer that stops reading cannot hold the shutdown open. Sockets are
+     * closed by net_server_destroy. */
+    const uint64_t deadline = now_ms() + REVERSI_NET_SERVER_SHUTDOWN_DRAIN_MS;
+    for (;;) {
+        fd_set write_set;
+        FD_ZERO(&write_set);
+        NetSocket maximum = 0;
+        bool pending = false;
+        for (int i = 0; i < REVERSI_NET_SERVER_MAX_CONNECTIONS; ++i) {
+            ServerConnection *connection = &server->connections[i];
+            if (connection->state == CONNECTION_FREE || connection->closing) {
+                continue;
+            }
             connection_flush(server, i);
+            if (connection->closing || connection->output_length == 0) {
+                continue;
+            }
+            FD_SET(connection->socket, &write_set);
+            if (!pending || connection->socket > maximum) {
+                maximum = connection->socket;
+            }
+            pending = true;
         }
+        const uint64_t now = now_ms();
+        if (!pending || now >= deadline) {
+            break;
+        }
+        const uint64_t left = deadline - now;
+        struct timeval timeout = {
+            .tv_sec = 0,
+            .tv_usec = (long)(left < 50 ? left : 50) * 1000
+        };
+        (void)select((int)maximum + 1, NULL, &write_set, NULL, &timeout);
     }
 }
 

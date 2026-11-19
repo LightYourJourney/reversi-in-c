@@ -397,7 +397,12 @@ static bool tls_handshake(NetClient *client, const char **reason)
         }
     } else {
         SSL_set_tlsext_host_name(ssl, client->host);
+#if OPENSSL_VERSION_NUMBER >= 0x40000000L
+        /* OpenSSL 4 deprecates SSL_set1_host for DNS names. */
+        if (SSL_set1_dnsname(ssl, client->host) != 1) {
+#else
         if (SSL_set1_host(ssl, client->host) != 1) {
+#endif
             *reason = "tls_certificate_invalid";
             return false;
         }
