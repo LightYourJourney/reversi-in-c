@@ -238,10 +238,15 @@ async function withPage(browser, fn, options) {
           await page.waitForTimeout(20);
         }
         assert(workers.length > 0, 'no Web Worker was created');
-        await page.evaluate(() => window.__reversiTest.cancelAi());
-        await page.waitForTimeout(400);
-        const aiActive = await page.evaluate(() => window.__reversiTest.aiActive());
+        /* Checked in the same task as the cancel: on the next frame the game
+         * loop starts a fresh search for the computer's turn, so a later
+         * check only passes when that search happens to finish first. */
+        const aiActive = await page.evaluate(() => {
+          window.__reversiTest.cancelAi();
+          return window.__reversiTest.aiActive();
+        });
         assert(!aiActive, 'AI still active after cancel');
+        await page.waitForTimeout(400);
         let terminated = false;
         try {
           await workers[0].evaluate(() => 1);
