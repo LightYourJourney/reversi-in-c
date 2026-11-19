@@ -161,5 +161,4 @@ void experiment_result_free(ExperimentResult *result);
 bool experiment_write_all(const ExperimentResult *result, const char *dir,
                           char *error, size_t error_size);
 
-
 #endif

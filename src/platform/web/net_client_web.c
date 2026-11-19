@@ -38,7 +38,6 @@ struct NetClient {
 
 static NetClient *g_web_client = NULL;
 
-
 EM_JS(void, reversi_web_net_connect, (const char *host, int port), {
     var scheme = globalThis.location
         && globalThis.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -191,6 +190,9 @@ void net_client_disconnect(NetClient *client)
         return;
     }
     reversi_web_net_close();
+    /* Messages from the closed connection must not reach the caller. */
+    client->head = 0;
+    client->count = 0;
     web_set_status(client, NET_CLIENT_IDLE, "closed");
 }
 

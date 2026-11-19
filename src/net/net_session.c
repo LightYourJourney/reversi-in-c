@@ -151,14 +151,17 @@ static void apply_state(NetSession *session, const NetMessage *message)
         ? NET_SESSION_PLAYING : NET_SESSION_FINISHED;
 }
 
+/* The seat is gone: nothing to rejoin, no room code to show. */
+static void forget_room(NetSession *session)
+{
+    session->active = false;
+    session->token[0] = '\0';
+    session->code[0] = '\0';
+}
+
 static void on_message(void *context, const NetMessage *message)
 {
     NetSession *session = context;
-    /* Messages still queued behind a failure (for example after an
-     * incompatible welcome) must not revive the session. */
-    if (session->phase == NET_SESSION_FAILED) {
-        return;
-    }
     switch (message->type) {
     case NET_MSG_WELCOME:
         if (message->version != REVERSI_NET_VERSION) {
@@ -168,9 +171,7 @@ static void on_message(void *context, const NetMessage *message)
                      "Server speaks protocol v%d; this build needs v%d",
                      message->version, REVERSI_NET_VERSION);
             net_client_disconnect(session->client);
-            session->active = false;
-            session->token[0] = '\0';
-            session->code[0] = '\0';
+            forget_room(session);
             session->phase = NET_SESSION_FAILED;
             break;
         }
@@ -224,9 +225,7 @@ static void on_message(void *context, const NetMessage *message)
         if (strcmp(message->error, "rejoin_failed") == 0) {
             /* The room is gone (restart/expiry); the lobby must not keep
              * showing its code or the old opponent state. */
-            session->active = false;
-            session->token[0] = '\0';
-            session->code[0] = '\0';
+            forget_room(session);
             session->opponent_status[0] = '\0';
             session->phase = NET_SESSION_LOBBY;
         }
@@ -239,9 +238,7 @@ static void on_message(void *context, const NetMessage *message)
                      message->status);
             session->phase = NET_SESSION_LOBBY;
         }
-        session->active = false;
-        session->code[0] = '\0';
-        session->token[0] = '\0';
+        forget_room(session);
         break;
     case NET_MSG_PONG:
         session->latency_ms = (int)(now_ms() - session->ping_sent_ms);

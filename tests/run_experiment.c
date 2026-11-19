@@ -6,9 +6,6 @@
 /* Human-readable summary; printing belongs to the tool, not the library. */
 static void print_summary(const ExperimentResult *result)
 {
-    if (result == NULL) {
-        return;
-    }
     const ExperimentSummary *s = &result->summary;
     printf("Experiment %s: %d games (%d completed)\n",
            result->config.name, s->games, s->completed);

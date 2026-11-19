@@ -59,9 +59,11 @@ static void test_rejects_bad_input(TestStats *stats)
     NetMessage out;
     REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
         "bogus", NET_DIRECTION_CLIENT_TO_SERVER, &out));
-    REVERSI_TEST_ASSERT(stats, !net_protocol_decode(
+    /* Any version decodes; the server refuses a foreign hello itself
+     * (net.server), and the client explains a foreign welcome. */
+    REVERSI_TEST_ASSERT(stats, net_protocol_decode(
         "hello v=2", NET_DIRECTION_CLIENT_TO_SERVER, &out));
-    /* A foreign welcome decodes so the client can explain the mismatch. */
+    REVERSI_TEST_ASSERT(stats, out.version == 2);
     REVERSI_TEST_ASSERT(stats, net_protocol_decode(
         "welcome v=2 token=0123456789abcdef0123456789abcdef player=1",
         NET_DIRECTION_SERVER_TO_CLIENT, &out));

@@ -5,8 +5,8 @@
  */
 importScripts('ai_worker.js');
 
+// null while loading, the module once loaded, false if it failed to load.
 var moduleReady = null;
-var moduleFailed = false;
 var queue = [];
 
 function handle(data) {
@@ -28,7 +28,7 @@ function handle(data) {
 }
 
 self.onmessage = function (event) {
-  if (moduleReady || moduleFailed) {
+  if (moduleReady !== null) {
     handle(event.data || {});
   } else {
     queue.push(event.data || {});
@@ -42,7 +42,7 @@ createAiWorker().then(function (instance) {
   }
 }).catch(function () {
   // Fail each pending and future request instead of leaving it unanswered.
-  moduleFailed = true;
+  moduleReady = false;
   while (queue.length > 0) {
     handle(queue.shift());
   }

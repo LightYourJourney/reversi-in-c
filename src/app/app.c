@@ -66,6 +66,14 @@ typedef enum AppScreen {
     APP_SCREEN_NET
 } AppScreen;
 
+/* Whether the current match's result is in the statistics. */
+typedef enum AppStatsState {
+    APP_STATS_PENDING = 0, /* record it when the game ends */
+    APP_STATS_RECORDED,    /* recorded here; undo withdraws it */
+    APP_STATS_FROM_SAVE    /* a finished save, counted when first played:
+                              never recorded or withdrawn again */
+} AppStatsState;
+
 typedef enum PendingGameAction {
     PENDING_GAME_NONE = 0,
     PENDING_GAME_START,
@@ -128,10 +136,7 @@ typedef struct App {
     AiWorker *ai_worker;
     AiDifficulty ai_difficulty;
     unsigned ai_seed;
-    bool stats_recorded;
-    /* The finished game came from a save: it was counted when it was first
-     * played, so undo/redo/replay on it must not touch the statistics. */
-    bool stats_from_save;
+    AppStatsState stats_state;
     int pending_delete_row;
 } App;
 
@@ -369,8 +374,7 @@ static void app_init(App *app)
     app->ai_worker = NULL;
     app->ai_difficulty = AI_DIFFICULTY_MEDIUM;
     app->ai_seed = 0x51ED270Bu;
-    app->stats_recorded = true;
-    app->stats_from_save = false;
+    app->stats_state = APP_STATS_RECORDED;
     app->pending_delete_row = -1;
     app->saves_saving = false;
     app->saves_return = APP_SCREEN_MENU;
@@ -386,7 +390,7 @@ static void app_init(App *app)
         && strcmp(autoplay, "0") != 0;
     if (app->autoplay) {
         app->settings.animations = false;
-        app->stats_recorded = false;
+        app->stats_state = APP_STATS_PENDING;
         const unsigned long seed = strtoul(autoplay, NULL, 10);
         srand(seed != 0 ? (unsigned)seed : (unsigned)time(NULL));
     }
@@ -700,11 +704,11 @@ static void app_save_stats(App *app)
 
 static void app_unrecord_result(App *app, GameResult previous)
 {
-    if (!app->stats_recorded || previous == GAME_RESULT_ONGOING
-        || app->stats_from_save) {
+    if (app->stats_state != APP_STATS_RECORDED
+        || previous == GAME_RESULT_ONGOING) {
         return;
     }
-    app->stats_recorded = false;
+    app->stats_state = APP_STATS_PENDING;
     stats_unrecord(&app->stats, app->match.config.mode,
                    app->match.config.human_color, (int)app->ai_difficulty,
                    previous);
@@ -714,10 +718,10 @@ static void app_unrecord_result(App *app, GameResult previous)
 static void app_maybe_record_result(App *app)
 {
     if (app->match.state.result == GAME_RESULT_ONGOING
-        || app->stats_recorded) {
+        || app->stats_state != APP_STATS_PENDING) {
         return;
     }
-    app->stats_recorded = true;
+    app->stats_state = APP_STATS_RECORDED;
     stats_record(&app->stats, app->match.config.mode,
                  app->match.config.human_color, (int)app->ai_difficulty,
                  app->match.state.result);
@@ -762,8 +766,8 @@ static bool app_restore_saved(App *app, const char *path)
     app_cancel_ai(app);
     app->ai = ai;
     app->ai_difficulty = difficulty;
-    app->stats_recorded = app->match.phase == MATCH_PHASE_GAME_OVER;
-    app->stats_from_save = app->stats_recorded;
+    app->stats_state = app->match.phase == MATCH_PHASE_GAME_OVER
+        ? APP_STATS_FROM_SAVE : APP_STATS_PENDING;
     app->pending_action = PENDING_GAME_LOAD;
     app_notice(app, "Game loaded");
     app_request_screen(app, APP_SCREEN_GAME);
@@ -803,8 +807,7 @@ static void app_switch_screen(App *app, AppScreen target)
     case PENDING_GAME_START:
         if (match_start(&app->match, &app->pending_config)) {
             app_reset_match_ui(app);
-            app->stats_recorded = false;
-            app->stats_from_save = false;
+            app->stats_state = APP_STATS_PENDING;
             app_maybe_start_ai(app);
             app_autosave(app);
         } else {
@@ -850,8 +853,7 @@ static void app_begin_match(App *app, const MatchConfig *config)
     if (app->screen == APP_SCREEN_GAME && !app->transition.active) {
         if (match_start(&app->match, config)) {
             app_reset_match_ui(app);
-            app->stats_recorded = false;
-            app->stats_from_save = false;
+            app->stats_state = APP_STATS_PENDING;
             app_maybe_start_ai(app);
             app_autosave(app);
         }
@@ -860,8 +862,7 @@ static void app_begin_match(App *app, const MatchConfig *config)
 
     app->pending_config = *config;
     app->pending_action = PENDING_GAME_START;
-    app->stats_recorded = false;
-    app->stats_from_save = false;
+    app->stats_state = APP_STATS_PENDING;
     app_request_screen(app, APP_SCREEN_GAME);
 }
 
@@ -1148,8 +1149,7 @@ static void app_handle_modal_confirm(App *app)
         app_cancel_ai(app);
         if (match_restart(&app->match)) {
             app_reset_match_ui(app);
-            app->stats_recorded = false;
-            app->stats_from_save = false;
+            app->stats_state = APP_STATS_PENDING;
             app_maybe_start_ai(app);
             app_autosave(app);
         }
@@ -1250,7 +1250,7 @@ static bool app_build_net_match(App *app)
                             net->has_last, net->pass)) {
         return false;
     }
-    app->stats_recorded = true;
+    app->stats_state = APP_STATS_RECORDED;
     app->last_move_age = 0.0f;
     app->net_state_seq = net->seq;
     app->net_move_pending = false;
@@ -1504,7 +1504,8 @@ static void app_update_game(App *app, const UiInput *input, float dt)
         }
     }
 
-    if (match->phase == MATCH_PHASE_GAME_OVER && !app->stats_recorded) {
+    if (match->phase == MATCH_PHASE_GAME_OVER
+        && app->stats_state == APP_STATS_PENDING) {
         app_complete_game_over(app);
     }
 
@@ -2082,8 +2083,7 @@ void reversi_web_debug_autoplay(unsigned seed)
     App *app = &g_web_run.app;
     app->autoplay = true;
     app->settings.animations = false;
-    app->stats_recorded = false;
-    app->stats_from_save = false;
+    app->stats_state = APP_STATS_PENDING;
     srand(seed != 0 ? seed : (unsigned)time(NULL));
     app->screen = APP_SCREEN_GAME;
 }

@@ -34,7 +34,6 @@ struct AiWorker {
 static AiWorker *g_active_worker = NULL;
 static unsigned g_generation = 0;
 
-
 EM_JS(void, reversi_web_ai_post, (const char *request, unsigned generation), {
     function createWorker() {
         var worker = new Worker('ai_worker_boot.js');

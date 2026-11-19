@@ -10,7 +10,7 @@
 - **顺序强制**：会话中的第一条消息必须是 `hello`；先发其他消息返回
   `hello_required`，重复 `hello` 返回 `unexpected_message`。重连时同样
   先 `hello` 再 `rejoin`。
-- 版本不一致由服务端拒绝：`v≠1` 的 `hello` 在解码阶段即失败，服务端回
+- 版本不一致由服务端拒绝：解码器接受任意 `v`，服务端的 hello 处理对 `v≠1` 回
   通用的 `bad_message`（没有专门的版本错误码）。客户端收到 `v≠1` 的
   `welcome` 时断开连接，会话进入 FAILED，大厅显示
   “Server speaks protocol vN; this build needs v1”。

@@ -861,6 +861,12 @@ static void dispatch(NetServer *server, int connection, NetMessage *message)
 {
     ServerConnection *conn = &server->connections[connection];
     if (message->type == NET_MSG_HELLO) {
+        /* Protocol versions are not negotiated: a client speaking another
+         * one gets the generic refusal, as before the decoder parsed v. */
+        if (message->version != REVERSI_NET_VERSION) {
+            send_error(server, connection, "bad_message");
+            return;
+        }
         if (conn->hello_received) {
             send_error(server, connection, "unexpected_message");
             return;

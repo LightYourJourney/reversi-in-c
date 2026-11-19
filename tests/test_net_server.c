@@ -8,6 +8,7 @@
 #include "core/game.h"
 #include "core/rules.h"
 #include "test_harness.h"
+#include "test_socket.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,23 +17,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
-typedef SOCKET TestSocket;
-#define REVERSI_TEST_SOCKET_INVALID INVALID_SOCKET
-#else
-#include <arpa/inet.h>
+#if !defined(_WIN32)
 #include <errno.h>
 #include <fcntl.h>
-#include <netinet/in.h>
 #include <sys/select.h>
-#include <sys/socket.h>
-#include <time.h>
-#include <unistd.h>
-typedef int TestSocket;
-#define REVERSI_TEST_SOCKET_INVALID (-1)
 #endif
 
 typedef struct TestClient {
@@ -75,25 +63,10 @@ static uint64_t test_now_ms(void)
 #endif
 }
 
-static void test_sleep_ms(int ms)
-{
-#if defined(_WIN32)
-    Sleep((DWORD)ms);
-#else
-    struct timespec ts = {.tv_sec = ms / 1000,
-                          .tv_nsec = (long)(ms % 1000) * 1000000L};
-    nanosleep(&ts, NULL);
-#endif
-}
-
 static void test_close(TestClient *client)
 {
     if (client->socket != REVERSI_TEST_SOCKET_INVALID) {
-#if defined(_WIN32)
-        closesocket(client->socket);
-#else
-        close(client->socket);
-#endif
+        test_close_socket(client->socket);
         client->socket = REVERSI_TEST_SOCKET_INVALID;
     }
 }
@@ -106,15 +79,6 @@ static void test_nonblocking(TestSocket socket_fd)
 #else
     const int flags = fcntl(socket_fd, F_GETFL, 0);
     fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
-#endif
-}
-
-static void test_close_socket(TestSocket socket_fd)
-{
-#if defined(_WIN32)
-    closesocket(socket_fd);
-#else
-    close(socket_fd);
 #endif
 }
 
@@ -201,19 +165,7 @@ static bool test_send(TestClient *client, const NetMessage *message)
     const size_t length = net_ws_encode(
         0x1, (const uint8_t *)text, strlen(text), true, &client->rng, frame,
         sizeof(frame));
-    if (length == 0) {
-        return false;
-    }
-    size_t sent = 0;
-    while (sent < length) {
-        const int written = (int)send(client->socket, (const char *)frame + sent,
-                                      (int)(length - sent), 0);
-        if (written <= 0) {
-            return false;
-        }
-        sent += (size_t)written;
-    }
-    return true;
+    return length > 0 && test_send_raw(client->socket, frame, length);
 }
 
 static void test_read_available(TestClient *client)
@@ -871,21 +823,6 @@ static void test_rate_limit(TestStats *stats)
     net_server_destroy(server);
 }
 
-static bool test_send_raw(TestClient *client, const uint8_t *data,
-                          size_t length)
-{
-    size_t sent = 0;
-    while (sent < length) {
-        const int written = (int)send(client->socket, (const char *)data + sent,
-                                      (int)(length - sent), 0);
-        if (written <= 0) {
-            return false;
-        }
-        sent += (size_t)written;
-    }
-    return true;
-}
-
 static void test_control_frame_rate_limit(TestStats *stats)
 {
     /* Ping frames cost the server a pong each; they spend tokens too. */
@@ -904,7 +841,7 @@ static void test_control_frame_rate_limit(TestStats *stats)
         used += net_ws_encode(0x9, NULL, 0, true, &a.rng, burst + used,
                               sizeof(burst) - used);
     }
-    REVERSI_TEST_ASSERT(stats, test_send_raw(&a, burst, used));
+    REVERSI_TEST_ASSERT(stats, test_send_raw(a.socket, burst, used));
     NetMessage message;
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ERROR,
                                              &message, 2000));
@@ -932,29 +869,30 @@ static void test_partial_frame_then_burst(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_PONG,
                                              &message, 2000));
 
+    /* Five bad frames back to back; the first half of the first one
+     * arrives alone and sits in the server's buffer. */
     char garbage[2000];
     memset(garbage, 'x', sizeof(garbage));
-    static uint8_t frames[5][sizeof(garbage) + 16];
-    size_t lengths[5];
+    static uint8_t wire[5 * (sizeof(garbage) + 16)];
+    size_t used = 0;
+    size_t first = 0;
     for (int i = 0; i < 5; ++i) {
-        lengths[i] = net_ws_encode(0x1, (const uint8_t *)garbage,
-                                   sizeof(garbage), true, &a.rng, frames[i],
-                                   sizeof(frames[i]));
-        REVERSI_TEST_ASSERT(stats, lengths[i] > 0);
+        const size_t length = net_ws_encode(
+            0x1, (const uint8_t *)garbage, sizeof(garbage), true, &a.rng,
+            wire + used, sizeof(wire) - used);
+        REVERSI_TEST_ASSERT(stats, length > 0);
+        used += length;
+        if (i == 0) {
+            first = length;
+        }
     }
-    const size_t half = lengths[0] / 2;
-    REVERSI_TEST_ASSERT(stats, test_send_raw(&a, frames[0], half));
-    for (int i = 0; i < 50; ++i) {
+    const size_t half = first / 2;
+    REVERSI_TEST_ASSERT(stats, test_send_raw(a.socket, wire, half));
+    for (int i = 0; i < 5; ++i) {
         net_server_poll(server, 1);
     }
-    static uint8_t rest[5 * (sizeof(garbage) + 16)];
-    size_t used = lengths[0] - half;
-    memcpy(rest, frames[0] + half, used);
-    for (int i = 1; i < 5; ++i) {
-        memcpy(rest + used, frames[i], lengths[i]);
-        used += lengths[i];
-    }
-    REVERSI_TEST_ASSERT(stats, test_send_raw(&a, rest, used));
+    REVERSI_TEST_ASSERT(stats, test_send_raw(a.socket, wire + half,
+                                             used - half));
     int bad = 0;
     while (bad < 5 && client_expect(server, &a, NET_MSG_ERROR, &message,
                                     2000)) {
@@ -1197,6 +1135,12 @@ static void test_hello_order(TestStats *stats)
     REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ERROR,
                                              &message, 2000));
     REVERSI_TEST_ASSERT(stats, strcmp(message.error, "hello_required") == 0);
+
+    /* Another protocol version is refused and does not count as hello. */
+    test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 2});
+    REVERSI_TEST_ASSERT(stats, client_expect(server, &a, NET_MSG_ERROR,
+                                             &message, 2000));
+    REVERSI_TEST_ASSERT(stats, strcmp(message.error, "bad_message") == 0);
 
     test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});
     test_send(&a, &(NetMessage){.type = NET_MSG_HELLO, .version = 1});

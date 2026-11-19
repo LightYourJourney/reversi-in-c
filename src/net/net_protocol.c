@@ -17,7 +17,8 @@ typedef struct NetFieldSet {
     bool seq;
     bool result;
     bool pass;
-    bool last;
+    bool cell;  /* move: the square played */
+    bool last;  /* state: the last move, or "-" */
     bool board;
     bool player;
     bool host;
@@ -187,7 +188,7 @@ static void required_fields(NetMessageType type, NetFieldSet *set)
     case NET_MSG_HELLO: set->version = true; break;
     case NET_MSG_CREATE: set->color = true; break;
     case NET_MSG_JOIN: set->code = true; set->color = true; break;
-    case NET_MSG_MOVE: set->last = true; set->seq = true; break;
+    case NET_MSG_MOVE: set->cell = true; set->seq = true; break;
     case NET_MSG_REJOIN: set->token = true; break;
     case NET_MSG_WELCOME:
         set->version = true; set->token = true; set->player = true;
@@ -282,13 +283,10 @@ bool net_protocol_decode(const char *text, NetDirection direction,
         const char *value = equals + 1;
 
         if (strcmp(key, "v") == 0) {
+            /* Any version decodes; each side decides what it accepts (the
+             * server's hello handler, the client session's welcome). */
             int version = 0;
-            /* The server refuses a foreign hello outright. A welcome
-             * carrying another version still decodes, so the client can
-             * tell the player why instead of dropping it silently. */
-            if (seen.version || !parse_seq(value, &version)
-                || (out->type != NET_MSG_WELCOME
-                    && version != REVERSI_NET_VERSION)) {
+            if (seen.version || !parse_seq(value, &version)) {
                 return false;
             }
             out->version = version;
@@ -331,16 +329,15 @@ bool net_protocol_decode(const char *text, NetDirection direction,
             }
             seen.pass = true;
         } else if (strcmp(key, "cell") == 0) {
-            /* Both keys fill the same field; each belongs to one message
-             * type, so "move last=d3" or "state cell=d3" is malformed. */
-            if (seen.last || out->type != NET_MSG_MOVE
-                || !move_from_notation(value, &out->last)) {
+            /* Shares the move field with "last"; required_fields() decides
+             * which key each message type may carry. */
+            if (seen.cell || !move_from_notation(value, &out->last)) {
                 return false;
             }
             out->has_last = true;
-            seen.last = true;
+            seen.cell = true;
         } else if (strcmp(key, "last") == 0) {
-            if (seen.last || out->type != NET_MSG_STATE) {
+            if (seen.last) {
                 return false;
             }
             if (strcmp(value, "-") == 0) {
@@ -473,14 +470,14 @@ size_t net_protocol_encode(const NetMessage *message, char *buffer,
                          message->pass ? "1" : "0")) {
         return 0;
     }
-    if (fields.last) {
+    if (fields.cell || fields.last) {
         char notation[3];
         const char *value = "-";
         if (message->has_last && move_to_notation(message->last, notation)) {
             value = notation;
         }
-        const char *key = message->type == NET_MSG_MOVE ? "cell" : "last";
-        if (!encode_field(buffer, capacity, &used, key, value)) {
+        if (!encode_field(buffer, capacity, &used,
+                          fields.cell ? "cell" : "last", value)) {
             return 0;
         }
     }

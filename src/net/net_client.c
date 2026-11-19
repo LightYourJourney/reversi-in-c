@@ -736,7 +736,6 @@ static void *client_thread(void *argument)
     set_status(client, NET_CLIENT_CONNECTED, NULL);
     NetWsParser parser;
     net_ws_parser_init(&parser);
-    bool pending_frames = buffered > 0;
     while (!atomic_load(&client->stop)) {
         /* Drain the outbound queue before sleeping: queued frames are at
          * most one poll interval (20 ms) old. */
@@ -747,43 +746,9 @@ static void *client_thread(void *argument)
             set_status(client, NET_CLIENT_DISCONNECTED, "send_failed");
             break;
         }
-        /* Selecting keeps teardown join bounded: a blocked recv is not
-         * reliably interrupted by shutdown() from another thread on Windows. */
-        if (!pending_frames) {
-            const int ready = connection_has_buffered(client)
-                ? 1 : socket_wait_readable(socket_fd, 20);
-            if (ready == 0) {
-                continue;
-            }
-            if (ready < 0) {
-                set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
-                break;
-            }
-            /* Never full here: what stays buffered is less than one
-             * maximum frame, and the buffer holds two. */
-            const int read = connection_read(client, buffer + buffered,
-                                             sizeof(buffer) - buffered);
-            if (read == 0) {
-                /* A shutdown this client asked for already carries its own
-                 * reason; do not overwrite it with "closed". */
-                if (!atomic_load(&client->stop)) {
-                    set_status(client, NET_CLIENT_DISCONNECTED, "closed");
-                }
-                break;
-            }
-            if (read < 0) {
-                if (read == -2) {
-                    continue;
-                }
-                if (!atomic_load(&client->stop)) {
-                    set_status(client, NET_CLIENT_DISCONNECTED,
-                               "socket_error");
-                }
-                break;
-            }
-            buffered += (size_t)read;
-        }
-        pending_frames = false;
+        /* Parse what is buffered before waiting: the handshake may have
+         * brought frames along, and a frame split across reads waits here
+         * for the rest. */
         size_t offset = 0;
         while (offset < buffered) {
             NetWsFrame frame;
@@ -829,6 +794,42 @@ static void *client_thread(void *argument)
         }
         memmove(buffer, buffer + offset, buffered - offset);
         buffered -= offset;
+        if (atomic_load(&client->stop)) {
+            break;
+        }
+        /* Selecting keeps teardown join bounded: a blocked recv is not
+         * reliably interrupted by shutdown() from another thread on Windows. */
+        const int ready = connection_has_buffered(client)
+            ? 1 : socket_wait_readable(socket_fd, 20);
+        if (ready == 0) {
+            continue;
+        }
+        if (ready < 0) {
+            set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
+            break;
+        }
+        /* Never full here: what stays buffered is less than one
+         * maximum frame, and the buffer holds two. */
+        const int read = connection_read(client, buffer + buffered,
+                                         sizeof(buffer) - buffered);
+        if (read == 0) {
+            /* A shutdown this client asked for already carries its own
+             * reason; do not overwrite it with "closed". */
+            if (!atomic_load(&client->stop)) {
+                set_status(client, NET_CLIENT_DISCONNECTED, "closed");
+            }
+            break;
+        }
+        if (read < 0) {
+            if (read == -2) {
+                continue;
+            }
+            if (!atomic_load(&client->stop)) {
+                set_status(client, NET_CLIENT_DISCONNECTED, "socket_error");
+            }
+            break;
+        }
+        buffered += (size_t)read;
     }
 #if REVERSI_NET_CLIENT_TLS
     tls_release(client);
@@ -998,6 +999,12 @@ void net_client_disconnect(NetClient *client)
     }
     unlock_client(client);
     thread_join(client);
+    /* Messages from the closed connection must not reach the caller after
+     * it chose to disconnect (net_client_poll may be draining right now). */
+    lock_client(client);
+    client->queue_head = 0;
+    client->queue_count = 0;
+    unlock_client(client);
     set_status(client, NET_CLIENT_IDLE, NULL);
 }
 

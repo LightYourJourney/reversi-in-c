@@ -15,17 +15,11 @@
 
 #include "net/net_client.h"
 #include "test_harness.h"
+#include "test_socket.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#else
-#include <time.h>
-#endif
 
 typedef struct Events {
     NetClientStatus status;
@@ -48,24 +42,14 @@ static void on_status(void *context, NetClientStatus status,
     }
 }
 
-static void sleep_ms(int ms)
-{
-#if defined(_WIN32)
-    Sleep((DWORD)ms);
-#else
-    struct timespec ts = {.tv_sec = ms / 1000,
-                          .tv_nsec = (long)(ms % 1000) * 1000000L};
-    nanosleep(&ts, NULL);
-#endif
-}
-
 static void test_public_certificates(TestStats *stats)
 {
     struct {
         const char *host;
-        const char *reason;   /* NULL means "chain must verify" */
+        const char *reason;
     } cases[] = {
-        {"example.com", NULL},
+        /* A verified chain gets as far as the WebSocket upgrade. */
+        {"example.com", "handshake_failed"},
         {"expired.badssl.com", "tls_certificate_invalid"},
         {"self-signed.badssl.com", "tls_certificate_invalid"},
     };
@@ -87,12 +71,14 @@ static void test_public_certificates(TestStats *stats)
             for (int elapsed = 0; elapsed < 10000
                  && events.status != NET_CLIENT_FAILED; elapsed += 10) {
                 net_client_poll(client);
-                sleep_ms(10);
+                test_sleep_ms(10);
             }
             if (strcmp(events.reason, "tls_handshake_failed") != 0) {
                 break;
             }
-            sleep_ms(1000);
+            if (attempt < 2) {
+                test_sleep_ms(1000);
+            }
         }
         /* Reachability failures are the environment's problem, not the
          * client's: skip instead of inventing a pass. */
@@ -103,8 +89,7 @@ static void test_public_certificates(TestStats *stats)
             net_client_destroy(client);
             continue;
         }
-        const char *expected = cases[i].reason != NULL ? cases[i].reason
-                                                       : "handshake_failed";
+        const char *expected = cases[i].reason;
         if (strcmp(events.reason, expected) != 0) {
             fprintf(stderr, "  %s: expected %s, got status %d reason %s\n",
                     cases[i].host, expected, (int)events.status,

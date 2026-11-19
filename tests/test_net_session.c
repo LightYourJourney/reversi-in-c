@@ -7,47 +7,12 @@
 #include "net/net_session.h"
 #include "net/net_ws.h"
 #include "test_harness.h"
+#include "test_socket.h"
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-typedef SOCKET TestSocket;
-#define REVERSI_TEST_SOCKET_INVALID INVALID_SOCKET
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-typedef int TestSocket;
-#define REVERSI_TEST_SOCKET_INVALID (-1)
-#endif
-
-static void close_test_socket(TestSocket socket_fd)
-{
-#if defined(_WIN32)
-    closesocket(socket_fd);
-#else
-    close(socket_fd);
-#endif
-}
-
-static void test_sleep_ms(int ms)
-{
-#if defined(_WIN32)
-    Sleep((DWORD)ms);
-#else
-    struct timespec ts = {.tv_sec = ms / 1000,
-                          .tv_nsec = (long)(ms % 1000) * 1000000L};
-    nanosleep(&ts, NULL);
-#endif
-}
 
 static bool wait_phase(NetServer *server, NetSession *a, NetSession *b,
                        NetSessionPhase phase, int timeout_ms)
@@ -263,11 +228,8 @@ static void test_session_lobby_server_loss(TestStats *stats)
 
     net_server_destroy(server);
     /* The status flips on the I/O thread; the session hears it on poll. */
-    for (int elapsed = 0; elapsed < 2000 && a->phase == NET_SESSION_LOBBY;
-         ++elapsed) {
-        net_session_update(a, 0.002f);
-        test_sleep_ms(1);
-    }
+    REVERSI_TEST_ASSERT(stats, wait_phase(NULL, a, NULL, NET_SESSION_IDLE,
+                                          2000));
     REVERSI_TEST_ASSERT(stats,
         net_client_status(a->client) == NET_CLIENT_DISCONNECTED);
     REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_IDLE);
@@ -284,46 +246,15 @@ static void test_session_version_mismatch(TestStats *stats)
      * session with a reason the player can read, not leave it hanging. */
     NetSession *a = net_session_create();   /* WSAStartup on Windows */
     REVERSI_TEST_ASSERT(stats, a != NULL);
-    TestSocket listener = socket(AF_INET, SOCK_STREAM, 0);
+    int port = 0;
+    TestSocket listener = test_listen_loopback(0, &port);
     REVERSI_TEST_ASSERT(stats, listener != REVERSI_TEST_SOCKET_INVALID);
-    struct sockaddr_in address;
-    memset(&address, 0, sizeof(address));
-    address.sin_family = AF_INET;
-    inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
-    REVERSI_TEST_ASSERT(stats, bind(listener, (struct sockaddr *)&address,
-                                    sizeof(address)) == 0);
-    REVERSI_TEST_ASSERT(stats, listen(listener, 1) == 0);
-#if defined(_WIN32)
-    int address_length = (int)sizeof(address);
-#else
-    socklen_t address_length = sizeof(address);
-#endif
-    REVERSI_TEST_ASSERT(stats, getsockname(listener,
-        (struct sockaddr *)&address, &address_length) == 0);
-    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1",
-                                                   ntohs(address.sin_port)));
-    TestSocket server = accept(listener, NULL, NULL);
-    REVERSI_TEST_ASSERT(stats, server != REVERSI_TEST_SOCKET_INVALID);
-
-    char request[2048];
-    size_t used = 0;
-    while (used < sizeof(request) - 1) {
-        const int read = (int)recv(server, request + used,
-                                   (int)(sizeof(request) - 1 - used), 0);
-        if (read <= 0) {
-            break;
-        }
-        used += (size_t)read;
-        request[used] = '\0';
-        if (strstr(request, "\r\n\r\n") != NULL) {
-            break;
-        }
-    }
-    char key[25];
+    REVERSI_TEST_ASSERT(stats, net_session_connect(a, "127.0.0.1", port));
     char response[256];
-    REVERSI_TEST_ASSERT(stats, net_ws_parse_handshake(request, used, key));
-    REVERSI_TEST_ASSERT(stats, net_ws_build_handshake_response(key, response));
-    send(server, response, (int)strlen(response), 0);
+    TestSocket server = test_accept_websocket(listener, response);
+    REVERSI_TEST_ASSERT(stats, server != REVERSI_TEST_SOCKET_INVALID);
+    REVERSI_TEST_ASSERT(stats,
+        test_send_raw(server, response, strlen(response)));
 
     static const char welcome[] =
         "welcome v=2 token=0123456789abcdef0123456789abcdef player=1";
@@ -332,20 +263,15 @@ static void test_session_version_mismatch(TestStats *stats)
                                         strlen(welcome), false, NULL, frame,
                                         sizeof(frame));
     REVERSI_TEST_ASSERT(stats, length > 0);
-    send(server, (const char *)frame, (int)length, 0);
-
-    for (int elapsed = 0; elapsed < 3000 && a->phase != NET_SESSION_FAILED;
-         ++elapsed) {
-        net_session_update(a, 0.002f);
-        test_sleep_ms(1);
-    }
-    REVERSI_TEST_ASSERT(stats, a->phase == NET_SESSION_FAILED);
+    REVERSI_TEST_ASSERT(stats, test_send_raw(server, frame, length));
+    REVERSI_TEST_ASSERT(stats, wait_phase(NULL, a, NULL, NET_SESSION_FAILED,
+                                          3000));
     REVERSI_TEST_ASSERT(stats, strstr(a->error, "v2") != NULL);
     REVERSI_TEST_ASSERT(stats, !a->active);
     REVERSI_TEST_ASSERT(stats, a->token[0] == '\0');
 
-    close_test_socket(server);
-    close_test_socket(listener);
+    test_close_socket(server);
+    test_close_socket(listener);
     net_session_destroy(a);
 }
 
