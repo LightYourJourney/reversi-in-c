@@ -38,7 +38,7 @@ version 1
 name tt-vs-nott
 seed 20261025
 games 8
-openings 2
+openings 4
 opening-ply 4
 max-plies 100
 engine-a kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=on endgame=off label=TT
@@ -49,6 +49,10 @@ engine-b kind=search difficulty=hard depth=6 time=2000 nodes=0 tt=off endgame=of
 
 - `games` 必须为偶数：每两局共享同一开局并交换黑白。
 - `openings` 个开局由 `seed` 派生，使用合法随机着法生成到 `opening-ply`。
+- 必须满足 `games ≤ 2 × openings`，否则拒绝：每一对换色对局用自己的开局。
+  若开局被复用，确定性引擎（固定深度/节点）会逐步重演同一局，副本却会被
+  当成独立样本计入 n。剩余风险：`opening-ply` 很小时，不同种子可能随机到
+  同一局面（如 2 ply 只有 12 种），生成器不去重。
 - 每个引擎的随机流由**实验种子、引擎 seed、局号与引擎编号**共同派生；
   固定这些值即可复现 Random 与 Easy 的随机性。
 - `max-plies` 是安全上限；达到时记为 `aborted`，不当作平局。
@@ -173,4 +177,13 @@ Python，未为实验平台引入新的运行时依赖。
 - 进程崩溃不会留下部分原始数据。
 - Elo 只适用于双引擎对局；不构建多引擎对手池。
 - 性能回归需要手动运行 `compare-experiments.py`；不同机器的耗时不可比。
-- 区间以配对开局为单位；8 局实验只有 4 个独立单位，区间很宽。
+- 区间以配对开局为单位；8 局实验只有 4 个独立单位，区间很宽。2026-11-19
+  之前提交的结果用 `openings 2` 跑 8 局，后 4 局是前 4 局的副本、区间偏窄；
+  已按新约束重跑（`scripts/run-experiments.sh`，2026-11-19）。结论变化：
+  depth-4-vs-6 由 A 分 0.250 / Elo −191 变为 0.125 / −338 [−750, +74]；
+  eval-full-vs-basic 由 0.500 / +0 变为 0.750 / +191 [−147, +528]；
+  fixed-time-150ms 由 0.375 / −89 变为 0.500 / +0（1 局超时）；easy-vs-hard
+  8 局全负。所有区间仍很宽，跨越 0 的结论不能当作强度差异。
+- 两个引擎的着法选择完全相同时（如 `tt-vs-nott`：置换表不改变固定深度的
+  结果；`node-budget-20k`：A/B 配置相同），换色的两局会逐步相同。这不是开局
+  复用；区间以“对”为单位，这样的对仍只计一次。

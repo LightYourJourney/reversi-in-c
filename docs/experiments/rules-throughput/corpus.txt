@@ -1,40 +1,40 @@
 Command: build-release/bin/reversi_ai_corpus
-Date: 2026-10-26T07:41:15Z
+Date: 2026-11-19T06:14:28Z
 
 Reversi AI corpus benchmark
 micro iterations per position: 10000
 fixed search: Medium depth 6, no TT; practical: Hard default (500 ms budget)
 
 position           empty scalar-gen scalar-play     bb-gen    bb-play
-opening               60    17192.1      230.7        4.3        8.1
-midgame-40            40     9849.8     1018.7        9.3      497.4
-midgame-30            30     7115.2      725.5       13.8        8.6
-corner-contest        52    14842.1      418.6      978.4       10.0
-mobility-<=3          59    19632.7       43.3        6.5      197.2
-must-pass             12     3357.1        0.0       16.8       -1.0
-terminal               0     1340.5        0.0       24.4       -1.0
-endgame-20            20     3933.6      469.6       30.4       14.4
-endgame-12            12     3350.2       47.6      110.2        8.5
-endgame-10            10     3834.4     1467.6       23.1        8.8
-endgame-8              8     1864.3       55.9       17.9        8.0
-endgame-6              6     1609.3     1696.5       20.4        9.1
-endgame-4              4     2154.1      638.4      147.8        8.0
-endgame-2              2     3238.0      322.7      169.7       10.9
+opening               60     2984.7       61.6        8.9       10.5
+midgame-40            40     1780.5       81.8       14.8       11.8
+midgame-30            30     1708.2       70.9       19.8       68.1
+corner-contest        52     2505.8       81.8       11.1       14.8
+mobility-<=3          59     3632.7       71.9       13.0       11.4
+must-pass             12      942.9        0.0       23.3       -1.0
+terminal               0       54.5        0.0       36.2       -1.0
+endgame-20            20     1390.8       81.9       30.2       14.8
+endgame-12            12      625.2       70.9       27.7       10.3
+endgame-10            10      843.2       63.2       35.5       17.6
+endgame-8              8      470.0       83.5       29.7      108.0
+endgame-6              6      531.4       87.0       36.9       13.6
+endgame-4              4     2826.7     1496.5       24.9      239.1
+endgame-2              2      121.6      299.8       26.9       70.4
 
 search (ns/op above; times below)
-opening            fixed6=ok nodes=1820      ms=91.000 nps=20000 | hard=ok depth=7 nodes=9216      ms=514.3 cut=24.6% tt=66
-midgame-40         fixed6=ok nodes=39686     ms=1907.452 nps=20806 | hard=ok depth=6 nodes=14336     ms=533.0 cut=24.3% tt=130
-midgame-30         fixed6=ok nodes=89997     ms=4918.066 nps=18299 | hard=ok depth=5 nodes=12288     ms=582.4 cut=13.9% tt=171
-corner-contest     fixed6=ok nodes=15200     ms=949.765 nps=16004 | hard=ok depth=6 nodes=8192      ms=568.7 cut=20.4% tt=47
-mobility-<=3       fixed6=ok nodes=1752      ms=138.207 nps=12677 | hard=ok depth=8 nodes=11264     ms=575.3 cut=20.2% tt=56
+opening            fixed6=ok nodes=1820      ms=29.989 nps=60689 | hard=ok depth=8 nodes=32768     ms=741.3 cut=20.3% tt=229
+midgame-40         fixed6=ok nodes=39686     ms=1278.064 nps=31052 | hard=ok depth=7 nodes=75776     ms=501.7 cut=15.5% tt=995
+midgame-30         fixed6=ok nodes=89997     ms=518.232 nps=173662 | hard=ok depth=7 nodes=84992     ms=501.1 cut=21.4% tt=1690
+corner-contest     fixed6=ok nodes=15200     ms=346.214 nps=43903 | hard=ok depth=6 nodes=8192      ms=552.0 cut=20.4% tt=47
+mobility-<=3       fixed6=ok nodes=1752      ms=15.429 nps=113552 | hard=ok depth=8 nodes=9760      ms=502.8 cut=20.8% tt=52
 must-pass          search=skip
 terminal           search=skip
-endgame-20         fixed6=ok nodes=33844     ms=1300.690 nps=26020 | hard=ok depth=6 nodes=8842      ms=509.5 cut=23.0% tt=168
-endgame-12         fixed6=ok nodes=4076      ms=14.460 nps=281881 | hard=ok depth=6 nodes=98148     ms=513.5 cut=36.4% tt=8960
-endgame-10         fixed6=ok nodes=1086      ms=5.650 nps=192212 | hard=ok depth=10 nodes=7452      ms=2.5 cut=31.0% tt=711
-endgame-8          fixed6=ok nodes=1899      ms=44.721 nps=42463 | hard=ok depth=8 nodes=868       ms=1.6 cut=39.4% tt=69
-endgame-6          fixed6=ok nodes=543       ms=0.429 nps=1265734 | hard=ok depth=6 nodes=183       ms=0.1 cut=32.2% tt=0
-endgame-4          fixed6=ok nodes=36        ms=0.031 nps=1161290 | hard=ok depth=4 nodes=12        ms=0.0 cut=25.0% tt=0
-endgame-2          fixed6=ok nodes=10        ms=0.008 nps=1250000 | hard=ok depth=2 nodes=6         ms=0.0 cut=0.0% tt=0
+endgame-20         fixed6=ok nodes=33844     ms=321.826 nps=105162 | hard=ok depth=7 nodes=65536     ms=502.7 cut=23.6% tt=2197
+endgame-12         fixed6=ok nodes=4076      ms=17.741 nps=229750 | hard=ok depth=12 nodes=99753     ms=36.3 cut=37.0% tt=9323
+endgame-10         fixed6=ok nodes=1086      ms=2.637 nps=411832 | hard=ok depth=10 nodes=7452      ms=2.3 cut=31.0% tt=711
+endgame-8          fixed6=ok nodes=1899      ms=6.609 nps=287335 | hard=ok depth=8 nodes=868       ms=0.5 cut=39.4% tt=69
+endgame-6          fixed6=ok nodes=543       ms=0.539 nps=1007421 | hard=ok depth=6 nodes=183       ms=0.3 cut=32.2% tt=0
+endgame-4          fixed6=ok nodes=36        ms=0.041 nps=878049 | hard=ok depth=4 nodes=12        ms=0.1 cut=25.0% tt=0
+endgame-2          fixed6=ok nodes=10        ms=0.013 nps=769231 | hard=ok depth=2 nodes=6         ms=0.0 cut=0.0% tt=0
 
-peak_rss_kb=7072
+peak_rss_kb=9248

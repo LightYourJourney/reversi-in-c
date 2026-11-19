@@ -11,9 +11,9 @@
   `hello_required`，重复 `hello` 返回 `unexpected_message`。重连时同样
   先 `hello` 再 `rejoin`。
 - 版本不一致由服务端拒绝：`v≠1` 的 `hello` 在解码阶段即失败，服务端回
-  通用的 `bad_message`（没有专门的版本错误码）。客户端同样只接受
-  `v=1` 的 `welcome`；版本不符的 `welcome` 会被当作无法解码的消息丢弃，
-  界面不会给出专门提示（已知缺口）。
+  通用的 `bad_message`（没有专门的版本错误码）。客户端收到 `v≠1` 的
+  `welcome` 时断开连接，会话进入 FAILED，大厅显示
+  “Server speaks protocol vN; this build needs v1”。
 - 客户端 → 服务端：`hello create join ready move resign ping rejoin leave`
 - 服务端 → 客户端：`welcome room start state error opponent gameover roomclosed pong`
 - 未知键、重复键、缺失必需字段、方向不符一律拒绝。
@@ -29,8 +29,8 @@
 | `seq` | 状态序号，0 开始，每次接受的落子/Pass 递增 |
 | `result` | `O` 进行中 / `B` 黑胜 / `W` 白胜 / `D` 平局 |
 | `pass` | `0`/`1`，上一步后对手被自动跳过 |
-| `cell` | 客户端落子坐标，如 `d3` |
-| `last` | 服务端状态中的最后一步，`-` 表示无 |
+| `cell` | 客户端落子坐标，如 `d3`；只出现在 `move` |
+| `last` | 服务端状态中的最后一步，`-` 表示无；只出现在 `state` |
 | `board` | 64 字符，行主序，`0` 空 / `1` 黑 / `2` 白 |
 | `player` | 座位 `1`/`2`（1 为房主） |
 | `host` / `ready` | `0`/`1` |

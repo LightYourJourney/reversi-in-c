@@ -64,8 +64,8 @@
    （`tests/test_net_client.c` 的 `test_send_to_stalled_server`）。
 9. **桌面端 TLS 的平台差异**：三个平台的构建都支持 `wss://`（OpenSSL）。
    macOS 静态链接 OpenSSL，Windows 随包附带 OpenSSL DLL，Linux 使用发行版
-   的 `libssl`。`net.tls` 自动化测试只在 macOS/Linux 注册，Windows 的 TLS
-   路径没有自动化覆盖，见 §5。
+   的 `libssl`。`net.tls`（自签证书全套用例）只在 macOS/Linux 注册；跨平台的
+   `net.tls_public` 在打包 CI 中覆盖三个平台的系统信任库，见 §5。
 10. **连接上限与代理层 `limit_conn`** 未做并发压测。
 
 ## 5. 桌面端 WSS：实现与限制
@@ -116,7 +116,12 @@
 实现细节：Windows 上 OpenSSL 的 `SSL_set_fd()` 接收 `int`，套接字句柄按
 OpenSSL 的惯例转换（64 位句柄值在实际运行中落在 int 范围内）。
 
+**信任库**：Windows 上 OpenSSL 的默认路径指向 OpenSSL 安装目录，玩家电脑
+上通常不存在；客户端在 OpenSSL ≥ 3.2 时额外加载 `org.openssl.winstore:`
+（Windows 证书存储）。公共 CA 用例已拆到跨平台的
+`tests/test_net_tls_public.c`（`net.tls_public`），打包 CI 以
+`REVERSI_TLS_PUBLIC=1` 在三个平台运行；本机 macOS 已 PASS，Windows 尚待
+CI 首次运行（NOT TESTED）。
+
 **仍未覆盖**：TLS 中断后的自动重连（重连路径复用同一传输，但只有明文
-路径有自动化）；Windows 上的 TLS 路径（`net.tls` 不在 Windows 注册）。
-过期证书与真实公网 CA 见上表 `REVERSI_TLS_PUBLIC=1` 一行，需要外网，
-不在 CI 中运行。
+路径有自动化）；Windows 上用自签证书的完整 `net.tls` 用例。

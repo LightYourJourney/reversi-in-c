@@ -28,7 +28,9 @@ app ── ui/lab_view (编译进 app)
 ```
 
 `reversi_ui` 不依赖 AI；Lab 视图放在 `src/ui/lab_view.c`，但编入
-`reversi_app`，使 `ui.*` 单元测试仍只链接 UI 与 core。
+`reversi_app`，使 `ui.*` 单元测试仍只链接 UI 与 core。“Save record /
+Load record” 只返回动作，`lab-record.rvr` 的读写由 `app` 完成，读入的文本
+再交给 `lab_view_load_record()` 解析。
 
 ## 3. 数据模型
 

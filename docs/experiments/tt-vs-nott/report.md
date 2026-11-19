@@ -1,13 +1,13 @@
 # Experiment: tt-vs-nott
 
-- Commit: `6ae6e01`
+- Commit: `bfa2582-dirty`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
-- Compiler: AppleClang 21.0.0.21000334
+- Compiler: AppleClang 21.0.0.21000401
 - Build: Release
 - Seed: 20261025
 - Games: 8 (completed 8)
-- Openings: 2, opening ply 4, max plies 100
+- Openings: 4, opening ply 4, max plies 100
 
 ## Engines
 
@@ -45,15 +45,15 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 | Metric | A | B |
 |---|---|---|
 | Moves | 224 | 224 |
-| Nodes | 1383640 | 3109902 |
-| NPS | 44069 | 39254 |
-| Average | 140 ms | 353 ms |
-| P50 | 26 ms | 67 ms |
-| P95 | 645 ms | 1778 ms |
+| Nodes | 1504686 | 3586288 |
+| NPS | 72126 | 71079 |
+| Average | 93 ms | 225 ms |
+| P50 | 40 ms | 97 ms |
+| P95 | 345 ms | 833 ms |
 | Average depth | 5 | 5 |
 | Max depth | 6 | 6 |
-| Cut rate | 23.1% | 20.0% |
-| TT hit rate | 1.3% | 0.0% |
+| Cut rate | 22.8% | 19.7% |
+| TT hit rate | 1.4% | 0.0% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 ## Anomalies

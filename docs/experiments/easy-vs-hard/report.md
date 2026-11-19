@@ -1,13 +1,13 @@
 # Experiment: easy-vs-hard
 
-- Commit: `6ae6e01`
+- Commit: `bfa2582-dirty`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
-- Compiler: AppleClang 21.0.0.21000334
+- Compiler: AppleClang 21.0.0.21000401
 - Build: Release
 - Seed: 20261025
 - Games: 8 (completed 8)
-- Openings: 2, opening ply 4, max plies 100
+- Openings: 4, opening ply 4, max plies 100
 
 ## Engines
 
@@ -25,18 +25,18 @@
 
 | Metric | Value |
 |---|---|
-| A wins | 2 |
-| B wins | 6 |
+| A wins | 0 |
+| B wins | 8 |
 | Draws | 0 |
 | A wins as Black | 0 |
-| A wins as White | 2 |
+| A wins as White | 0 |
 | Illegal games | 0 |
 | Timeouts | 0 |
 | Node-limit games | 0 |
 | Aborted | 0 |
 | Excluded (unpaired) | 0 |
-| A score (draw=0.5) | 0.250 (95% CI 0.046..0.699) |
-| Elo difference | -191 (95% CI -528..+147) |
+| A score (draw=0.5) | 0.000 (95% CI 0.000..0.490) |
+| Elo difference | -1200 (95% CI -1200..-7) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -44,16 +44,16 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 
 | Metric | A | B |
 |---|---|---|
-| Moves | 218 | 230 |
-| Nodes | 1292 | 2148642 |
-| NPS | 117455 | 212547 |
-| Average | 0 ms | 43 ms |
-| P50 | 0 ms | 28 ms |
-| P95 | 0 ms | 141 ms |
+| Moves | 217 | 230 |
+| Nodes | 1391 | 1908489 |
+| NPS | 86938 | 70380 |
+| Average | 0 ms | 117 ms |
+| P50 | 0 ms | 69 ms |
+| P95 | 1 ms | 391 ms |
 | Average depth | 1 | 6 |
 | Max depth | 1 | 12 |
-| Cut rate | 0.0% | 29.3% |
-| TT hit rate | 0.0% | 2.7% |
+| Cut rate | 0.0% | 27.9% |
+| TT hit rate | 0.0% | 2.3% |
 | Timeouts | 0 | 0 |
 | Node cap hits | 0 | 0 |
 ## Anomalies

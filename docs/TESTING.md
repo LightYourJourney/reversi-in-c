@@ -14,9 +14,11 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 31 个测试（Debug）：27 个
-无窗口测试、`app.smoke`、`app.lab`、`app.net` 与 `app.autoplay`。不开启时注册 27 个。
-无窗口测试里的 `net.tls` 只在找到 OpenSSL 的非 Windows 构建中注册；没有它时是 26 个。
+`REVERSI_ENABLE_GUI_TESTS=ON` 时 CTest 注册 32 个测试（Debug）：28 个
+无窗口测试、`app.smoke`、`app.lab`、`app.net` 与 `app.autoplay`。不开启时注册 28 个。
+无窗口测试里的 `net.tls` 只在找到 OpenSSL 的非 Windows 构建中注册，
+`net.tls_public` 在找到 OpenSSL 的所有平台注册；Windows 上是 27 个，没有
+OpenSSL 时是 26 个。
 CTest 名称、可执行文件和源码一一对应。
 
 Phase 7 增加了发行包验收：`scripts/package.sh` 执行 Release 构建、CTest
@@ -47,14 +49,15 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | ai.endgame | reversi_endgame_tests | 70 | 12/10/8/6/4/2 空与全深度搜索分数一致、INCOMPLETE 分类、边界 | PASS |
 | ai.analyze | reversi_analyze_tests | 104 | MultiPV 排序、同深度可比、PV 逐步重放、精确残局、取消、黑方视角 | PASS |
 | analysis.session | reversi_analysis_tests | 123 | 局面树/分支/Pass、编辑、History 导入（含撤销后定位当前局面）、棋谱往返与拒绝、终局棋谱的结果行往返、访问器、ply 上限、VALID 根 | PASS |
-| analysis.lab | reversi_lab_tests | 9 | generation 守卫、进入/退出取消分析 | PASS |
-| net.protocol | reversi_net_protocol_tests | 41 | 协议字段/版本/方向/棋盘/错误/终局快照、版本号与 seq 只收纯十进制数字 | PASS |
+| analysis.lab | reversi_lab_tests | 16 | generation 守卫、进入/退出取消分析、读入棋谱文本（成功替换会话 / 失败保留并提示） | PASS |
+| net.protocol | reversi_net_protocol_tests | 48 | 协议字段/版本/方向/棋盘/错误/终局快照、版本号与 seq 只收纯十进制数字、`cell` 只属于 move / `last` 只属于 state、异版本 welcome 可解码 | PASS |
 | net.ws | reversi_net_ws_tests | 20,026 | 握手、掩码、长度、分片、ping、20k 随机帧 | PASS |
 | net.server | reversi_net_server_tests | 5,776（macOS）/ 5,783（Linux/Windows） | 完整对局、非法、重复、重连、离开、多房间、重启、双向落子超时、限速与关闭（含 ping 控制帧洪泛）、半帧缓冲后的整块读取、重连到期与旧令牌、满房、终局重连、模糊、Hello 顺序、握手/空闲/房间 TTL、加入失败限速、连接/房间上限、等待房间重连、座位接管、优雅关闭、20 ms 延迟代理整局、日志脱敏、8 局连续 soak、发送队列饱和（非 macOS） | PASS |
 | net.tls | reversi_net_tls_tests | 52 | TLS 1.2+ 握手、证书链与主机名（含 IP 字面量）校验、错误 CA、握手后断开、断线自动重连；可选整局（`REVERSI_TLS_E2E`） | PASS |
-| net.client | reversi_net_client_tests | 63 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出、服务器不读时的队列饱和与主线程零等待、连接取消与 5 s 超时、公网地址拒绝 | PASS |
-| net.session | reversi_net_session_tests | 109 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、大厅中失去服务器回到 IDLE、重连预算耗尽 FAILED、落子记录 | PASS |
-| experiment.regression | reversi_experiment_tests | 97 | 配置拒绝（含非法种子、超长配置文件）、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
+| net.tls_public | reversi_net_tls_public_tests | 0（默认）/ 12–14（`REVERSI_TLS_PUBLIC=1`） | 真实系统信任库对公共主机：`example.com` 通过证书校验、`expired`/`self-signed.badssl.com` 被拒；跨平台（含 Windows），打包 CI 开启；不可达记为 skipped，badssl 提前断开时最多重试 3 次 | PASS（本机 macOS） |
+| net.client | reversi_net_client_tests | 73 | 连接、创建/加入/ready/落子、断线重连、接收队列溢出、服务器不读时的队列饱和与主线程零等待、连接取消与 5 s 超时、公网地址拒绝、与 101 响应同段到达的帧、跨两次读取的半帧 | PASS |
+| net.session | reversi_net_session_tests | 124 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、大厅中失去服务器回到 IDLE、服务器协议版本不符时 FAILED 并提示、TLS 提示不被截断、重连预算耗尽 FAILED、落子记录 | PASS |
+| experiment.regression | reversi_experiment_tests | 101 | 配置拒绝（含非法种子、超长配置文件、局数超过 2×开局数）、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
 | storage.save | reversi_save_tests | 102 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture | PASS |
 | storage.settings | reversi_settings_tests | 68 | 默认值、速度档位、解析、持久化、损坏回退、v1.0.1 设置 fixture | PASS |
@@ -76,6 +79,14 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 - 全项目评审修复（2026-11-19，分支 `review/whole-project`）：本机 Debug
   **27/27 PASS**；另在全新 Release 目录（macOS 静态链接 OpenSSL）27/27 PASS。
   新增用例均先在修复前的代码上确认失败、修复后通过。
+- 评审跟进（2026-11-19）：本机 Debug **28/28 PASS**（新增 `net.tls_public`）；
+  `REVERSI_TLS_PUBLIC=1` 下 `net.tls_public` 连续 4 次 PASS；ASan+UBSan
+  25 项（不含 `core.random`/`core.bitboard`/`ai.core`）PASS 且无报告；
+  GUI 4/4 PASS；Lab “Save record” 在全新 HOME 下的真实点击写出
+  `lab-record.rvr`（修复前提示 “Could not save the record”）。读档局撤销
+  不撤回统计这一项只有代码审查与编译，没有自动化或 GUI 验证（NOT TESTED）。
+  Windows 运行库依赖检查、macOS 包检查与 Windows `net.tls_public` 需要
+  推送后由 CI 执行，本机 NOT TESTED。
 - GitHub Actions 运行 `40818759364`（2026-10-29，`21c8d20`）**9/9
   success**：Linux/Windows/macOS Debug 各 26/26、Linux ASan+UBSan
   26/26、Linux Xvfb GUI 4/4、三平台打包与 Linux 包验收。首跑

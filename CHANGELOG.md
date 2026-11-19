@@ -57,6 +57,18 @@
   `libssl-dev`；`scripts/package.sh` 在无法重建 Web 客户端时不再打包旧的
   `web/dist`；`scripts/run-experiments.sh` 先检查全部工具再改写报告。
 - `THIRD_PARTY_NOTICES.md` 补上 OpenSSL（Apache-2.0）。
+- 读入已结束的存档后撤销不再撤回统计（该局在最初下完时已计入）；反复
+  读档 + 撤销不再扣掉别的对局。
+- 实验配置要求 `games ≤ 2 × openings`，避免确定性引擎重演同一开局被当成
+  独立样本；已提交的实验按新约束重跑。
+- 协议：`cell` 只属于 `move`、`last` 只属于 `state`；服务器 `welcome`
+  版本不符时断开并提示 “Server speaks protocol vN”。
+- 桌面客户端不再丢弃与 101 响应同段到达的帧和跨两次读取的帧；大厅错误
+  提示不再被截成 31 个字符；Windows 客户端（OpenSSL ≥ 3.2）加载系统证书存储。
+- Lab “Save record” 在全新安装上会先创建用户目录（此前提示
+  “Could not save the record”）；棋谱文件读写移到 app 层。
+- 打包 CI：三平台运行 `net.tls_public`，Windows 包拒绝 VC 运行库依赖，
+  macOS 包拒绝非系统动态库。
 
 ## [2.0.0] - 未发布（Release Candidate，源码截至 2026-10-29）
 

@@ -1,13 +1,13 @@
 # Experiment: random-100
 
-- Commit: `6ae6e01`
+- Commit: `bfa2582-dirty`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
-- Compiler: AppleClang 21.0.0.21000334
+- Compiler: AppleClang 21.0.0.21000401
 - Build: Release
 - Seed: 20261025
 - Games: 100 (completed 100)
-- Openings: 4, opening ply 0, max plies 100
+- Openings: 50, opening ply 0, max plies 100
 
 ## Engines
 

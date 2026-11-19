@@ -132,11 +132,14 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **Windows 的 TLS 没有自动化测试**：三个平台都已构建 `wss://`
-   （Windows 随包附带 OpenSSL DLL，打包冒烟只验证能启动）。但 `net.tls`
-   不在 Windows 注册，Windows 上的证书校验与 WSS 对局 NOT TESTED；
-   macOS 包改为静态链接 OpenSSL 之后（2026-11-19）也还没有在一台没装
-   Homebrew 的 Mac 上启动验证。Release Notes 必须如实写明；见
+1. **Windows/macOS 发行包的 TLS 依赖待 CI 首次验证**：2026-11-19 起打包
+   工作流在三个平台以 `REVERSI_TLS_PUBLIC=1` 运行跨平台的 `net.tls_public`
+   （Windows 客户端从 OpenSSL 3.2 起加载系统证书存储）；Windows 包用
+   `dumpbin /dependents` 拒绝 VCRUNTIME/MSVCP 依赖；macOS 包用 `otool -L`
+   拒绝非系统 dylib 并检查 `--version`。这些检查**尚未推送运行**，结论
+   NOT TESTED；若 Windows OpenSSL DLL 依赖 VC 运行库，CI 会变红，需要随包
+   附带运行库或改用静态 OpenSSL。CI 是托管 VM，物理机仍 NOT TESTED；
+   `net.tls`（自签证书的完整用例）仍不在 Windows 注册。见
    `NETWORK_SECURITY.md` §5。
 2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
    `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/

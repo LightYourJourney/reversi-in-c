@@ -1,13 +1,13 @@
 # Experiment: fixed-time-150ms
 
-- Commit: `6ae6e01`
+- Commit: `bfa2582-dirty`
 - OS: Darwin 25.6.0 arm64
 - CPU: Apple M3
-- Compiler: AppleClang 21.0.0.21000334
+- Compiler: AppleClang 21.0.0.21000401
 - Build: Release
 - Seed: 20261025
-- Games: 8 (completed 8)
-- Openings: 2, opening ply 4, max plies 100
+- Games: 8 (completed 7)
+- Openings: 4, opening ply 4, max plies 100
 
 ## Engines
 
@@ -26,17 +26,17 @@
 | Metric | Value |
 |---|---|
 | A wins | 3 |
-| B wins | 5 |
+| B wins | 3 |
 | Draws | 0 |
-| A wins as Black | 2 |
-| A wins as White | 1 |
+| A wins as Black | 1 |
+| A wins as White | 2 |
 | Illegal games | 0 |
-| Timeouts | 0 |
+| Timeouts | 1 |
 | Node-limit games | 0 |
 | Aborted | 0 |
-| Excluded (unpaired) | 0 |
-| A score (draw=0.5) | 0.375 (95% CI 0.092..0.781) |
-| Elo difference | -89 (95% CI -398..+220) |
+| Excluded (unpaired) | 1 |
+| A score (draw=0.5) | 0.500 (95% CI 0.125..0.875) |
+| Elo difference | +0 (95% CI -338..+338) |
 
 Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The interval is a Wilson interval transformed to Elo. Small samples remain uncertain even when all games go one way.
 
@@ -44,20 +44,20 @@ Elo is a two-engine logistic estimate from the A score; draws count as 0.5. The 
 
 | Metric | A | B |
 |---|---|---|
-| Moves | 224 | 224 |
-| Nodes | 6713403 | 6855389 |
-| NPS | 239962 | 249242 |
-| Average | 124 ms | 122 ms |
-| P50 | 151 ms | 151 ms |
-| P95 | 178 ms | 181 ms |
-| Average depth | 6 | 6 |
-| Max depth | 14 | 13 |
-| Cut rate | 24.1% | 24.2% |
-| TT hit rate | 2.7% | 2.9% |
-| Timeouts | 176 | 174 |
+| Moves | 215 | 220 |
+| Nodes | 2063550 | 2139967 |
+| NPS | 64969 | 69299 |
+| Average | 147 ms | 140 ms |
+| P50 | 156 ms | 155 ms |
+| P95 | 245 ms | 228 ms |
+| Average depth | 5 | 5 |
+| Max depth | 12 | 12 |
+| Cut rate | 23.3% | 24.0% |
+| TT hit rate | 2.2% | 2.4% |
+| Timeouts | 178 | 178 |
 | Node cap hits | 0 | 0 |
 ## Anomalies
 
-None.
+- Game 2: illegal=no timeout=yes node_limit=no aborted=no
 
 Raw data: `games.csv`, `moves.csv`, `summary.json`. The HTML report renders the same JSON.
