@@ -132,14 +132,16 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 
-1. **Windows/macOS 发行包的 TLS 依赖待 CI 首次验证**：2026-11-19 起打包
-   工作流在三个平台以 `REVERSI_TLS_PUBLIC=1` 运行跨平台的 `net.tls_public`
-   （Windows 客户端从 OpenSSL 3.2 起加载系统证书存储）；Windows 包用
-   `dumpbin /dependents` 拒绝 VCRUNTIME/MSVCP 依赖；macOS 包用 `otool -L`
-   拒绝非系统 dylib 并检查 `--version`。这些检查**尚未推送运行**，结论
-   NOT TESTED；若 Windows OpenSSL DLL 依赖 VC 运行库，CI 会变红，需要随包
-   附带运行库或改用静态 OpenSSL。CI 是托管 VM，物理机仍 NOT TESTED；
-   `net.tls`（自签证书的完整用例）仍不在 Windows 注册。见
+1. **Windows 发行包的运行库待 CI 复验**：2026-11-19 起打包工作流在三个
+   平台以 `REVERSI_TLS_PUBLIC=1` 运行跨平台的 `net.tls_public`（Windows
+   客户端从 OpenSSL 3.2 起加载系统证书存储）；Windows 包用
+   `dumpbin /dependents` 要求每个导入的 VC 运行库都在同目录；macOS 包用
+   `otool -L` 拒绝非系统 dylib 并检查 `--version`。首次运行
+   （`44476462430`）：macOS 包通过（OpenSSL 4.1.0 静态链接，只依赖系统库，
+   `--version` 正常，`net.tls_public` PASS）；Windows `net.tls_public` PASS，
+   但 OpenSSL DLL 导入 `VCRUNTIME140.dll`，打包失败。已改为随包附带
+   `vcruntime140.dll`，以下一次 CI 结果为准。CI 是托管 VM，物理机仍
+   NOT TESTED；`net.tls`（自签证书的完整用例）仍不在 Windows 注册。见
    `NETWORK_SECURITY.md` §5。
 2. **iOS Safari、Android Chrome** 未验证；桌面 Safari 已于 2026-10-30 用
    `safaridriver` 完成整局（房间 `CD8GDJ` / `VFDHTZ`），Chrome/Firefox/

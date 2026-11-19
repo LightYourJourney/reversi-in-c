@@ -65,9 +65,12 @@ xcrun stapler staple Reversi.app
 
 1. 解压 zip 到任意目录（例如 `%LOCALAPPDATA%\Programs\Reversi`）。
 2. 运行 `reversi.exe`。运行时资源在同级 `assets\` 目录中，必须一起保留。
-3. 发行包使用静态 MSVC 运行库，不要求单独安装 Visual C++ Redistributable。
-   （随包的 OpenSSL DLL 来自 CI runner，是否依赖 `vcruntime140.dll` 尚未用
-   `dumpbin /dependents` 核实，在干净的 Windows 上 NOT TESTED。）
+3. 不要求单独安装 Visual C++ Redistributable：`reversi.exe` 与
+   `reversi_server.exe` 使用静态 MSVC 运行库；随包的 OpenSSL DLL 依赖
+   `vcruntime140.dll`（2026-11-19 CI 用 `dumpbin /dependents` 核实），
+   因此包根与 `bin\` 各附带一份 `vcruntime140.dll`（取自编译器的
+   `VC\Redist`）。打包 CI 会检查每个二进制导入的 VC 运行库都在其同目录。
+   在一台从未装过 VC 运行库的物理 Windows 上启动仍 NOT TESTED。
 
 卸载：关闭程序后删除解压目录，并可选删除
 `%APPDATA%\Reversi`（设置、统计与存档）。

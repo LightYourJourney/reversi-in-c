@@ -294,6 +294,15 @@ raylib 6.2 静态链接了以下单头库。本项目未修改其版权声明；
    END OF TERMS AND CONDITIONS
 ```
 
+## Microsoft Visual C++ 运行库（仅 Windows 包）
+
+- 文件：`vcruntime140.dll`（包根与 `bin\` 各一份）
+- 来源：构建所用 Visual Studio 的 `VC\Redist\MSVC\<version>\x64\Microsoft.VC*.CRT`
+- 许可：Microsoft Visual Studio 许可条款中的 Distributable Code（Redist
+  目录中的文件允许随应用分发）；版权归 Microsoft Corporation。
+- 原因：随包的 OpenSSL DLL 由 MSVC 构建并导入该文件；本项目自身的
+  可执行文件使用静态 CRT，不依赖它。
+
 ## 音效与图像
 
 落子、翻转、按钮、胜负与平局音效均由程序在运行时合成；棋盘、棋子、

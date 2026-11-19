@@ -579,6 +579,29 @@ endif()
 # Windows: the executables load OpenSSL at run time, so the runtime ships in
 # the archive — next to reversi.exe at the root and next to the server in bin/.
 if(WIN32 AND REVERSI_OPENSSL_DLLS)
+    # Our executables use the static CRT, but OpenSSL DLLs built with MSVC
+    # import VCRUNTIME140.dll, which a clean Windows does not have. Ship the
+    # redistributable copy from this compiler's VC\Redist next to them
+    # (app-local deployment; the file is listed as redistributable).
+    if(MSVC)
+        get_filename_component(REVERSI_CL_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+        # cl.exe lives in VC/Tools/MSVC/<version>/bin/Host<arch>/<arch>.
+        get_filename_component(REVERSI_VC_DIR
+            "${REVERSI_CL_DIR}/../../../../../.." ABSOLUTE)
+        file(GLOB REVERSI_VCRUNTIME
+            "${REVERSI_VC_DIR}/Redist/MSVC/*/x64/Microsoft.VC*.CRT/vcruntime140.dll")
+        list(SORT REVERSI_VCRUNTIME)
+        list(POP_BACK REVERSI_VCRUNTIME REVERSI_VCRUNTIME_DLL)
+        if(REVERSI_VCRUNTIME_DLL)
+            message(STATUS
+                "Reversi: bundling VC runtime: ${REVERSI_VCRUNTIME_DLL}")
+            list(APPEND REVERSI_OPENSSL_DLLS "${REVERSI_VCRUNTIME_DLL}")
+        else()
+            message(WARNING "Reversi: vcruntime140.dll not found under "
+                "${REVERSI_VC_DIR}/Redist; the package will need the VC++ "
+                "Redistributable")
+        endif()
+    endif()
     install(FILES ${REVERSI_OPENSSL_DLLS} DESTINATION .
             COMPONENT Reversi)
     install(FILES ${REVERSI_OPENSSL_DLLS} DESTINATION bin

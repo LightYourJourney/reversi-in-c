@@ -67,8 +67,10 @@
   提示不再被截成 31 个字符；Windows 客户端（OpenSSL ≥ 3.2）加载系统证书存储。
 - Lab “Save record” 在全新安装上会先创建用户目录（此前提示
   “Could not save the record”）；棋谱文件读写移到 app 层。
-- 打包 CI：三平台运行 `net.tls_public`，Windows 包拒绝 VC 运行库依赖，
-  macOS 包拒绝非系统动态库。
+- 打包 CI：三平台运行 `net.tls_public`，Windows 包要求导入的 VC 运行库就在
+  包内，macOS 包拒绝非系统动态库。
+- Windows 包随附 `vcruntime140.dll`：随包的 OpenSSL DLL 依赖它，干净的
+  Windows 上此前会因缺 DLL 无法启动。
 
 ## [2.0.0] - 未发布（Release Candidate，源码截至 2026-10-29）
 

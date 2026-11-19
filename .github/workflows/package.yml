@@ -116,9 +116,10 @@ jobs:
         shell: pwsh
         run: |
           # RELEASE.md promises no Visual C++ Redistributable. The executables
-          # use the static CRT; the bundled OpenSSL DLLs come from the runner
-          # and must not pull in VCRUNTIME/MSVCP either. The version smoke
-          # above cannot see this: System32 on the runner has those DLLs.
+          # use the static CRT; the bundled OpenSSL DLLs import VCRUNTIME140,
+          # so every VC runtime DLL a packaged binary imports must sit in the
+          # package next to it. The version smoke above cannot see this:
+          # System32 on the runner has those DLLs.
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
           $dumpbin = Get-ChildItem (Join-Path $vs 'VC\Tools\MSVC') -Recurse -Filter dumpbin.exe |
             Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
@@ -131,12 +132,15 @@ jobs:
             $deps = & $dumpbin.FullName /nologo /dependents $file.FullName
             Write-Host "== $($file.Name)"
             $deps | Where-Object { $_ -match '\.dll' } | ForEach-Object { Write-Host "   $($_.Trim())" }
-            if ($deps -match '(?i)(vcruntime|msvcp)[0-9_]*\.dll') {
-              $bad += $file.Name
+            foreach ($dll in ($deps | Select-String -Pattern '(?i)\b(vcruntime|msvcp)[0-9_]*\.dll' -AllMatches |
+                              ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)) {
+              if (-not (Test-Path (Join-Path $file.DirectoryName $dll))) {
+                $bad += "$($file.Name) -> $dll"
+              }
             }
           }
           if ($bad.Count -gt 0) {
-            throw "Needs the Visual C++ runtime: $($bad -join ', ')"
+            throw "VC runtime not bundled next to: $($bad -join ', ')"
           }
 
       - name: macOS package check
