@@ -5,6 +5,7 @@
 #include "core/match.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #define REVERSI_SAVE_FORMAT_VERSION 1
 #define REVERSI_SAVE_MAX_MOVES REVERSI_HISTORY_MAX_MOVES
@@ -40,6 +41,13 @@ typedef enum SaveAutosaveAction {
 /* An online match mirrors the server (often from a mid-game root), so it
  * neither overwrites nor deletes the local game's autosave. */
 SaveAutosaveAction save_autosave_action(const Match *match, bool online);
+
+/* One-line description for the save list ("PvE / Medium / 12 moves",
+ * " / finished" appended once the game is decided). `difficulty_name` is
+ * only used for PvE; the storage layer stays independent of the AI library,
+ * so the caller supplies the name. Writes an empty string on bad input. */
+void save_slot_summary(const SavedGame *saved, const char *difficulty_name,
+                       char *out, size_t cap);
 
 /* English status text for the UI. */
 const char *save_status_message(SaveStatus status);

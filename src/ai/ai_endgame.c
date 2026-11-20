@@ -1,6 +1,6 @@
 #include "ai/ai_endgame.h"
 
-#include "ai/ai_hash.h"
+#include "ai/ai_shared.h"
 #include "ai/ai_internal.h"
 #include "core/bitboard.h"
 
@@ -9,7 +9,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-
 
 #define REVERSI_ENDGAME_TT_SIZE (1u << 16)
 #define REVERSI_ENDGAME_CHECK_MASK 1023u

@@ -23,7 +23,7 @@
 | 资源耗尽 | 48 连接（超限回 HTTP 503）/ 32 房间上限；握手 5 s、空闲 120 s、等待房间 10 min（加入/重连刷新）；发送队列 16 KB |
 | 协议顺序 | 会话首条消息必须是 `hello`；其余顺序错误不改变任何状态 |
 | 房间权限 | 只有就座玩家可 ready/move；非本房间令牌拒绝 |
-| 身份伪造 | 128 位 OS 随机令牌（`/dev/urandom` / `BCryptGenRandom`；取不到系统随机数时拒绝建房、加入与重连，回 `server_busy`，不再退化为可预测的伪随机）；房间代码同源并查重；不记录令牌 |
+| 身份伪造 | 128 位 OS 随机令牌（`getentropy`（Linux/macOS）/ `/dev/urandom` / `BCryptGenRandom`；取不到系统随机数时拒绝建房、加入与重连，回 `server_busy`，不再退化为可预测的伪随机）；房间代码同源并查重；不记录令牌 |
 | 服务端崩溃 | 单线程非阻塞事件循环；所有偏移/长度检查；ASan 回归 |
 | 日志泄露 | 只记录房间代码/座位/结果，不记录令牌或完整负载；`test_logs_redacted` 捕获 stderr 并断言 |
 | 客户端卡死 | 桌面套接字非阻塞 + 有界写入（1 s）；服务器不读数据时断开并重连，不阻塞 UI 线程 |
@@ -97,8 +97,8 @@
 | 客户端信任另一个 CA | 拒绝，`tls_certificate_invalid` |
 | 证书只含 `DNS:localhost`，客户端拨 `127.0.0.1` | 拒绝，主机名不匹配 |
 | 握手成功后服务端断开 | 客户端进入 DISCONNECTED |
-| `REVERSI_TLS_E2E=host:port` + 真 nginx WSS + `reversi_server` | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1（本机实测，52 条断言） |
-| `REVERSI_TLS_PUBLIC=1`：真实公共 CA | `example.com` 链与主机名通过、止步于 WS 升级；`expired` / `self-signed` / `wrong.host.badssl.com` 均被拒绝（68 条断言，2026-10-31） |
+| `REVERSI_TLS_E2E=host:port` + 真 nginx WSS + `reversi_server` | 两个 TLS 会话建房/加入/ready/落子，`seq` 均为 1（本机实测；断言数见 [TESTING.md](TESTING.md) §2） |
+| `REVERSI_TLS_PUBLIC=1`：真实公共 CA | `example.com` 链与主机名通过、止步于 WS 升级；`expired` / `self-signed` / `wrong.host.badssl.com` 均被拒绝（2026-10-31；断言数见 [TESTING.md](TESTING.md) §2） |
 
 **平台**：macOS、Linux、Windows 三个构建都带 TLS（Linux CI 与打包都安装
 `libssl-dev`；Windows 使用 runner 自带的 OpenSSL）。macOS 静态链接 OpenSSL，

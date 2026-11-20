@@ -321,6 +321,15 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(reversi_net_server
         PUBLIC reversi_net
         PRIVATE reversi_warnings)
+    # Tokens and room codes come from getentropy() where the libc has it,
+    # falling back to /dev/urandom; the check keeps older libcs buildable.
+    include(CheckSymbolExists)
+    check_symbol_exists(getentropy "unistd.h;sys/random.h"
+                        REVERSI_HAVE_GETENTROPY)
+    if(REVERSI_HAVE_GETENTROPY)
+        target_compile_definitions(reversi_net_server
+                                   PRIVATE REVERSI_NET_GETENTROPY)
+    endif()
     if(WIN32)
         target_link_libraries(reversi_net_server PRIVATE ws2_32 bcrypt)
     endif()
@@ -351,7 +360,7 @@ add_library(reversi_ai STATIC
     src/ai/ai_baselines.c
     src/ai/ai_eval.c
     src/ai/ai_endgame.c
-    src/ai/ai_hash.c
+    src/ai/ai_shared.c
     src/ai/ai_search.c
     ${REVERSI_AI_WORKER_SOURCE})
 target_include_directories(reversi_ai PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")

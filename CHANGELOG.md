@@ -90,7 +90,7 @@
 - Web 大厅预填的服务器地址可由 `index.html` 的
   `<meta name="reversi-server" content="host:port">` 配置（此前固定为
   `127.0.0.1:8080`，公网玩家需手填）。
-- AI：搜索与残局求解共用 `ai_hash.[ch]`（计时、Zobrist 键、着法展开），
+- AI：搜索与残局求解共用 `ai_shared.[ch]`（计时、Zobrist 键、着法展开），
   行为逐节点不变。
 - CI：工作流默认只读，只有发布任务可写；官方 action 固定到提交 SHA。
 
@@ -98,6 +98,14 @@
 
 - Windows：用户目录含当前代码页以外的字符（如 `C:\Users\张三`）时无法
   读写设置、统计与存档；存储层改用宽字符环境变量与文件 API。
+- 服务端令牌与房间码优先取 `getentropy()`（Linux/macOS），不可用时才读
+  `/dev/urandom`。
+- 停机排空在单调时钟不可读（`now_ms()` 为 0）时不再无限等待：等待次数上限
+  20 次（每次 ≤ 50 ms）仍然生效。
+- 存档槽的一行摘要格式移入 `storage`（`save_slot_summary`），由 app 传入
+  难度名称，并有无窗口测试。
+- AI 共享模块 `ai_hash.[ch]` 更名为 `ai_shared.[ch]`（它还包含时钟与着法
+  展开，不只是哈希）。
 
 - 桌面客户端发送队列满时，断开原因偶尔被工作线程报成 `closed` 或
   `send_failed`（macOS CI 复现）；现在先记录原因再关闭套接字，且第一次断开的

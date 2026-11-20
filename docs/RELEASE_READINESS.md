@@ -127,11 +127,7 @@ Playwright Firefox 157、Playwright WebKit 27.2。
 | CI（最新提交） | PASS 9/9 | `41182743291`（`39fa43f`）：三平台 Debug（`net.tls` 只在 macOS/Linux 注册）、ASan+UBSan、Xvfb GUI、三平台打包与 Linux 包验收 |
 | Windows / Linux 桌面 | NOT TESTED（本阶段） | 依赖 CI；Phase 14 时 CI PASS |
 
-断言数（本机 Debug，全部无窗口测试合计 **1,211,054**）：
-`net.protocol` 33、`net.ws` 20,026、`net.server` 5,758、`net.client` 63、
-`net.session` 101、`net.tls` 52、`analysis.session` 112、`storage.save` 102、
-`storage.settings` 68；其余见 `TESTING.md` §2。Linux/Windows 的饱和
-用例另加 7 条。
+各测试当前的断言数与结果只记录在 [TESTING.md](TESTING.md) §2；本评估表格里的数字是评估当时的快照。
 
 ## 6. 发布阻碍（正式 Release 前必须关闭或明确披露）
 

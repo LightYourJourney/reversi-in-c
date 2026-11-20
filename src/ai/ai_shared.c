@@ -2,7 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "ai/ai_hash.h"
+#include "ai/ai_shared.h"
 
 #include "core/bitboard.h"
 

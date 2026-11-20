@@ -59,7 +59,7 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 | net.session | reversi_net_session_tests | 122 | 会话相位、颜色、seq、回合、落子、投降终局、终局后房间关闭、中途重启后回到大厅、大厅中失去服务器回到 IDLE、服务器协议版本不符时 FAILED 并提示、TLS 提示不被截断、重连预算耗尽 FAILED、落子记录 | PASS |
 | experiment.regression | reversi_experiment_tests | 101 | 配置拒绝（含非法种子、超长配置文件、局数超过 2×开局数）、配对/换色、确定性 oracle、搜索 oracle、报告文件 | PASS |
 | ai.worker | reversi_ai_worker_tests | 44 | 后台线程、快照隔离、取消、生命周期 | PASS |
-| storage.save | reversi_save_tests | 131 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture、非标准开局的对局拒绝写出、自动存档决策（在线对局不动本地自动存档）、用户目录含非 ASCII 字符（`Zoë-张三`）时的建目录/原子写/读/删（Windows 上验证宽字符路径） | PASS |
+| storage.save | reversi_save_tests | 137 | 往返、原子覆盖、损坏/版本/校验和/非法状态、v1.0.1 存档 fixture、非标准开局的对局拒绝写出、自动存档决策（在线对局不动本地自动存档）、存档槽摘要（PvE/PvP、已结束后缀）、用户目录含非 ASCII 字符（`Zoë-张三`）时的建目录/原子写/读/删（Windows 上验证宽字符路径） | PASS |
 | storage.settings | reversi_settings_tests | 83 | 默认值、速度/音量档位（到端即止）、难度/主题循环、解析、持久化、损坏回退、v1.0.1 设置 fixture | PASS |
 | storage.stats | reversi_stats_tests | 63 | 记录/撤回、视角、汇总、原子持久化、单局记账（只计一次、撤销撤回、读入的终局存档不再计入或撤回） | PASS |
 | audio.noop | reversi_audio_tests | 2 | 无音频设备时安全空操作 | PASS |
@@ -73,14 +73,17 @@ GitHub Actions 实跑，标记 **NOT TESTED**，需推送后确认。
 发布就绪评估与各阶段报告只链接到这里（阶段报告里的数字是当时的记录，
 不再更新）。
 
-- 2026-11-20，`improve/audit-roadmap`：本机 macOS Debug 无窗口 **28/28 PASS**
-  （断言合计 1,211,239），GUI 构建 `app.smoke`、`app.autoplay` PASS。
+- 2026-11-20，审查路线图：本机 macOS Debug 无窗口 **28/28 PASS**（断言合计
+  1,211,249），GUI 构建 `app.smoke`、`app.autoplay` PASS。
 - `storage.save` 的非 ASCII 用户目录用例先在未修复的代码上于 Windows CI 失败
   （运行 `44587356614`，7 条断言），修复后通过；macOS/Linux 上它本来就通过。
+- 路线图抽取出的纯逻辑达到 80% 行覆盖率（llvm-cov，Debug、无窗口）：
+  `settings.c` 82.7%、`save.c` 83.0%、`stats.c` 83.2%；`app.c` 不参与无窗口
+  测试，故不在统计内。
 - 本机 ASan+UBSan：无窗口 26 项（含 `ai.core`，不含 `core.random`/`core.bitboard`）
   PASS 且无报告；TSan：`net.client` 72、`net.session` 122、`ai.worker` 44 PASS，
   无竞争报告。
-- AI 去重（`ai_hash.[ch]`）前后用同一程序对比 12 局：选着、残局求解与 MultiPV
+- AI 去重（`ai_shared.[ch]`）前后用同一程序对比 12 局：选着、残局求解与 MultiPV
   分析共 456 行输出（着法、分数、节点数、剪枝数、TT 命中）逐字节相同。
 - CI 新增 Web 任务（`package.yml` 的 `web`）：Emscripten 6.0.13 构建 Release
   与 Debug 两套 Web 客户端，用运行器自带的 Chrome 跑 `tests/web` 全部 9 个

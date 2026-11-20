@@ -31,6 +31,10 @@ typedef int NetSockLen;
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#if defined(__linux__) || defined(__APPLE__)
+/* getentropy: glibc and macOS both declare it here. */
+#include <sys/random.h>
+#endif
 #include <netinet/in.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -44,6 +48,8 @@ typedef socklen_t NetSockLen;
 #define REVERSI_NET_SERVER_MAX_ROOMS 32
 #define REVERSI_NET_SERVER_READ_CAP 8192
 #define REVERSI_NET_SERVER_SHUTDOWN_DRAIN_MS 1000
+/* 20 waits of <= 50 ms: the same second without a clock. */
+#define REVERSI_NET_SERVER_SHUTDOWN_DRAIN_WAITS 20
 #define REVERSI_NET_SERVER_SEND_CAP 16384
 #define REVERSI_NET_SERVER_TOKEN_CAP 40
 #define REVERSI_NET_SERVER_TOKEN_RATE 20
@@ -132,6 +138,14 @@ static bool os_random(uint8_t *buffer, size_t length)
     return BCryptGenRandom(NULL, buffer, (ULONG)length,
                            BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
 #else
+    /* getentropy fails instead of reading something else: no fopen, so an
+     * exhausted descriptor table or a swapped /dev cannot weaken a token.
+     * Every caller here needs at most 16 bytes (the call caps at 256). */
+#if defined(REVERSI_NET_GETENTROPY)
+    if (length <= 256 && getentropy(buffer, length) == 0) {
+        return true;
+    }
+#endif
     FILE *file = fopen("/dev/urandom", "rb");
     if (file == NULL) {
         return false;
@@ -380,10 +394,11 @@ static bool generate_code(NetServer *server, char out[7])
 /* Tokens and room codes come only from the OS generator: a predictable
  * fallback would let anyone guess a seat. Without it the request fails
  * ("server_busy") instead of degrading silently. */
-static bool generate_token(char out[33])
+static bool generate_token(NetServer *server, int connection, char out[33])
 {
     uint8_t bytes[16];
     if (!os_random(bytes, sizeof(bytes))) {
+        send_error(server, connection, "server_busy");
         return false;
     }
     static const char HEX[] = "0123456789abcdef";
@@ -640,8 +655,7 @@ static void handle_rejoin(NetServer *server, int connection,
                 continue;
             }
             char token[REVERSI_NET_TOKEN_LEN + 1];
-            if (!generate_token(token)) {
-                send_error(server, connection, "server_busy");
+            if (!generate_token(server, connection, token)) {
                 return;
             }
             if (player->connection >= 0) {
@@ -709,8 +723,11 @@ static void handle_create(NetServer *server, int connection,
     room_reset(room);
     char generated[REVERSI_NET_CODE_LEN + 1];
     char token[REVERSI_NET_TOKEN_LEN + 1];
-    if (!generate_code(server, generated) || !generate_token(token)) {
+    if (!generate_code(server, generated)) {
         send_error(server, connection, "server_busy");
+        return;
+    }
+    if (!generate_token(server, connection, token)) {
         return;
     }
     room->used = true;
@@ -763,8 +780,7 @@ static void handle_join(NetServer *server, int connection,
             return;
         }
         char token[REVERSI_NET_TOKEN_LEN + 1];
-        if (!generate_token(token)) {
-            send_error(server, connection, "server_busy");
+        if (!generate_token(server, connection, token)) {
             return;
         }
         room->players[seat].seated = true;
@@ -1393,7 +1409,12 @@ void net_server_shutdown(NetServer *server)
     /* Drain queued bytes (the roomclosed notices) for a bounded time; a
      * peer that stops reading cannot hold the shutdown open. Sockets are
      * closed by net_server_destroy. */
-    const uint64_t deadline = now_ms() + REVERSI_NET_SERVER_SHUTDOWN_DRAIN_MS;
+    /* The wait count bounds the drain even if the clock cannot be read
+     * (now_ms() reports 0), so a stalled peer never holds shutdown open. */
+    const uint64_t start = now_ms();
+    const uint64_t deadline = start != 0
+        ? start + REVERSI_NET_SERVER_SHUTDOWN_DRAIN_MS : 0;
+    int waits = 0;
     for (;;) {
         fd_set write_set;
         FD_ZERO(&write_set);
@@ -1415,15 +1436,18 @@ void net_server_shutdown(NetServer *server)
             pending = true;
         }
         const uint64_t now = now_ms();
-        if (!pending || now >= deadline) {
+        if (!pending || waits >= REVERSI_NET_SERVER_SHUTDOWN_DRAIN_WAITS
+            || (deadline != 0 && now >= deadline)) {
             break;
         }
-        const uint64_t left = deadline - now;
+        const uint64_t left = deadline != 0 && deadline > now
+            ? deadline - now : 50;
         struct timeval timeout = {
             .tv_sec = 0,
             .tv_usec = (long)(left < 50 ? left : 50) * 1000
         };
         (void)select((int)maximum + 1, NULL, &write_set, NULL, &timeout);
+        ++waits;
     }
 }
 

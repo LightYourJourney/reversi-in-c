@@ -16,6 +16,7 @@
 #include <string.h>
 
 #ifdef _WIN32
+#include <direct.h>
 #include <wchar.h>
 #else
 #include <unistd.h>
@@ -360,6 +361,41 @@ static void test_status_messages(TestStats *stats)
         save_status_message((SaveStatus)999) != NULL);
 }
 
+static void test_slot_summary(TestStats *stats)
+{
+    char text[80];
+    SavedGame saved = {0};
+    saved.mode = GAME_MODE_PVE;
+    saved.difficulty = 1;
+    saved.move_count = 12;
+    saved.expected.result = GAME_RESULT_ONGOING;
+    save_slot_summary(&saved, "Medium", text, sizeof(text));
+    REVERSI_TEST_ASSERT(stats, strcmp(text, "PvE / Medium / 12 moves") == 0);
+
+    saved.expected.result = GAME_RESULT_BLACK_WIN;
+    save_slot_summary(&saved, "Medium", text, sizeof(text));
+    REVERSI_TEST_ASSERT(stats,
+        strcmp(text, "PvE / Medium / 12 moves / finished") == 0);
+
+    saved.mode = GAME_MODE_PVP;
+    saved.move_count = 5;
+    saved.expected.result = GAME_RESULT_ONGOING;
+    save_slot_summary(&saved, NULL, text, sizeof(text));
+    REVERSI_TEST_ASSERT(stats, strcmp(text, "PvP / 5 moves") == 0);
+
+    /* A missing name still yields a readable line. */
+    saved.mode = GAME_MODE_PVE;
+    save_slot_summary(&saved, NULL, text, sizeof(text));
+    REVERSI_TEST_ASSERT(stats, strcmp(text, "PvE / ? / 5 moves") == 0);
+
+    text[0] = 'x';
+    save_slot_summary(NULL, "Medium", text, sizeof(text));
+    REVERSI_TEST_ASSERT(stats, text[0] == 'x');
+    save_slot_summary(&saved, "Medium", NULL, sizeof(text));
+    save_slot_summary(&saved, "Medium", text, 0);
+    REVERSI_TEST_ASSERT(stats, text[0] == 'x');
+}
+
 static void test_storage_path(TestStats *stats)
 {
     char path[1024];
@@ -522,6 +558,7 @@ int main(void)
     REVERSI_RUN_TEST(&stats, test_refuse_custom_root);
     REVERSI_RUN_TEST(&stats, test_reject_bad_files);
     REVERSI_RUN_TEST(&stats, test_status_messages);
+    REVERSI_RUN_TEST(&stats, test_slot_summary);
     REVERSI_RUN_TEST(&stats, test_storage_path);
     REVERSI_RUN_TEST(&stats, test_atomic_overwrite);
     REVERSI_RUN_TEST(&stats, test_v101_fixture);

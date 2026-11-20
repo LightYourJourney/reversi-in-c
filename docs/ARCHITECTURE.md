@@ -68,7 +68,7 @@
 | History | `src/core/history.[ch]` | Phase 3 已实现 | 局面快照栈、撤销/重做游标、重做分支截断、跳过事件记录 | Game |
 | Match | `src/core/match.[ch]` | Phase 3 已实现 | 对局状态机、模式与 AI 边界、落子/暂停/继续/撤销/重做/重开、阶段一致性检查 | Game、History、Rules |
 | AI | `src/ai/` | Phase 4/11/12 已实现 | 局面评估、Bitboard Negamax/Alpha-Beta、增量 Zobrist、难度配置、精确残局求解、只读 MultiPV 分析、后台搜索工作者 | Board、Bitboard、Rules、Game（只读）、Match 的 `AiController` 边界类型、C 标准库、POSIX/Windows 线程 |
-| Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、平台时钟头 |
+| Endgame | `src/ai/ai_endgame.[ch]` | Phase 11 已实现 | 全宽度残局求解、EXACT/INCOMPLETE 分类、预算与取消 | Bitboard、GameState、AiStats、AI 配置、C 标准库、`ai_shared`（时钟与 Zobrist） |
 | Net | `src/net/`、`server/` | Phase 14 已实现；15.2 增加桌面 TLS | 协议/WS、权威房间服务端、桌面线程客户端、WebSocket 适配、客户端会话、TLS 传输 | core（只读/服务端权威）、平台 socket、Emscripten、C 标准库、OpenSSL 3（可选，桌面 `wss://`） |
 | Experiment | `src/experiment/` | Phase 13 已实现 | 版本化实验配置、配对对局、强度/性能统计、CSV/JSON/Markdown/HTML 报告 | AI、core、C 标准库、平台进程/文件 API |
 | Analysis | `src/analysis/` | Phase 12 已实现 | 独立分析局面树、导航/分支、自由摆盘、History 导入、版本化棋谱格式 | Board、Game、History、Rules、C 标准库 |

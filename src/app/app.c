@@ -610,19 +610,11 @@ static void app_fill_slot(SaveSlotInfo *slot, const char *path)
     }
 
     slot->valid = true;
-    if (saved.mode == GAME_MODE_PVE) {
-        snprintf(slot->summary, sizeof(slot->summary),
-                 "PvE / %s / %d moves%s",
-                 ai_difficulty_name((AiDifficulty)saved.difficulty),
-                 saved.move_count,
-                 saved.expected.result == GAME_RESULT_ONGOING
-                    ? "" : " / finished");
-    } else {
-        snprintf(slot->summary, sizeof(slot->summary),
-                 "PvP / %d moves%s", saved.move_count,
-                 saved.expected.result == GAME_RESULT_ONGOING
-                    ? "" : " / finished");
-    }
+    save_slot_summary(&saved,
+                      saved.mode == GAME_MODE_PVE
+                          ? ai_difficulty_name((AiDifficulty)saved.difficulty)
+                          : NULL,
+                      slot->summary, sizeof(slot->summary));
 }
 
 static void app_refresh_slots(App *app)

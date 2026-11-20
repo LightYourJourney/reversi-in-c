@@ -92,6 +92,24 @@ SaveAutosaveAction save_autosave_action(const Match *match, bool online)
                                                  : SAVE_AUTOSAVE_WRITE;
 }
 
+void save_slot_summary(const SavedGame *saved, const char *difficulty_name,
+                       char *out, size_t cap)
+{
+    if (saved == NULL || out == NULL || cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    const char *finished =
+        saved->expected.result == GAME_RESULT_ONGOING ? "" : " / finished";
+    if (saved->mode == GAME_MODE_PVE) {
+        snprintf(out, cap, "PvE / %s / %d moves%s",
+                 difficulty_name != NULL ? difficulty_name : "?",
+                 saved->move_count, finished);
+    } else {
+        snprintf(out, cap, "PvP / %d moves%s", saved->move_count, finished);
+    }
+}
+
 SaveStatus save_write(const char *path, const Match *match, int difficulty)
 {
     if (path == NULL || path[0] == '\0' || match == NULL) {
